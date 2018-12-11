@@ -1,0 +1,4 @@
+[submodule "KrkrSharp"]
+	path = KrkrSharp
+	url = https://github.com/Project-AZUSA/KirikiriSharp.git
+	branch = master

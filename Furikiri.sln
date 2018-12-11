@@ -1,0 +1,49 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.136
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Furikiri", "Furikiri\Furikiri.csproj", "{94DA3084-7672-4BE8-AA05-7873577E0C37}"
+EndProject
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "Tjs2", "KrkrSharp\Tjs2\Tjs2.shproj", "{BE8EAF1D-A34E-4E5E-9363-A72090E9874E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tjs2Disassembler", "KrkrSharp\Tjs2Disassembler\Tjs2Disassembler.csproj", "{008C53BE-3787-4671-AC14-4C18194BD916}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tjs2Win32", "KrkrSharp\Tjs2Win32\Tjs2Win32.csproj", "{37480026-F759-4936-B229-A5883664365D}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Tjs2Net", "KrkrSharp\Tjs2Net\Tjs2Net.csproj", "{DBF7929F-382B-435D-81D4-1145279B5D1F}"
+EndProject
+Global
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		KrkrSharp\Tjs2\Tjs2.projitems*{37480026-f759-4936-b229-a5883664365d}*SharedItemsImports = 4
+		KrkrSharp\Tjs2\Tjs2.projitems*{be8eaf1d-a34e-4e5e-9363-a72090e9874e}*SharedItemsImports = 13
+	EndGlobalSection
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{94DA3084-7672-4BE8-AA05-7873577E0C37}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{94DA3084-7672-4BE8-AA05-7873577E0C37}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{94DA3084-7672-4BE8-AA05-7873577E0C37}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{94DA3084-7672-4BE8-AA05-7873577E0C37}.Release|Any CPU.Build.0 = Release|Any CPU
+		{008C53BE-3787-4671-AC14-4C18194BD916}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{008C53BE-3787-4671-AC14-4C18194BD916}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{008C53BE-3787-4671-AC14-4C18194BD916}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{008C53BE-3787-4671-AC14-4C18194BD916}.Release|Any CPU.Build.0 = Release|Any CPU
+		{37480026-F759-4936-B229-A5883664365D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{37480026-F759-4936-B229-A5883664365D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{37480026-F759-4936-B229-A5883664365D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{37480026-F759-4936-B229-A5883664365D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DBF7929F-382B-435D-81D4-1145279B5D1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DBF7929F-382B-435D-81D4-1145279B5D1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DBF7929F-382B-435D-81D4-1145279B5D1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DBF7929F-382B-435D-81D4-1145279B5D1F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {086BAC06-5774-44FD-81AA-8017E6317414}
+	EndGlobalSection
+EndGlobal
