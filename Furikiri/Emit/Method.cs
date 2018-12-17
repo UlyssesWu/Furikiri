@@ -4,11 +4,11 @@ using System.Text;
 
 namespace Furikiri.Emit
 {
-    class MethodBody
+    class Method
     {
         public List<Instruction> Instructions { get; set; } = new List<Instruction>();
 
-        public MethodBody(short[] code)
+        public Method(short[] code)
         {
             ParseByteCode(code);
         }

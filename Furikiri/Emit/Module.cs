@@ -4,9 +4,10 @@ using System.Text;
 
 namespace Furikiri.Emit
 {
-    interface IRegister
+    /// <summary>
+    /// Compiled Script
+    /// </summary>
+    class Module
     {
-        int Size { get; }
-        bool Indirect { get; }
     }
 }

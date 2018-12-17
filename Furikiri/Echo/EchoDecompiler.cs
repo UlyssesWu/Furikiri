@@ -62,7 +62,7 @@ namespace Furikiri.Echo
             var t = obj.mContextType;
             var codes = obj.mCode;
 
-            MethodBody method = new MethodBody(codes);
+            Method method = new Method(codes);
             return method.ToAssemblyCode();
         }
     }

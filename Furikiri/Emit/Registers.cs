@@ -42,7 +42,7 @@ namespace Furikiri.Emit
             Slot = slot;
         }
 
-        string IRegister.ToString()
+        public override string ToString()
         {
             return $"*{Slot.ToString()}";
         }
@@ -58,7 +58,7 @@ namespace Furikiri.Emit
             Value = value;
         }
 
-        string IRegister.ToString()
+        public override string ToString()
         {
             return Value.ToString();
         }

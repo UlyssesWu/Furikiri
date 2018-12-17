@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using Furikiri.Emit;
+using Tjs2.Engine;
 
 namespace Furikiri
 {
@@ -167,52 +168,9 @@ namespace Furikiri
             }
         }
 
-        public static bool IsIndirectPropertyOp4(this OpCode code)
+        internal static ITjsVariant ToTjsVariant(this Variant v)
         {
-            switch (code)
-            {
-                case OpCode.LORPI:
-                case OpCode.LANDPI:
-                case OpCode.BORPI:
-                case OpCode.BXORPI:
-                case OpCode.BANDPI:
-                case OpCode.SARPI:
-                case OpCode.SALPI:
-                case OpCode.SRPI:
-                case OpCode.ADDPI:
-                case OpCode.SUBPI:
-                case OpCode.MODPI:
-                case OpCode.DIVPI:
-                case OpCode.IDIVPI:
-                case OpCode.MULPI:
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        public static bool IsDirectPropertyOp4(this OpCode code)
-        {
-            switch (code)
-            {
-                case OpCode.LORPD:
-                case OpCode.LANDPD:
-                case OpCode.BORPD:
-                case OpCode.BXORPD:
-                case OpCode.BANDPD:
-                case OpCode.SARPD:
-                case OpCode.SALPD:
-                case OpCode.SRPD:
-                case OpCode.ADDPD:
-                case OpCode.SUBPD:
-                case OpCode.MODPD:
-                case OpCode.DIVPD:
-                case OpCode.IDIVPD:
-                case OpCode.MULPD:
-                    return true;
-                default:
-                    return false;
-            }
+            throw new NotImplementedException();
         }
     }
 }
