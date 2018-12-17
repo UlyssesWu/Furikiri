@@ -8,18 +8,32 @@ namespace Furikiri.Emit
     {
         public List<Instruction> Instructions { get; set; } = new List<Instruction>();
 
-        public MethodBody()
-        { }
+        public MethodBody(short[] code)
+        {
+            ParseByteCode(code);
+        }
 
         public void ParseByteCode(short[] code)
         {
+            Instructions.Clear();
             int ptr = 0;
             while (ptr < code.Length)
             {
-                switch ((OpCode)code[ptr])
-                {
-                }
+                var ins = Instruction.Create(code, ptr);
+                Instructions.Add(ins);
+                ptr += ins.Size;
             }
+        }
+
+        public string ToAssemblyCode()
+        {
+            StringBuilder sb = new StringBuilder();
+            foreach (var ins in Instructions)
+            {
+                sb.Append(ins.Offset.ToString("D8")).Append("\t").Append(ins).AppendLine();
+            }
+
+            return sb.ToString();
         }
     }
 }

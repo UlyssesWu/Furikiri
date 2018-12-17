@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using Furikiri.Emit;
 using Tjs2;
 using Tjs2.Engine;
 using Tjs2.Sharper;
@@ -12,7 +13,7 @@ namespace Furikiri.Echo
         private Tjs _engine;
         private Dispatch2 _dispatcher;
         private TjsByteCodeLoader _codeLoader;
-        public void Decompile(string path)
+        public string Disassemble(string path)
         {
             Tjs.mStorage = null;
             Tjs.Initialize();
@@ -22,13 +23,15 @@ namespace Furikiri.Echo
             _dispatcher = _engine.GetGlobal();
             _codeLoader = new TjsByteCodeLoader();
 
-            Decompile(_codeLoader, _engine, path);
+            var result = Disassemble(_codeLoader, _engine, path);
             
             _engine.Shutdown();
             Tjs.FinalizeApplication();
+
+            return result;
         }
 
-        void Decompile(TjsByteCodeLoader loader, Tjs engine, string path)
+        string Disassemble(TjsByteCodeLoader loader, Tjs engine, string path)
         {
             using (var fs = new FileStream(path, FileMode.Open))
             {
@@ -36,9 +39,12 @@ namespace Furikiri.Echo
                 try
                 {
                     var scriptBlock = loader.ReadByteCode(engine, Path.GetFileNameWithoutExtension(path), stream);
+
+                    return DisassembleObject(scriptBlock.Objects[0].Get());
+
                     foreach (var scriptBlockObject in scriptBlock.Objects)
                     {
-                        DecompileObject(scriptBlockObject.Get());
+                        DisassembleObject(scriptBlockObject.Get());
                     }
                 }
                 catch (Exception e)
@@ -46,13 +52,18 @@ namespace Furikiri.Echo
                     Console.WriteLine($"Loading {path} failed.");
                 }
             }
+
+            return null;
         }
 
-        private void DecompileObject(InterCodeObject obj)
+        private string DisassembleObject(InterCodeObject obj)
         {
             var name = obj.mName;
             var t = obj.mContextType;
             var codes = obj.mCode;
+
+            MethodBody method = new MethodBody(codes);
+            return method.ToAssemblyCode();
         }
     }
 }

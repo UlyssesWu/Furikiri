@@ -43,6 +43,7 @@ namespace Furikiri.Emit
         /// <summary>
         /// continue clear register
         /// 范围寄存器置空，从%low到%high
+        /// 实际为%low(低址), %range(向上加range个)
         /// <example>ccl %low-%high</example>
         /// </summary>
         CCL = 4,
@@ -547,13 +548,13 @@ namespace Furikiri.Emit
         /// <summary>
         /// check type
         /// 获取类型字符串
-        /// <example>typeofd %obj.*name</example>
+        /// <example>typeofd %reg, %obj.*name</example>
         /// </summary>
         TYPEOFD = 84,
         /// <summary>
         /// check type
         /// 获取类型字符串
-        /// <example>typeofi %obj.%name</example>
+        /// <example>typeofi %reg, %obj.%name</example>
         /// </summary>
         TYPEOFI = 85,
         /// <summary>

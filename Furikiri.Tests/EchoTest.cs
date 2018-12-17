@@ -11,7 +11,7 @@ namespace Furikiri.Tests
         public void TestDecompile()
         {
             EchoDecompiler decompiler = new EchoDecompiler();
-            decompiler.Decompile("..\\..\\Res\\startup.tjs");
+            var code = decompiler.Disassemble("..\\..\\Res\\startup.tjs");
         }
     }
 }

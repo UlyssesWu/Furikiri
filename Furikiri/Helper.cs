@@ -85,8 +85,6 @@ namespace Furikiri
                 case OpCode.ENTRY:
                 case OpCode.CHGTHIS:
                 case OpCode.ADDCI:
-                case OpCode.TYPEOFD:
-                case OpCode.TYPEOFI:
                     return 2;
 
                 case OpCode.LORP:
@@ -122,6 +120,8 @@ namespace Furikiri
                 case OpCode.INCPI:
                 case OpCode.DECPD:
                 case OpCode.DECPI:
+                case OpCode.TYPEOFD:
+                case OpCode.TYPEOFI:
                     return 3;
 
                 case OpCode.LORPD:
