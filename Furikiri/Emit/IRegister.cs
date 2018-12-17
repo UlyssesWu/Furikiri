@@ -2,9 +2,10 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Furikiri.Naive
+namespace Furikiri.Emit
 {
-    class NaiveDecompiler
+    interface IRegister
     {
+        bool Indirect { get; }
     }
 }

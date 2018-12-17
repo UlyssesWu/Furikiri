@@ -7,10 +7,17 @@
     <Description>Furikiri TJS2 Decompiler</Description>
     <Copyright>LGPLv3</Copyright>
     <PackageProjectUrl>https://github.com/UlyssesWu/Furikiri</PackageProjectUrl>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\IronTJS\IronTJS\IronTJS.csproj" />
     <ProjectReference Include="..\KrkrSharp\Tjs2Net\Tjs2Net.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Echo\Patterns\" />
+    <Folder Include="Narcissus\" />
   </ItemGroup>
 
 </Project>
