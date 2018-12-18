@@ -11,6 +11,22 @@
         Real = 5,
     }
 
+    internal enum TjsInternalType
+    {
+        Unknown = -1,
+        Void = 0,
+        Object = 1,
+        InterObject = 2,
+        InterGenerator = 10,
+        String = 3,
+        Octet = 4,
+        Real = 5,
+        Byte = 6,
+        Short = 7,
+        Int = 8,
+        Long = 9,
+    }
+
     public interface ITjsVariant
     {
         TjsVarType Type { get; }
@@ -32,6 +48,7 @@
     {
         public TjsVarType Type => TjsVarType.Object;
         public object Value { get; set; }
+        public bool Internal { get; set; } = false;
 
         public TjsObject(object obj)
         {

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using Furikiri.Emit;
 using Tjs2.Engine;
@@ -8,6 +9,11 @@ namespace Furikiri
 {
     internal static class Helper
     {
+        public static string ToRealString(this char[] chars)
+        {
+            return new string(chars);
+        }
+
         public static short ToS(this OpCode code)
         {
             return (short)code;
@@ -166,6 +172,18 @@ namespace Furikiri
                 default:
                     return 0;
             }
+        }
+
+        public static string Read2ByteString(this BinaryReader br)
+        {
+            var len = br.ReadInt32();
+            char[] chars = new char[len];
+            for (int i = 0; i < len; i++)
+            {
+                chars[i] = (char)br.ReadInt16();
+            }
+
+            return chars.ToRealString();
         }
 
         internal static ITjsVariant ToTjsVariant(this Variant v)

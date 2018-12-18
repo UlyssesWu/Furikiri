@@ -1,5 +1,6 @@
 ﻿using System;
 using Furikiri.Echo;
+using Furikiri.Emit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Furikiri.Tests
@@ -12,6 +13,15 @@ namespace Furikiri.Tests
         {
             EchoDecompiler decompiler = new EchoDecompiler();
             var code = decompiler.Disassemble("..\\..\\Res\\startup.tjs");
+        }
+
+        [TestMethod]
+        public void TestLoadTjs()
+        {
+            var path = "..\\..\\Res\\startup.tjs";
+            Module m = new Module();
+            m.LoadFromFile(path);
+            
         }
     }
 }
