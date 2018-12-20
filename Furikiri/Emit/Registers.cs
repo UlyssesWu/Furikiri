@@ -4,14 +4,10 @@ using System.Text;
 
 namespace Furikiri.Emit
 {
-    public enum FuncParameterExpand : short
+    interface IRegister
     {
-        Normal = -3,
-        Expand = -2,
-        Omit = -1,
-        FatNormal = 0,
-        FatExpand = 1,
-        FatUnnamedExpand = 2,
+        int Size { get; }
+        bool Indirect { get; }
     }
 
     class RegisterRef : IRegister

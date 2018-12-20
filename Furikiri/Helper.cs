@@ -9,6 +9,8 @@ namespace Furikiri
 {
     internal static class Helper
     {
+        private const int NAMESPACE_DEFAULT_HASH_BITS = 3;
+
         public static string ToRealString(this char[] chars)
         {
             return new string(chars);
@@ -189,6 +191,31 @@ namespace Furikiri
         internal static ITjsVariant ToTjsVariant(this Variant v)
         {
             throw new NotImplementedException();
+        }
+
+        internal static int ContextHashSize(this TjsContextType type)
+        {
+            switch (type)
+            {
+                case TjsContextType.TopLevel:
+                    return 0;
+                case TjsContextType.Function:
+                    return 1;
+                case TjsContextType.ExprFunction:
+                    return 1;
+                case TjsContextType.Property:
+                    return 1;
+                case TjsContextType.PropertySetter:
+                    return 0;
+                case TjsContextType.PropertyGetter:
+                    return 0;
+                case TjsContextType.Class:
+                    return NAMESPACE_DEFAULT_HASH_BITS;
+                case TjsContextType.SuperClassGetter:
+                    return 0;
+                default:
+                    return NAMESPACE_DEFAULT_HASH_BITS;
+            }
         }
     }
 }

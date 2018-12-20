@@ -151,7 +151,7 @@ namespace Furikiri.Emit
                 for (int j = 0; j < count; j++)
                 {
                     int p = j * 2;
-                    int type = _varTypes[p];
+                    var type = _varTypes[p];
                     int index = _varTypes[p + 1];
                     switch ((TjsInternalType)type)
                     {
@@ -166,18 +166,56 @@ namespace Furikiri.Emit
                             replacements.Add((vars[j], index));
                             break;
                         case TjsInternalType.InterGenerator:
-                            //TODO:
+                            vars[j] = new TjsObject(null) { Internal = true };
+                            replacements.Add((vars[j], index));
+                            break;
+                        case TjsInternalType.String:
+                            vars[j] = new TjsString(_strings[index]);
                             break;
                         case TjsInternalType.Octet:
-                            break;
-                        case TjsInternalType.Int:
+                            vars[j] = new TjsOctet(_octets[index]);
                             break;
                         case TjsInternalType.Real:
+                            vars[j] = new TjsReal(_doubles[index]);
                             break;
+                        case TjsInternalType.Byte:
+                            vars[j] = new TjsInt(_bytes[index]);
+                            break;
+                        case TjsInternalType.Short:
+                            vars[j] = new TjsInt(_shorts[index]);
+                            break;
+                        case TjsInternalType.Int:
+                            vars[j] = new TjsInt(_ints[index]);
+                            break;
+                        case TjsInternalType.Long:
+                            vars[j] = new TjsReal(_longs[index]);
+                            break;
+
+                        case TjsInternalType.Unknown:
                         default:
-                            throw new ArgumentOutOfRangeException();
+                            vars[j] = TjsVoid.Void;
+                            break;
                     }
                 }
+
+                count = br.ReadInt32();
+                int[] superPointers = new int[count];
+                for (int j = 0; j < count; j++)
+                {
+                    superPointers[j] = br.ReadInt32();
+                }
+
+                //properties
+                count = br.ReadInt32();
+                int[] props = new int[count * 2];
+                for (int j = 0; j < count*2; j++)
+                {
+                    props[j] = br.ReadInt32();
+                }
+
+                properties.Add(props);
+
+
             }
         }
 

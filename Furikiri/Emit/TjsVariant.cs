@@ -1,32 +1,5 @@
 ﻿namespace Furikiri.Emit
 {
-    public enum TjsVarType
-    {
-        Null = -1,
-        Void = 0,
-        Object = 1,
-        String = 2,
-        Octet = 3,
-        Int = 4,
-        Real = 5,
-    }
-
-    internal enum TjsInternalType
-    {
-        Unknown = -1,
-        Void = 0,
-        Object = 1,
-        InterObject = 2,
-        InterGenerator = 10,
-        String = 3,
-        Octet = 4,
-        Real = 5,
-        Byte = 6,
-        Short = 7,
-        Int = 8,
-        Long = 9,
-    }
-
     public interface ITjsVariant
     {
         TjsVarType Type { get; }
@@ -41,6 +14,9 @@
 
         private TjsVoid() { }
 
+        /// <summary>
+        /// Void
+        /// </summary>
         public static TjsVoid Void => _void ?? (_void = new TjsVoid());
     }
 
@@ -92,12 +68,39 @@
 
     public class TjsInt : ITjsVariant
     {
+        internal TjsInternalType InternalType { get; set; }
+
         public TjsVarType Type => TjsVarType.Int;
         public object Value => IntValue;
         public int IntValue { get; set; }
 
+        /// <summary>
+        /// Int
+        /// </summary>
+        /// <param name="val"></param>
         public TjsInt(int val)
         {
+            InternalType = TjsInternalType.Int;
+            IntValue = val;
+        }
+
+        /// <summary>
+        /// Byte
+        /// </summary>
+        /// <param name="val"></param>
+        public TjsInt(byte val)
+        {
+            InternalType = TjsInternalType.Byte;
+            IntValue = val;
+        }
+
+        /// <summary>
+        /// Short
+        /// </summary>
+        /// <param name="val"></param>
+        public TjsInt(short val)
+        {
+            InternalType = TjsInternalType.Short;
             IntValue = val;
         }
 
@@ -114,13 +117,31 @@
 
     public class TjsReal : ITjsVariant
     {
-        public TjsVarType Type => TjsVarType.Real;
-        public object Value => DoubleValue;
-        public double DoubleValue { get; set; }
+        internal TjsInternalType InternalType { get; set; }
 
+        public TjsVarType Type => TjsVarType.Real;
+        public object Value => InternalType == TjsInternalType.Long ? LongValue : DoubleValue;
+        public double DoubleValue { get; set; }
+        public long LongValue { get; set; }
+
+        /// <summary>
+        /// Double
+        /// </summary>
+        /// <param name="val"></param>
         public TjsReal(double val)
         {
+            InternalType = TjsInternalType.Real;
             DoubleValue = val;
+        }
+
+        /// <summary>
+        /// Long
+        /// </summary>
+        /// <param name="val"></param>
+        public TjsReal(long val)
+        {
+            InternalType = TjsInternalType.Long;
+            LongValue = val;
         }
 
         public static implicit operator double(TjsReal d)
