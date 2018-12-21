@@ -10,10 +10,10 @@ namespace Furikiri.Tests
     public class EchoTest
     {
         [TestMethod]
-        public void TestDecompile()
+        public void TestDisassemble()
         {
-            EchoDecompiler decompiler = new EchoDecompiler();
-            var code = decompiler.Disassemble("..\\..\\Res\\startup.tjs");
+            Assembler assembler = new Assembler();
+            var code = assembler.Disassemble("..\\..\\Res\\startup.tjs");
             File.WriteAllText("out.tjsasm", code);
         }
 

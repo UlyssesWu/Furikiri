@@ -32,38 +32,6 @@ namespace Furikiri.Echo
             return result;
         }
 
-        public string Disassemble(string path)
-        {
-            Module m = new Module();
-            m.LoadFromFile(path);
-
-            StringBuilder sb = new StringBuilder();
-            if (m.TopLevel != null)
-            {
-                sb.AppendLine(Disassemble(m.TopLevel));
-            }
-
-            foreach (var codeObject in m.Objects)
-            {
-                if (codeObject == m.TopLevel)
-                {
-                    continue;
-                }
-
-                sb.AppendLine(Disassemble(codeObject));
-            }
-
-            return sb.ToString();
-        }
-
-        private string Disassemble(CodeObject codeObject)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendLine(codeObject.GetDisassembleSignatureString());
-            var method = codeObject.ResolveMethod();
-            sb.AppendLine(method.ToAssemblyCode());
-            return sb.ToString();
-        }
 
         string Disassemble(TjsByteCodeLoader loader, Tjs engine, string path)
         {
