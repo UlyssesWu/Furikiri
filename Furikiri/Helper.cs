@@ -193,6 +193,58 @@ namespace Furikiri
             throw new NotImplementedException();
         }
 
+        internal static short GetSlot(this IRegister register)
+        {
+            switch (register)
+            {
+                case RegisterParameter registerParameter:
+                    return (short)registerParameter.Slot;
+                case RegisterRef registerRef:
+                    return (short)registerRef.Slot;
+                case RegisterShort registerShort:
+                    return registerShort.Value;
+                case RegisterValue registerValue:
+                    return (short)registerValue.Slot;
+            }
+
+            return 0;
+        }
+
+        public static string Flatten(this string str)
+        {
+            return str.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+        }
+
+        /// <summary>
+        /// Get name for Context Type
+        /// </summary>
+        /// <param name="type"></param>
+        /// <returns></returns>
+        public static string ContextTypeName(this TjsContextType type)
+        {
+            switch (type)
+            {
+                case TjsContextType.TopLevel:
+                    return "top level";
+                case TjsContextType.Function:
+                    return "function";
+                case TjsContextType.ExprFunction:
+                    return "function expression";
+                case TjsContextType.Property:
+                    return "property";
+                case TjsContextType.PropertySetter:
+                    return "property setter";
+                case TjsContextType.PropertyGetter:
+                    return "property getter";
+                case TjsContextType.Class:
+                    return "class";
+                case TjsContextType.SuperClassGetter:
+                    return "super class getter proxy";
+                default:
+                    return "unknown";
+            }
+        }
+
         internal static int ContextHashSize(this TjsContextType type)
         {
             switch (type)

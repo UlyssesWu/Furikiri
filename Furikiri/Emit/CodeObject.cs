@@ -13,7 +13,7 @@ namespace Furikiri.Emit
         public string Name { get; set; }
         public TjsContextType ContextType { get; set; }
         public short[] Code { get; set; }
-        public ITjsVariant[] Variants { get; set; }
+        public List<ITjsVariant> Variants { get; set; }
 
         public int MaxVariableCount { get; set; }
         public int VariableReserveCount { get; set; }
@@ -25,9 +25,17 @@ namespace Furikiri.Emit
         public long[] SourcePosArray { get; set; }
         public int[] SuperClassGetterPointer { get; set; }
 
-        public CodeObject(Module block, string name, int type, short[] code, ITjsVariant[] da,
+        public CodeObject Parent { get; set; }
+        public CodeObject Setter { get; set; }
+        public CodeObject Getter { get; set; }
+        public CodeObject SuperClass { get; set; }
+
+        public Dictionary<string, (TjsCodeObject Property, TjsInterfaceFlag Flag)> Properties =
+            new Dictionary<string, (TjsCodeObject Property, TjsInterfaceFlag Flag)>();
+
+        public CodeObject(Module block, string name, int type, short[] code, List<ITjsVariant> da,
             int varCount, int varReserveCount, int maxFrame, int argCount, int arrayBase,
-            int colBase, bool srcSorted, long[] srcPos, int[] superPointer)
+            int collapseBase, bool srcSorted, long[] srcPos, int[] superPointer)
         {
             Block = block;
             Name = name;
@@ -39,12 +47,26 @@ namespace Furikiri.Emit
             MaxFrameCount = maxFrame;
             FuncDeclArgCount = argCount;
             FuncDeclUnnamedArgArrayBase = arrayBase;
-            FuncDeclCollapseBase = colBase;
+            FuncDeclCollapseBase = collapseBase;
             SourcePosArraySorted = srcSorted;
             SourcePosArray = srcPos;
             SuperClassGetterPointer = superPointer;
         }
 
+        public void SetProperty(TjsInterfaceFlag flag, string name, TjsCodeObject val, CodeObject ths)
+        {
+            //TODO: this need a TJS function call...
+            val.This = ths;
+            Properties[name] = (val, flag);
+        }
+
+        public Method ResolveMethod()
+        {
+            return new Method(this, Code);
+        }
+
+        public string GetDisassembleSignatureString() => 
+            $"({ContextType.ContextTypeName()}) {Name} 0x{GetHashCode():X8}";
     }
 
 }

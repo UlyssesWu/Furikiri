@@ -4,12 +4,16 @@ using static Furikiri.Emit.OpCode;
 
 namespace Furikiri.Emit
 {
-    class Instruction
+    /// <summary>
+    /// TJS ASM Instruction
+    /// </summary>
+    public class Instruction
     {
         public OpCode OpCode { get; set; }
         public List<IRegister> Registers { get; set; } = new List<IRegister>();
         public int Offset { get; set; }
         public int Size => 1 + Registers.Sum(i => i.Size);
+        public IRegisterData Data { get; set; }
 
         public Instruction(OpCode op)
         {
@@ -293,29 +297,29 @@ namespace Furikiri.Emit
                 case SRV:
                 case THROW:
                 case GLOBAL:
-                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}";
+                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}";
                 //*
                 case JF:
                 case JNF:
                 case JMP:
-                    return $"{OpCode.ToString().ToLowerInvariant()} {((RegisterShort)Registers[0]).Value + Offset:D9}";
+                    return $"{OpCode.ToString().ToLowerInvariant()} {((RegisterShort)Registers[0]).Value + Offset:D8}";
 
                 //2
                 //instant, %
                 case ENTRY:
-                    return $"{OpCode.ToString().ToLowerInvariant()} {((RegisterShort)Registers[0]).Value + Offset:D9}, {Registers[1].ToString()}";
+                    return $"{OpCode.ToString().ToLowerInvariant()} {((RegisterShort)Registers[0]).Value + Offset:D8}, {Registers[1]}";
 
                 //%, *
                 case CONST:
-                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}, {Registers[1].ToString()}";
+                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}";
                 case TYPEOFD:
                 case TYPEOFI:
-                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}.{Registers[1].ToString()}";
+                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}.{Registers[1]}";
 
                 //%, %
                 case CCL:
                     return
-                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}-{((RegisterShort)Registers[0]).Value + ((RegisterShort)Registers[1]).Value - 1}";
+                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}-{((RegisterShort)Registers[0]).Value + ((RegisterShort)Registers[1]).Value - 1}";
                 //real
                 //return
                 //    $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}, {Registers[1].ToString()}";
@@ -347,7 +351,7 @@ namespace Furikiri.Emit
                 case CHGTHIS:
                 case ADDCI:
                     return
-                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}, {Registers[1].ToString()}";
+                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}";
 
                 //3
                 case LORP:
@@ -365,7 +369,7 @@ namespace Furikiri.Emit
                 case IDIVP:
                 case MULP:
                     return
-                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}, {Registers[1].ToString()}, {Registers[2].ToString()}";
+                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}, {Registers[2]}";
                 //x, x.x
                 case GPI:
                 case GPIS:
@@ -378,7 +382,7 @@ namespace Furikiri.Emit
                 case INCPD:
                 case DECPD:
                     return
-                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}, {Registers[1].ToString()}.{Registers[2].ToString()}";
+                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}.{Registers[2]}";
                 //x.x, x
                 case SPI:
                 case SPIE:
@@ -388,7 +392,7 @@ namespace Furikiri.Emit
                 case SPDEH:
                 case SPDS:
                     return
-                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}.{Registers[1].ToString()}, {Registers[2].ToString()}";
+                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}.{Registers[1]}, {Registers[2]}";
 
                 //x, x.x, x
                 case LORPI:
@@ -420,7 +424,7 @@ namespace Furikiri.Emit
                 case IDIVPD:
                 case MULPD:
                     return
-                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}, {Registers[1].ToString()}.{Registers[2].ToString()}, {Registers[3].ToString()}";
+                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}.{Registers[2]}, {Registers[3]}";
 
                 //special
                 case CALL:
@@ -449,13 +453,39 @@ namespace Furikiri.Emit
 
                     if (OpCode == CALLD || OpCode == CALLI)
                     {
-                        return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}, {Registers[1].ToString()}.{Registers[2].ToString()}({param})";
+                        return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}.{Registers[2]}({param})";
                     }
-                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}, {Registers[1].ToString()}({param})";
+                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}({param})";
 
             }
 
             return OpCode.ToString().ToLowerInvariant();
+        }
+
+        public short[] ToCodes()
+        {
+            List<short> output = new List<short>(Size) { OpCode.ToS() };
+            foreach (var register in Registers)
+            {
+                switch (register)
+                {
+                    case RegisterParameter p:
+                        output.Add((short)p.ParameterExpand);
+                        output.Add((short)p.Slot);
+                        break;
+                    case RegisterShort s:
+                        output.Add(s.Value);
+                        break;
+                    case RegisterValue v:
+                        output.Add((short)v.Slot);
+                        break;
+                    case RegisterRef r:
+                        output.Add((short)r.Slot);
+                        break;
+                }
+            }
+
+            return output.ToArray();
         }
     }
 }

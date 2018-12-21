@@ -4,6 +4,46 @@ using System.Text;
 
 namespace Furikiri.Emit
 {
+    [Flags]
+    public enum TjsInterfaceFlag : int
+    {
+        /// <summary>
+        /// create a member if not exists
+        /// </summary>
+        MemberEnsure = 0x00000200,
+        /// <summary>
+        /// member *must* exist (for Dictionary/Array)
+        /// </summary>
+        MemberMustExist = 0x00000400,
+        /// <summary>
+        /// ignore property invoking
+        /// </summary>
+        IgnorePropInvoking = 0x00000800,
+        /// <summary>
+        /// member is hidden
+        /// </summary>
+        HiddenMember = 0x00001000,
+        /// <summary>
+        /// member is not registered to the object (internal use)
+        /// </summary>
+        StaticMember = 0x00010000,
+        /// <summary>
+        /// values are not retrieved (for EnumMembers)
+        /// </summary>
+        EnumNoValue = 0x00100000,
+
+        NisRegister = 0x00000001,
+
+        NisGetInstance = 0x00000002,
+
+        CiiAdd = 0x00000001,
+
+        CiiGet = 0x00000000,
+
+        CiiSetFinalize = 0x00000002,
+
+        CiiSetMissing = 0x00000003,
+    }
     public enum FuncParameterExpand : short
     {
         Normal = -3,

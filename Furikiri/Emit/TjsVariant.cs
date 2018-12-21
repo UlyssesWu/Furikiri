@@ -1,4 +1,7 @@
-﻿namespace Furikiri.Emit
+﻿using System;
+using System.Globalization;
+
+namespace Furikiri.Emit
 {
     public interface ITjsVariant
     {
@@ -18,6 +21,11 @@
         /// Void
         /// </summary>
         public static TjsVoid Void => _void ?? (_void = new TjsVoid());
+
+        public override string ToString()
+        {
+            return "(void)";
+        }
     }
 
     public class TjsObject : ITjsVariant
@@ -29,6 +37,39 @@
         public TjsObject(object obj)
         {
             Value = obj;
+        }
+    }
+
+    public class TjsCodeObject : ITjsVariant
+    {
+        public TjsVarType Type => TjsVarType.Object;
+        public object Value => Object;
+        public CodeObject Object { get; set; }
+        public CodeObject This { get; set; } = null;
+        public bool HasThis => This != null;
+        public bool Internal { get; set; } = true;
+        public TjsCodeObject(CodeObject obj)
+        {
+            Object = obj;
+        }
+
+        public TjsCodeObject(CodeObject obj, CodeObject ths)
+        {
+            Object = obj;
+            This = ths;
+        }
+
+        public override string ToString()
+        {
+            string objName = Object?.Name;
+            objName = objName == null ? "0x00000000" : $"[{objName}]";
+            if (Object?.ContextType == TjsContextType.ExprFunction)
+            {
+                objName += $"(0x{Object.GetHashCode():X8})";
+            }
+            string thisName = This?.Name;
+            thisName = thisName == null ? "0x00000000" : $"[{objName}]";
+            return $"(object)({objName}:{thisName})";
         }
     }
 
@@ -52,6 +93,11 @@
         {
             return new TjsString(str);
         }
+
+        public override string ToString()
+        {
+            return $"(string)\"{StringValue}\"";
+        }
     }
 
     public class TjsOctet : ITjsVariant
@@ -63,6 +109,11 @@
         public TjsOctet(byte[] bytes)
         {
             BytesValue = bytes;
+        }
+
+        public override string ToString()
+        {
+            return $"(octet)<% {BitConverter.ToString(BytesValue)} %>";
         }
     }
 
@@ -113,6 +164,11 @@
         {
             return new TjsInt(i);
         }
+
+        public override string ToString()
+        {
+            return $"(int){IntValue}";
+        }
     }
 
     public class TjsReal : ITjsVariant
@@ -152,6 +208,11 @@
         public static explicit operator TjsReal(double d)
         {
             return new TjsReal(d);
+        }
+
+        public override string ToString()
+        {
+            return $"(real){Value}";
         }
     }
 }

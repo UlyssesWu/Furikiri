@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using Furikiri.Echo;
 using Furikiri.Emit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -13,6 +14,7 @@ namespace Furikiri.Tests
         {
             EchoDecompiler decompiler = new EchoDecompiler();
             var code = decompiler.Disassemble("..\\..\\Res\\startup.tjs");
+            File.WriteAllText("out.tjsasm", code);
         }
 
         [TestMethod]
@@ -21,7 +23,6 @@ namespace Furikiri.Tests
             var path = "..\\..\\Res\\startup.tjs";
             Module m = new Module();
             m.LoadFromFile(path);
-            
         }
     }
 }

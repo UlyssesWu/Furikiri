@@ -33,6 +33,9 @@ namespace Furikiri.Emit
         private List<byte[]> _octets;
         private short[] _varTypes;
 
+        public CodeObject TopLevel { get; set; }
+        public List<CodeObject> Objects { get; set; }
+
         public void LoadFromFile(string path)
         {
             using (var fs = File.OpenRead(path))
@@ -89,7 +92,8 @@ namespace Furikiri.Emit
             int[] propGetters = new int[objCount];
             int[] superClassGetters = new int[objCount];
             List<int[]> properties = new List<int[]>(objCount);
-            List<(ITjsVariant Var, int Index)> replacements = new List<(ITjsVariant Var, int Index)>();
+            List<(TjsCodeObject Var, int Index)> replacements = new List<(TjsCodeObject Var, int Index)>();
+            List<CodeObject> objects = new List<CodeObject>(objCount);
 
             for (int i = 0; i < objCount; i++)
             {
@@ -156,44 +160,46 @@ namespace Furikiri.Emit
                     switch ((TjsInternalType)type)
                     {
                         case TjsInternalType.Void:
-                            vars[j] = TjsVoid.Void;
+                            vars.Add(TjsVoid.Void);
                             break;
                         case TjsInternalType.Object:
-                            vars[j] = new TjsObject(null);
+                            vars.Add(new TjsObject(null) { Internal = false });
                             break;
                         case TjsInternalType.InterObject:
-                            vars[j] = new TjsObject(null) { Internal = true };
-                            replacements.Add((vars[j], index));
+                            var co = new TjsCodeObject(null) { Internal = true };
+                            vars.Add(co);
+                            replacements.Add((co, index));
                             break;
                         case TjsInternalType.InterGenerator:
-                            vars[j] = new TjsObject(null) { Internal = true };
-                            replacements.Add((vars[j], index));
+                            var co2 = new TjsCodeObject(null) { Internal = true };
+                            vars.Add(co2);
+                            replacements.Add((co2, index));
                             break;
                         case TjsInternalType.String:
-                            vars[j] = new TjsString(_strings[index]);
+                            vars.Add(new TjsString(_strings[index]));
                             break;
                         case TjsInternalType.Octet:
-                            vars[j] = new TjsOctet(_octets[index]);
+                            vars.Add(new TjsOctet(_octets[index]));
                             break;
                         case TjsInternalType.Real:
-                            vars[j] = new TjsReal(_doubles[index]);
+                            vars.Add(new TjsReal(_doubles[index]));
                             break;
                         case TjsInternalType.Byte:
-                            vars[j] = new TjsInt(_bytes[index]);
+                            vars.Add(new TjsInt(_bytes[index]));
                             break;
                         case TjsInternalType.Short:
-                            vars[j] = new TjsInt(_shorts[index]);
+                            vars.Add(new TjsInt(_shorts[index]));
                             break;
                         case TjsInternalType.Int:
-                            vars[j] = new TjsInt(_ints[index]);
+                            vars.Add(new TjsInt(_ints[index]));
                             break;
                         case TjsInternalType.Long:
-                            vars[j] = new TjsReal(_longs[index]);
+                            vars.Add(new TjsReal(_longs[index]));
                             break;
 
                         case TjsInternalType.Unknown:
                         default:
-                            vars[j] = TjsVoid.Void;
+                            vars.Add(TjsVoid.Void);
                             break;
                     }
                 }
@@ -208,15 +214,77 @@ namespace Furikiri.Emit
                 //properties
                 count = br.ReadInt32();
                 int[] props = new int[count * 2];
-                for (int j = 0; j < count*2; j++)
+                for (int j = 0; j < count * 2; j++)
                 {
                     props[j] = br.ReadInt32();
                 }
 
                 properties.Add(props);
 
+                CodeObject obj = new CodeObject(this, _strings[name], contextType, code, vars, maxVariableCount,
+                    variableReserveCount, maxFrameCount, funcDeclArgCount, funcDeclUnnamedArgArrayBase,
+                    funcDeclCollapseBase, true, srcPos, superPointers);
 
+                objects.Add(obj);
             }
+
+            TjsCodeObject propVar = null;
+            for (int i = 0; i < objCount; i++)
+            {
+                CodeObject parent = null;
+                CodeObject propSetter = null;
+                CodeObject propGetter = null;
+                CodeObject superClassGetter = null;
+
+                if (parents[i] >= 0)
+                {
+                    parent = objects[parents[i]];
+                }
+                if (propSetters[i] >= 0)
+                {
+                    propSetter = objects[propSetters[i]];
+                }
+                if (propGetters[i] >= 0)
+                {
+                    propGetter = objects[propGetters[i]];
+                }
+                if (superClassGetters[i] >= 0)
+                {
+                    superClassGetter = objects[superClassGetters[i]];
+                }
+
+                objects[i].Parent = parent;
+                objects[i].Setter = propSetter;
+                objects[i].Getter = propGetter;
+                objects[i].SuperClass = superClassGetter;
+
+                if (properties[i] != null)
+                {
+                    var pObj = parent;
+                    var props = properties[i];
+                    for (int j = 0; j < props.Length / 2; j++)
+                    {
+                        var name = _strings[props[j * 2]];
+                        var obj = objects[props[j * 2 + 1]];
+                        propVar = new TjsCodeObject(obj);
+                        pObj?.SetProperty(TjsInterfaceFlag.MemberEnsure | TjsInterfaceFlag.IgnorePropInvoking, name,
+                            propVar, obj);
+                    }
+                }
+            }
+
+            foreach (var replacement in replacements)
+            {
+                replacement.Var.Object = objects[replacement.Index];
+            }
+
+            replacements.Clear();
+            if (topLevel >= 0)
+            {
+                TopLevel = objects[topLevel];
+            }
+
+            Objects = objects;
         }
 
         private void ReadDataArea(BinaryReader br, int size)

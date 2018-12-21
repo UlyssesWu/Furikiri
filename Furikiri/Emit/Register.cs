@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Furikiri.Emit
 {
-    interface IRegister
+    public interface IRegister
     {
         int Size { get; }
         bool Indirect { get; }
@@ -43,13 +43,13 @@ namespace Furikiri.Emit
             return $"*{Slot.ToString()}";
         }
     }
-
-    class InstantValue<T> : IRegister
+    class RegisterShort : IRegister
     {
         public int Size => 1;
         public bool Indirect => false;
-        public T Value { get; set; }
-        public InstantValue(T value)
+        public short Value { get; set; }
+
+        public RegisterShort(short value)
         {
             Value = value;
         }
@@ -57,13 +57,6 @@ namespace Furikiri.Emit
         public override string ToString()
         {
             return Value.ToString();
-        }
-    }
-
-    class RegisterShort : InstantValue<short>
-    {
-        public RegisterShort(short value) : base(value)
-        {
         }
     }
 
