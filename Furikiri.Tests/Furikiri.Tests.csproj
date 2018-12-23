@@ -58,6 +58,10 @@
       <Project>{94da3084-7672-4be8-aa05-7873577e0c37}</Project>
       <Name>Furikiri</Name>
     </ProjectReference>
+    <ProjectReference Include="..\KrkrSharp\Tjs2Net\Tjs2Net.csproj">
+      <Project>{dbf7929f-382b-435d-81d4-1145279b5d1f}</Project>
+      <Name>Tjs2Net</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

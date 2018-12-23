@@ -6,9 +6,8 @@ using Tjs2.Engine;
 
 namespace Furikiri.Echo
 {
-    interface ITjsPattern
+    public interface ITjsPattern
     {
-        bool TryMatch(List<Instruction> codes, int index);
-        //ExprNode Match(in byte[] codes, int index);
+        int Length { get; }
     }
 }

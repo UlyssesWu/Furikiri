@@ -7,6 +7,7 @@ namespace Furikiri.Emit
 {
     public class Method
     {
+        public string Name => Object.Name;
         public CodeObject Object { get; set; }
         public List<Instruction> Instructions { get; set; } = new List<Instruction>();
 

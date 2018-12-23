@@ -36,10 +36,14 @@ namespace Furikiri.Emit
         public CodeObject TopLevel { get; set; }
         public List<CodeObject> Objects { get; set; }
 
-        public void LoadFromFile(string path)
+        public Module(string path)
         {
-            using (var fs = File.OpenRead(path))
-            using (var br = new BinaryReader(fs))
+            LoadFromFile(path);
+        }
+
+        public void LoadFromStream(Stream stream)
+        {
+            using (var br = new BinaryReader(stream))
             {
                 // TJS2
                 var tag = br.ReadChars(4).ToRealString();
@@ -57,9 +61,9 @@ namespace Furikiri.Emit
 
                 //file size
                 int size = br.ReadInt32();
-                if (size != fs.Length)
+                if (size != stream.Length)
                 {
-                    Debug.WriteLine($"File size incorrect: Expect {size}, Actual {fs.Length}");
+                    Debug.WriteLine($"File size incorrect: Expect {size}, Actual {stream.Length}");
                 }
 
                 if (br.ReadChars(4).ToRealString() != DATA_TAG_LE)
@@ -77,8 +81,14 @@ namespace Furikiri.Emit
                 }
                 ReadObjects(br);
             }
+        }
 
-            return;
+        public void LoadFromFile(string path)
+        {
+            using (var fs = File.OpenRead(path))
+            {
+                LoadFromStream(fs);
+            }
         }
 
         private void ReadObjects(BinaryReader br)

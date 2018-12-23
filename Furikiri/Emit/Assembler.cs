@@ -8,8 +8,7 @@ namespace Furikiri.Emit
     {
         public string Disassemble(string path)
         {
-            Module m = new Module();
-            m.LoadFromFile(path);
+            Module m = new Module(path);
 
             StringBuilder sb = new StringBuilder();
             if (m.TopLevel != null)

@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo
@@ -15,9 +17,24 @@ namespace Furikiri.Echo
         public Module Script { get; set; }
 
         public Dictionary<CodeObject, Method> Methods { get; set; } = new Dictionary<CodeObject, Method>();
-        
+
+        public List<Func<List<Instruction>, int, ITjsPattern>> Detectors = new List<Func<List<Instruction>, int, ITjsPattern>>();
+
         public EchoDecompiler()
-        { }
+        {
+            Init();
+        }
+
+        public EchoDecompiler(string path)
+        {
+            Init();
+            Script = new Module(path);
+        }
+
+        private void Init()
+        {
+            Detectors.Add(RegMemberPattern.TryMatch);
+        }
 
         public void Decompile()
         {
@@ -38,7 +55,32 @@ namespace Furikiri.Echo
                 Methods[obj] = obj.ResolveMethod();
             }
 
-            //TODO:
+            var patternList = new List<ITjsPattern>();
+            var m = Methods[Script.TopLevel];
+            int offset = 0;
+            while (offset < m.Instructions.Count)
+            {
+                bool found = false;
+                foreach (var detect in Detectors)
+                {
+                    var result = detect(m.Instructions, offset);
+                    if (result != null)
+                    {
+                        patternList.Add(result);
+                        offset += result.Length;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    Debug.WriteLine($"Failed to detect pattern at {m.Name}:L{offset}");
+                    offset++;
+                }
+            }
+
+            var p = patternList;
         }
 
         private void Compact(Method method)
