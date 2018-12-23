@@ -1,71 +1,53 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using Furikiri.Emit;
-using Tjs2;
-using Tjs2.Engine;
-using Tjs2.Sharper;
 
 namespace Furikiri.Echo
 {
+    /// <summary>
+    /// A naive TJS decompiler
+    /// </summary>
     public class EchoDecompiler
     {
-        private Tjs _engine;
-        private Dispatch2 _dispatcher;
-        private TjsByteCodeLoader _codeLoader;
-        public string DisassembleWithTjsEngine(string path)
+        public Module Script { get; set; }
+
+        public Dictionary<CodeObject, Method> Methods { get; set; } = new Dictionary<CodeObject, Method>();
+        
+        public EchoDecompiler()
+        { }
+
+        public void Decompile()
         {
-            Tjs.mStorage = null;
-            Tjs.Initialize();
-            _engine = new Tjs();
-            //Tjs.SetConsoleOutput(ConsoleOutput);
-
-            _dispatcher = _engine.GetGlobal();
-            _codeLoader = new TjsByteCodeLoader();
-
-            var result = Disassemble(_codeLoader, _engine, path);
-
-            _engine.Shutdown();
-            Tjs.FinalizeApplication();
-
-            return result;
-        }
-
-
-        string Disassemble(TjsByteCodeLoader loader, Tjs engine, string path)
-        {
-            using (var fs = new FileStream(path, FileMode.Open))
+            if (Script == null)
             {
-                TjsBinaryStream stream = new TjsBinaryStream(fs);
-                try
-                {
-                    var scriptBlock = loader.ReadByteCode(engine, Path.GetFileNameWithoutExtension(path), stream);
-
-                    return DisassembleObject(scriptBlock.Objects[0].Get());
-
-                    foreach (var scriptBlockObject in scriptBlock.Objects)
-                    {
-                        DisassembleObject(scriptBlockObject.Get());
-                    }
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine($"Loading {path} failed.");
-                }
+                return;
             }
 
-            return null;
+            Methods[Script.TopLevel] = Script.TopLevel.ResolveMethod();
+
+            foreach (var obj in Script.Objects)
+            {
+                if (obj == Script.TopLevel)
+                {
+                    continue;
+                }
+
+                Methods[obj] = obj.ResolveMethod();
+            }
+
+            //TODO:
         }
 
-        private string DisassembleObject(InterCodeObject obj)
+        private void Compact(Method method)
         {
-            var name = obj.mName;
-            var t = obj.mContextType;
-            var codes = obj.mCode;
-
-            Method method = new Method(codes);
-            return method.ToAssemblyCode();
+            method.Resolve();
+            //HashSet<OpCode> toBeRemoved = new HashSet<OpCode>();
+            method.Instructions.RemoveAll(instruction =>
+                instruction.OpCode == OpCode.NOP || instruction.OpCode == OpCode.DEBUGGER);
+            method.Merge();
         }
     }
 }

@@ -23,6 +23,14 @@ namespace Furikiri.Tests
             var path = "..\\..\\Res\\startup.tjs";
             Module m = new Module();
             m.LoadFromFile(path);
+
+            var method = m.TopLevel.ResolveMethod();
+            var offset = 0;
+            foreach (var ins in method.Instructions)
+            {
+                Assert.AreEqual(ins.Offset, offset);
+                offset += ins.Size;
+            }
         }
     }
 }

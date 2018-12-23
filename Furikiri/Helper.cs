@@ -210,9 +210,48 @@ namespace Furikiri
             return 0;
         }
 
+        internal static void SetSlot(this IRegister register, int value)
+        {
+            SetSlot(register, (short)value);
+        }
+
+        internal static void SetSlot(this IRegister register, short value)
+        {
+            switch (register)
+            {
+                case RegisterParameter registerParameter:
+                    registerParameter.Slot = value;
+                    break;
+                case RegisterRef registerRef:
+                    registerRef.Slot = value;
+                    break;
+                case RegisterShort registerShort:
+                    registerShort.Value = value;
+                    break;
+                case RegisterValue registerValue:
+                    registerValue.Slot = value;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Convert string to flatten string
+        /// </summary>
+        /// <param name="str"></param>
+        /// <returns></returns>
         public static string Flatten(this string str)
         {
             return str.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+        }
+
+        /// <summary>
+        /// Convert flatten string to popped string
+        /// </summary>
+        /// <param name="str"></param>
+        /// <returns></returns>
+        public static string Pop(this string str)
+        {
+            return str.Replace("\\r", "\r").Replace("\\n", "\n").Replace("\\t", "\t");
         }
 
         /// <summary>

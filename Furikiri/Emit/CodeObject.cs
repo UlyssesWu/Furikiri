@@ -62,10 +62,10 @@ namespace Furikiri.Emit
 
         public Method ResolveMethod()
         {
-            return new Method(this, Code);
+            return new Method(this);
         }
 
-        public string GetDisassembleSignatureString() => 
+        public string GetDisassembleSignatureString() =>
             $"({ContextType.ContextTypeName()}) {Name} 0x{GetHashCode():X8}";
     }
 

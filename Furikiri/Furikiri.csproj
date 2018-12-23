@@ -16,7 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Echo\Patterns\" />
     <Folder Include="Narcissus\" />
   </ItemGroup>
 
