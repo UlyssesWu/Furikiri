@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo.Patterns
@@ -11,35 +12,60 @@ namespace Furikiri.Echo.Patterns
     {
         public bool IsParameter { get; private set; } = false;
         public int Length => 1;
+        public TjsVarType Type { get; set; }
         public int Slot { get; set; }
+        public string Name { get; set; }
+        public string DefaultName => $"{(IsParameter ? "p" : "l")}{Math.Abs(Slot) + 2}";
 
-        public static LocalPattern TryMatch(List<Instruction> codes, int i, DecompileContext context)
+        public LocalPattern(bool isParam, int slot)
         {
+            IsParameter = isParam;
+            Slot = slot;
+        }
+
+        internal LocalPattern()
+        { }
+
+        public static LocalPattern Match(List<Instruction> codes, int i, DecompileContext context)
+        {
+            //cp dst, src
             var argCount = context.Object.FuncDeclArgCount;
             var varCount = context.Object.MaxVariableCount;
             if (codes[i].OpCode == OpCode.CP)
             {
                 var dst = codes[i].Registers[0].GetSlot();
                 var src = codes[i].Registers[1].GetSlot();
-                int local = 0;
-                int immediate = 0;
                 if (dst < Const.ThisProxy && src > Const.Resource)
                 {
-                    local = dst;
-                    immediate = src;
+                    //set var
+                    //local = dst;
+                    //immediate = src;
+                    return null;
                 }
-                else if (src < Const.ThisProxy && dst > Const.Resource)
+
+                LocalPattern l = new LocalPattern {Slot = dst};
+                if (src < Const.ThisProxy && dst > Const.Resource)
                 {
-                    //usually fetch parameter
-                    local = src;
-                    immediate = dst;
+                    //usually fetch parameter from src, save to dst
+                    if (src > Const.ThisProxy - argCount) //param
+                    {
+                        l.IsParameter = true;
+                        l.Type = context.GetSlotType(src);
+                    }
                 }
-
-                //TODO:
-
+                return l;
             }
 
             return null;
+        }
+
+        public override string ToString()
+        {
+            if (IsParameter)
+            {
+                return Name;
+            }
+            return $"var {Name}";
         }
     }
 }

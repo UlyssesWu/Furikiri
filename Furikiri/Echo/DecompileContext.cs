@@ -24,7 +24,8 @@ namespace Furikiri.Echo
         public List<DetectHandler> Detector { get; set; }
         public List<Instruction> InstructionQueue { get; set; } = new List<Instruction>();
         public List<IPattern> Blocks { get; set; } = new List<IPattern>();
-
+        public Dictionary<int, TjsVarType> TypeInfo { get; set; } = new Dictionary<int, TjsVarType>();
+        public Dictionary<int, IExpressionPattern> Expressions { get; set; } = new Dictionary<int, IExpressionPattern>();
         public DecompileContext(CodeObject obj, List<DetectHandler> detectors)
         {
             Object = obj;
@@ -35,48 +36,82 @@ namespace Furikiri.Echo
         public DecompileContext()
         { }
 
-        public Dictionary<int, IExpressionPattern> PopExpressionPatterns(bool clear = true)
+        public TjsVarType GetSlotType(int slot)
         {
-            Dictionary<int, IExpressionPattern> expressions = new Dictionary<int, IExpressionPattern>();
-            if (InstructionQueue == null || InstructionQueue.Count == 0)
+            if (TypeInfo.ContainsKey(slot))
             {
-                return expressions;
+                return TypeInfo[slot];
             }
-            var offset = 0;
-            while (offset < InstructionQueue.Count)
+
+            return TjsVarType.Null;
+        }
+
+        public void PopExpressionPatterns(int? slot = null, bool clear = true)
+        {
+            if (slot != null && Blocks.Count > 0)
             {
-                switch (InstructionQueue[offset].OpCode)
+                for (int i = Blocks.Count - 1; i > 0; i--)
                 {
-                    case OpCode.GPD: //get
-                        var p = ChainGetPattern.TryMatch(InstructionQueue, offset, this);
-                        expressions[p.Slot] = p;
-                        offset += p.Length;
-                        break;
-                    case OpCode.CONST: //const
-                        var c = ConstPattern.TryMatch(InstructionQueue, offset, this);
-                        expressions[c.Slot] = c;
-                        offset += c.Length;
-                        break;
-                    case OpCode.CP: //fetch param
-                        //if (InstructionQueue[offset].)
-                        //{
-                            
-                        //}
-                        //var cp = 
-                        break;
-                    default:
-                        Debug.WriteLine($"Ignore {InstructionQueue[offset]}");
-                        offset++;
-                        break;
+                    if (Blocks[i] is IExpressionPattern exp)
+                    {
+                        if (exp.Slot == slot)
+                        {
+                            Expressions[exp.Slot] = exp;
+                            break;
+                        }
+                    }
                 }
             }
 
-            if (clear)
+            if (InstructionQueue != null && InstructionQueue.Count > 0)
             {
-                InstructionQueue.Clear();
+                var offset = 0;
+                while (offset < InstructionQueue.Count)
+                {
+                    switch (InstructionQueue[offset].OpCode)
+                    {
+                        case OpCode.GPD: //get
+                            var p = ChainGetPattern.Match(InstructionQueue, offset, this);
+                            Expressions[p.Slot] = p;
+                            offset += p.Length;
+                            break;
+                        case OpCode.CONST: //const
+                            var c = ConstPattern.Match(InstructionQueue, offset, this);
+                            Expressions[c.Slot] = c;
+                            offset += c.Length;
+                            break;
+                        case OpCode.CP: //fetch param
+                            var l = LocalPattern.Match(InstructionQueue, offset, this);
+                            Expressions[l.Slot] = l;
+                            break;
+                        default:
+                            Debug.WriteLine($"Ignore {InstructionQueue[offset]}");
+                            offset++;
+                            break;
+                    }
+                }
+
+                if (clear)
+                {
+                    InstructionQueue.Clear();
+                }
+            }
+            
+            return;
+        }
+
+        public void TypeInferScan(List<Instruction> instructions, int i, int slot, bool up = false)
+        {
+            if (up)
+            {
+                
             }
 
-            return expressions;
+            for (int j = i; j < instructions.Count; j++)
+            {
+                var ins = instructions[j];
+
+            }
         }
     }
 }

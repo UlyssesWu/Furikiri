@@ -29,8 +29,8 @@ namespace Furikiri.Echo
 
         private void Init()
         {
-            Detectors.Add(RegMemberPattern.TryMatch);
-            //Detectors.Add(ChainGetPattern.TryMatch);
+            Detectors.Add(RegMemberPattern.Match);
+            Detectors.Add(BinaryOpPattern.Match);
         }
 
         public void Decompile()
@@ -81,6 +81,17 @@ namespace Furikiri.Echo
             }
 
             var p = context.Blocks;
+            foreach (var pattern in p)
+            {
+                var pp = pattern;
+                var p1 = pp as BinaryOpPattern;
+                if (p1 == null)
+                {
+                    continue;
+                }
+                var l = p1.Left as ChainGetPattern;
+                
+            }
         }
 
         private void Compact(Method method)

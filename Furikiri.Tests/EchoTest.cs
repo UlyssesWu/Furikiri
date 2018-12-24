@@ -1,8 +1,4 @@
-﻿using System;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Threading;
+﻿using System.IO;
 using Furikiri.Echo;
 using Furikiri.Emit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -59,6 +55,7 @@ namespace Furikiri.Tests
             var path = "..\\..\\Res\\Initialize.tjs.comp";
             EchoDecompiler decompiler = new EchoDecompiler(path);
             decompiler.Decompile();
+            return;
             var KAGLoadScript = decompiler.Script.Objects.Find(c => c.Name == "KAGLoadScript");
             var argC = KAGLoadScript.FuncDeclArgCount;
             var argD = KAGLoadScript.FuncDeclCollapseBase;

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Linq;
 
 namespace Furikiri.Emit
 {
@@ -135,8 +136,8 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            var str = string.Join(", ", BytesValue);
-            return $"[{str}]";
+            var str = string.Join(" ", BytesValue.Select(b => b.ToString("X2")));
+            return $"<% {str} %>";
         }
     }
 

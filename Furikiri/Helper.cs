@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
 namespace Furikiri
@@ -310,24 +311,54 @@ namespace Furikiri
         
         internal static string GetParamName(this TjsVarType v, int i)
         {
+            string s = i < 0 ? "" : i.ToString();
             switch (v)
             {
                 case TjsVarType.Null:
-                    return $"p{i}";
+                    return $"p{s}";
                 case TjsVarType.Void:
-                    return $"void{i}";
+                    return $"void{s}";
                 case TjsVarType.Object:
-                    return $"o{i}";
+                    return $"o{s}";
                 case TjsVarType.String:
-                    return $"s{i}";
+                    return $"s{s}";
                 case TjsVarType.Octet:
-                    return $"bytes{i}";
+                    return $"bytes{s}";
                 case TjsVarType.Int:
-                    return $"i{i}";
+                    return $"i{s}";
                 case TjsVarType.Real:
-                    return $"d{i}";
+                    return $"d{s}";
                 default:
-                    return $"p{i}";
+                    return $"p{s}";
+            }
+        }
+
+        internal static string ToSymbol(this BinaryOp op)
+        {
+            switch (op)
+            {
+                case BinaryOp.Assign:
+                    return "=";
+                case BinaryOp.Add:
+                    return "+";
+                case BinaryOp.Sub:
+                    return "-";
+                case BinaryOp.Mul:
+                    return "*";
+                case BinaryOp.Div:
+                    return "/";
+                case BinaryOp.Idiv:
+                    return "\\";
+                case BinaryOp.Equal:
+                    return "==";
+                case BinaryOp.NotEqual:
+                    return "!=";
+                case BinaryOp.Congruent:
+                    return "===";
+                case BinaryOp.NotCongruent:
+                    return "!==";
+                default:
+                    return "#";
             }
         }
     }

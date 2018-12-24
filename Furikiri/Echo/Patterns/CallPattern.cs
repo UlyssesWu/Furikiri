@@ -12,9 +12,9 @@ namespace Furikiri.Echo.Patterns
     {
         public int Length { get; }
 
-        public static CallPattern TryMatch(List<Instruction> codes, int i, DecompileContext context)
+        public static CallPattern Match(List<Instruction> codes, int i, DecompileContext context)
         {
-            ChainGetPattern get = ChainGetPattern.TryMatch(codes, i, context);
+            ChainGetPattern get = ChainGetPattern.Match(codes, i, context);
             if (get == null)
             {
                 return null;

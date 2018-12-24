@@ -15,6 +15,7 @@ namespace Furikiri.Echo
     /// </summary>
     public interface IExpressionPattern : IPattern
     {
+        TjsVarType Type { get; }
         int Slot { get; }
         string ToString();
     }

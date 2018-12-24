@@ -11,7 +11,7 @@ namespace Furikiri.Echo.Patterns
     /// </summary>
     class RegMemberPattern : IPattern
     {
-        public static RegMemberPattern TryMatch(List<Instruction> codes, int i, DecompileContext context)
+        public static RegMemberPattern Match(List<Instruction> codes, int i, DecompileContext context)
         {
             if (codes.Count < i + 3)
             {

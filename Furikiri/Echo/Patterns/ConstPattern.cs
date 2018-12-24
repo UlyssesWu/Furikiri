@@ -1,13 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo.Patterns
 {
+    /// <summary>
+    /// Constant
+    /// </summary>
     class ConstPattern : IExpressionPattern
     {
-        public int Length { get; }
+        public int Length => 1;
 
         public ITjsVariant Variant { get; }
 
@@ -16,7 +17,7 @@ namespace Furikiri.Echo.Patterns
             Variant = v;
         }
 
-        public static ConstPattern TryMatch(List<Instruction> codes, int i, DecompileContext context)
+        public static ConstPattern Match(List<Instruction> codes, int i, DecompileContext context)
         {
             if (codes[i].OpCode == OpCode.CONST)
             {
@@ -27,11 +28,12 @@ namespace Furikiri.Echo.Patterns
             return null;
         }
 
+        public TjsVarType Type => Variant.Type;
         public int Slot { get; private set; }
 
         public override string ToString()
         {
-            return base.ToString();
+            return Variant.ToString();
         }
     }
 }

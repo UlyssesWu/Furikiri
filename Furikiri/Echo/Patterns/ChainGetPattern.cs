@@ -12,7 +12,15 @@ namespace Furikiri.Echo.Patterns
     {
         public int Length => (FromGlobal ? 1 : 0) + Members.Count;
 
-        public static ChainGetPattern TryMatch(List<Instruction> codes, int i, DecompileContext context)
+        internal ChainGetPattern() { }
+
+        public ChainGetPattern(int slot, string member)
+        {
+            Slot = slot;
+            Members.Add(member);
+        }
+
+        public static ChainGetPattern Match(List<Instruction> codes, int i, DecompileContext context)
         {
             ChainGetPattern m = null;
             int reg = -1;
@@ -22,7 +30,7 @@ namespace Furikiri.Echo.Patterns
                 m = new ChainGetPattern {FromGlobal = true};
                 i++;
             }
-            while (codes[i].OpCode == OpCode.GPD)
+            while (i < codes.Count && codes[i].OpCode == OpCode.GPD)
             {
                 var slot = codes[i].Registers[1].GetSlot();
                 if (reg == -1 || slot == reg && slot != 0)
@@ -47,9 +55,11 @@ namespace Furikiri.Echo.Patterns
             return m;
         }
 
+        public TjsVarType Type { get; private set; } = TjsVarType.Null;
         public int Slot { get; private set; }
 
         public bool FromGlobal { get; private set; } = false;
+        public bool FromThis { get; private set; } = false;
 
         public List<string> Members = new List<string>();
 
