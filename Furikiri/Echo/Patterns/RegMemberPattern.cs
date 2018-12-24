@@ -9,19 +9,19 @@ namespace Furikiri.Echo.Patterns
     /// only appears on beginning
     /// <example>this.a = [object]</example>
     /// </summary>
-    class RegMemberPattern : ITjsPattern
+    class RegMemberPattern : IPattern
     {
-        public static RegMemberPattern TryMatch(List<Instruction> codes, int index, DecompileContext context)
+        public static RegMemberPattern TryMatch(List<Instruction> codes, int i, DecompileContext context)
         {
-            if (codes.Count < index + 3)
+            if (codes.Count < i + 3)
             {
                 return null;
             }
 
             RegMemberPattern pattern = null;
-            while (codes.Count >= index + 3)
+            while (codes.Count >= i + 3)
             {
-                if (codes[index].ToString() == "cl %1")
+                if (codes[i].ToString() == "cl %1")
                 {
                     if (pattern != null)
                     {
@@ -29,35 +29,35 @@ namespace Furikiri.Echo.Patterns
                     }
                     return pattern;
                 }
-                if (codes[index].ToString().StartsWith("const %1,") &&
-                    codes[index + 1].ToString() == "chgthis %1, %-1" &&
-                    codes[index + 2].ToString().StartsWith("spds %-1.") && codes[index + 2].Registers[2].GetSlot() == 1)
+                if (codes[i].ToString().StartsWith("const %1,") &&
+                    codes[i + 1].ToString() == "chgthis %1, %-1" &&
+                    codes[i + 2].ToString().StartsWith("spds %-1.") && codes[i + 2].Registers[2].GetSlot() == 1)
                 {
-                    var data = codes[index].Data as OperandData;
+                    var data = codes[i].Data as OperandData;
                     if (data == null)
                     {
-                        index += 3;
+                        i += 3;
                         continue;
                     }
 
                     var func = data.Variant as TjsCodeObject;
                     if (func == null)
                     {
-                        index += 3;
+                        i += 3;
                         continue;
                     }
 
-                    var memberData = codes[index + 2].Data as OperandData;
+                    var memberData = codes[i + 2].Data as OperandData;
                     if (memberData == null)
                     {
-                        index += 3;
+                        i += 3;
                         continue;
                     }
 
                     var memberName = memberData.Variant as TjsString;
                     if (memberName == null)
                     {
-                        index += 3;
+                        i += 3;
                         continue;
                     }
 
@@ -66,7 +66,7 @@ namespace Furikiri.Echo.Patterns
                         pattern = new RegMemberPattern();
                     }
                     pattern.Members[memberName] = func;
-                    index += 3;
+                    i += 3;
                 }
                 else
                 {

@@ -8,7 +8,7 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// <example>a.b.c</example>
     /// </summary>
-    class ChainGetPattern : ITjsPattern
+    class ChainGetPattern : IExpressionPattern
     {
         public int Length => (FromGlobal ? 1 : 0) + Members.Count;
 
@@ -34,6 +34,7 @@ namespace Furikiri.Echo.Patterns
                         m = new ChainGetPattern();
                     }
                     m.Members.Add(str);
+                    m.Slot = codes[i].Registers[0].GetSlot();
                 }
                 else
                 {
@@ -46,8 +47,31 @@ namespace Furikiri.Echo.Patterns
             return m;
         }
 
+        public int Slot { get; private set; }
+
         public bool FromGlobal { get; private set; } = false;
 
         public List<string> Members = new List<string>();
+
+        public override string ToString()
+        {
+            if (Members.Count > 0)
+            {
+                var s = string.Join(".", Members);
+                if (FromGlobal)
+                {
+                    s = "global." + s;
+                }
+
+                return s;
+            }
+
+            if (FromGlobal)
+            {
+                return "global";
+            }
+
+            return "";
+        }
     }
 }

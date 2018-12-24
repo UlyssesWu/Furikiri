@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Globalization;
+using System.Diagnostics;
 
 namespace Furikiri.Emit
 {
@@ -7,8 +7,11 @@ namespace Furikiri.Emit
     {
         TjsVarType Type { get; }
         object Value { get; }
+
+        string DebugString { get; }
     }
 
+    [DebuggerDisplay("DebugString")]
     public class TjsVoid : ITjsVariant
     {
         private static TjsVoid _void;
@@ -22,16 +25,20 @@ namespace Furikiri.Emit
         /// </summary>
         public static TjsVoid Void => _void ?? (_void = new TjsVoid());
 
+        public string DebugString => "(void)";
+
         public override string ToString()
         {
-            return "(void)";
+            return "void";
         }
     }
 
+    //[DebuggerDisplay("DebugString")]
     public class TjsObject : ITjsVariant
     {
         public TjsVarType Type => TjsVarType.Object;
         public object Value { get; set; }
+        public string DebugString => Value.ToString();
         public bool Internal { get; set; } = false;
 
         public TjsObject(object obj)
@@ -40,10 +47,28 @@ namespace Furikiri.Emit
         }
     }
 
+    [DebuggerDisplay("DebugString")]
     public class TjsCodeObject : ITjsVariant
     {
         public TjsVarType Type => TjsVarType.Object;
         public object Value => Object;
+
+        public string DebugString
+        {
+            get
+            {
+                string objName = Object?.Name;
+                objName = objName == null ? "0x00000000" : $"[{objName}]";
+                if (Object?.ContextType == TjsContextType.ExprFunction)
+                {
+                    objName += $"(0x{Object.GetHashCode():X8})";
+                }
+                string thisName = This?.Name;
+                thisName = thisName == null ? "0x00000000" : $"[{objName}]";
+                return $"(object)({objName}:{thisName})";
+            }
+        }
+
         public CodeObject Object { get; set; }
         public CodeObject This { get; set; } = null;
         public bool HasThis => This != null;
@@ -61,22 +86,17 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            string objName = Object?.Name;
-            objName = objName == null ? "0x00000000" : $"[{objName}]";
-            if (Object?.ContextType == TjsContextType.ExprFunction)
-            {
-                objName += $"(0x{Object.GetHashCode():X8})";
-            }
-            string thisName = This?.Name;
-            thisName = thisName == null ? "0x00000000" : $"[{objName}]";
-            return $"(object)({objName}:{thisName})";
+            return $"({Object.ContextType.ContextTypeName()}){Object.Name}";
         }
     }
 
+    [DebuggerDisplay("DebugString")]
     public class TjsString : ITjsVariant
     {
         public TjsVarType Type => TjsVarType.String;
         public object Value => StringValue;
+        public string DebugString => $"(string)\"{StringValue}\"";
+
         public string StringValue { get; set; }
 
         public TjsString(string str)
@@ -96,14 +116,16 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            return $"(string)\"{StringValue}\"";
+            return $"\"{StringValue.Flatten()}\"";
         }
     }
 
+    [DebuggerDisplay("DebugString")]
     public class TjsOctet : ITjsVariant
     {
         public TjsVarType Type => TjsVarType.Octet;
         public object Value => BytesValue;
+        public string DebugString => $"(octet)<% {BitConverter.ToString(BytesValue)} %>";
         public byte[] BytesValue { get; set; }
 
         public TjsOctet(byte[] bytes)
@@ -113,16 +135,19 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            return $"(octet)<% {BitConverter.ToString(BytesValue)} %>";
+            var str = string.Join(", ", BytesValue);
+            return $"[{str}]";
         }
     }
 
+    [DebuggerDisplay("DebugString")]
     public class TjsInt : ITjsVariant
     {
         internal TjsInternalType InternalType { get; set; }
 
         public TjsVarType Type => TjsVarType.Int;
         public object Value => IntValue;
+        public string DebugString => $"(int){IntValue}";
         public int IntValue { get; set; }
 
         /// <summary>
@@ -167,16 +192,18 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            return $"(int){IntValue}";
+            return IntValue.ToString();
         }
     }
 
+    [DebuggerDisplay("DebugString")]
     public class TjsReal : ITjsVariant
     {
         internal TjsInternalType InternalType { get; set; }
 
         public TjsVarType Type => TjsVarType.Real;
         public object Value => InternalType == TjsInternalType.Long ? LongValue : DoubleValue;
+        public string DebugString => $"(real){Value}";
         public double DoubleValue { get; set; }
         public long LongValue { get; set; }
 
@@ -212,7 +239,7 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            return $"(real){Value}";
+            return Value.ToString();
         }
     }
 }

@@ -30,7 +30,7 @@ namespace Furikiri.Echo
         private void Init()
         {
             Detectors.Add(RegMemberPattern.TryMatch);
-            Detectors.Add(ChainGetPattern.TryMatch);
+            //Detectors.Add(ChainGetPattern.TryMatch);
         }
 
         public void Decompile()
@@ -52,8 +52,10 @@ namespace Furikiri.Echo
                 Methods[obj] = obj.ResolveMethod();
             }
 
-            var context = new DecompileContext(Detectors);
+            var context = new DecompileContext(Script.TopLevel, Detectors);
             var m = Methods[Script.TopLevel];
+            Compact(m);
+
             int offset = 0;
             while (offset < m.Instructions.Count)
             {

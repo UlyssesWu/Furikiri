@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Furikiri.Emit;
-using Tjs2.Engine;
 
 namespace Furikiri
 {
@@ -188,10 +187,10 @@ namespace Furikiri
             return chars.ToRealString();
         }
 
-        internal static ITjsVariant ToTjsVariant(this Variant v)
-        {
-            throw new NotImplementedException();
-        }
+        //internal static ITjsVariant ToTjsVariant(this Variant v)
+        //{
+        //    throw new NotImplementedException();
+        //}
 
         internal static short GetSlot(this IRegister register)
         {
@@ -306,6 +305,29 @@ namespace Furikiri
                     return 0;
                 default:
                     return NAMESPACE_DEFAULT_HASH_BITS;
+            }
+        }
+        
+        internal static string GetParamName(this TjsVarType v, int i)
+        {
+            switch (v)
+            {
+                case TjsVarType.Null:
+                    return $"p{i}";
+                case TjsVarType.Void:
+                    return $"void{i}";
+                case TjsVarType.Object:
+                    return $"o{i}";
+                case TjsVarType.String:
+                    return $"s{i}";
+                case TjsVarType.Octet:
+                    return $"bytes{i}";
+                case TjsVarType.Int:
+                    return $"i{i}";
+                case TjsVarType.Real:
+                    return $"d{i}";
+                default:
+                    return $"p{i}";
             }
         }
     }

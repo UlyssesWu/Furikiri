@@ -25,7 +25,7 @@
         public IRegister Register { get; set; }
         public ITjsVariant Variant { get; set; }
         public Instruction Instruction { get; }
-        public string Comment => $"{Register} = {Variant.ToString().Flatten()}";
+        public string Comment => $"{Register} = {Variant.DebugString.Flatten()}";
 
         public OperandData(Instruction ins, IRegister register, ITjsVariant v)
         {

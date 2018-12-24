@@ -59,7 +59,18 @@ namespace Furikiri.Tests
             var path = "..\\..\\Res\\Initialize.tjs.comp";
             EchoDecompiler decompiler = new EchoDecompiler(path);
             decompiler.Decompile();
-            var props = decompiler.Script.TopLevel.Properties.First().Value.Property;
+            var KAGLoadScript = decompiler.Script.Objects.Find(c => c.Name == "KAGLoadScript");
+            var argC = KAGLoadScript.FuncDeclArgCount;
+            var argD = KAGLoadScript.FuncDeclCollapseBase;
+            var argU = KAGLoadScript.FuncDeclUnnamedArgArrayBase;
+            var vR = KAGLoadScript.VariableReserveCount;
+            var vM = KAGLoadScript.MaxVariableCount;
+            foreach (var tjsVariant in KAGLoadScript.Variants)
+            {
+                var v = tjsVariant;
+            }
+
+            var s = KAGLoadScript.SourcePosArray;
         }
 
         //DO NOT WORK

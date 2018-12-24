@@ -9,7 +9,7 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// <example>a.b = c</example>
     /// </summary>
-    class AssignmentPattern : ITjsPattern
+    class AssignmentPattern : IPattern
     {
         public int Length { get; }
 

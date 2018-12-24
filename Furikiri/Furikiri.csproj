@@ -11,11 +11,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\IronTJS\IronTJS\IronTJS.csproj" />
-    <ProjectReference Include="..\KrkrSharp\Tjs2Net\Tjs2Net.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Folder Include="Narcissus\" />
   </ItemGroup>
 

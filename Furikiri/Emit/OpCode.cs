@@ -12,6 +12,9 @@ namespace Furikiri.Emit
     //%obj.%name %为间接引用（indirect）
     //算术移位补符号位，逻辑移位补0
 
+    //%-1 = this
+    //%-2 = this proxy (this ?? global)
+
     /// <summary>
     /// TJS指令
     /// </summary>
