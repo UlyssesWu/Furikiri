@@ -5,9 +5,13 @@ using Furikiri.Emit;
 
 namespace Furikiri.Echo.Patterns
 {
+    /// <summary>
+    /// only appears on beginning
+    /// <example>this.a = [object]</example>
+    /// </summary>
     class RegMemberPattern : ITjsPattern
     {
-        public static RegMemberPattern TryMatch(List<Instruction> codes, int index)
+        public static RegMemberPattern TryMatch(List<Instruction> codes, int index, DecompileContext context)
         {
             if (codes.Count < index + 3)
             {

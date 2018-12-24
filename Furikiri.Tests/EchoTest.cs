@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using Furikiri.Echo;
 using Furikiri.Emit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -56,6 +59,7 @@ namespace Furikiri.Tests
             var path = "..\\..\\Res\\Initialize.tjs.comp";
             EchoDecompiler decompiler = new EchoDecompiler(path);
             decompiler.Decompile();
+            var props = decompiler.Script.TopLevel.Properties.First().Value.Property;
         }
 
         //DO NOT WORK

@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Text;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
@@ -18,7 +14,7 @@ namespace Furikiri.Echo
 
         public Dictionary<CodeObject, Method> Methods { get; set; } = new Dictionary<CodeObject, Method>();
 
-        public List<Func<List<Instruction>, int, ITjsPattern>> Detectors = new List<Func<List<Instruction>, int, ITjsPattern>>();
+        internal List<DetectHandler> Detectors = new List<DetectHandler>();
 
         public EchoDecompiler()
         {
@@ -34,6 +30,7 @@ namespace Furikiri.Echo
         private void Init()
         {
             Detectors.Add(RegMemberPattern.TryMatch);
+            Detectors.Add(ChainGetPattern.TryMatch);
         }
 
         public void Decompile()
@@ -55,7 +52,7 @@ namespace Furikiri.Echo
                 Methods[obj] = obj.ResolveMethod();
             }
 
-            var patternList = new List<ITjsPattern>();
+            var context = new DecompileContext(Detectors);
             var m = Methods[Script.TopLevel];
             int offset = 0;
             while (offset < m.Instructions.Count)
@@ -63,10 +60,10 @@ namespace Furikiri.Echo
                 bool found = false;
                 foreach (var detect in Detectors)
                 {
-                    var result = detect(m.Instructions, offset);
+                    var result = detect(m.Instructions, offset, context);
                     if (result != null)
                     {
-                        patternList.Add(result);
+                        context.Blocks.Add(result);
                         offset += result.Length;
                         found = true;
                         break;
@@ -76,11 +73,12 @@ namespace Furikiri.Echo
                 if (!found)
                 {
                     Debug.WriteLine($"Failed to detect pattern at {m.Name}:L{offset}");
+                    context.InstructionQueue.Add(m.Instructions[offset]);
                     offset++;
                 }
             }
 
-            var p = patternList;
+            var p = context.Blocks;
         }
 
         private void Compact(Method method)
