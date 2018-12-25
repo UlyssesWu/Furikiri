@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Furikiri.Emit;
 
@@ -78,19 +79,14 @@ namespace Furikiri.Echo.Patterns
         }
 
         public bool HasCL { get; set; } = false;
+        public bool Terminal => true;
         public int Length => 3 * Members.Count + (HasCL ? 1 : 0);
 
         public Dictionary<string, TjsCodeObject> Members { get; set; } = new Dictionary<string, TjsCodeObject>();
 
         public override string ToString()
         {
-            StringBuilder sb = new StringBuilder();
-            foreach (var m in Members)
-            {
-                sb.AppendLine($"this.{m.Key} = {m.Value};");
-            }
-
-            return sb.ToString();
+            return string.Join(Environment.NewLine, Members.Select(kv => $"this.{kv.Key} = {kv.Value};"));
         }
     }
 }

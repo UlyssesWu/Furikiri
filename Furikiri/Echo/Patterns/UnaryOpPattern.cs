@@ -8,7 +8,8 @@ namespace Furikiri.Echo.Patterns
     class UnaryOpPattern : IExpressionPattern
     {
         public int Length => 1;
+        public bool Terminal { get; set; }
         public TjsVarType Type { get; }
-        public int Slot { get; }
+        public short Slot { get; }
     }
 }

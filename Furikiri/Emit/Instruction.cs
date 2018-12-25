@@ -20,6 +20,23 @@ namespace Furikiri.Emit
             OpCode = op;
         }
 
+        public IRegister this[int i] => Registers[i];
+
+        /// <summary>
+        /// Get slot of target register
+        /// </summary>
+        /// <param name="register"></param>
+        /// <returns></returns>
+        internal short GetRegisterSlot(int register)
+        {
+            return Registers[register].GetSlot();
+        }
+
+        internal List<short> GetRelatedSlots()
+        {
+            return Registers.Where(r => r is RegisterRef).Select(rr => rr.GetSlot()).ToList();
+        }
+
         public static Instruction Create(in short[] code, int index)
         {
             Instruction ins = null;
@@ -437,7 +454,7 @@ namespace Furikiri.Emit
                     {
                         pcPos = 3;
                     }
-                    int paramCount = ((RegisterShort)Registers[pcPos]).Value;
+                    int paramCount = Registers[pcPos].GetSlot();
                     if (paramCount == -1)
                     {
                         param = "...";

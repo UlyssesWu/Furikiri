@@ -14,7 +14,7 @@ namespace Furikiri.Echo.Patterns
 
         internal ChainGetPattern() { }
 
-        public ChainGetPattern(int slot, string member)
+        public ChainGetPattern(short slot, string member)
         {
             Slot = slot;
             Members.Add(member);
@@ -55,8 +55,9 @@ namespace Furikiri.Echo.Patterns
             return m;
         }
 
+        public bool Terminal => false;
         public TjsVarType Type { get; private set; } = TjsVarType.Null;
-        public int Slot { get; private set; }
+        public short Slot { get; private set; }
 
         public bool FromGlobal { get; private set; } = false;
         public bool FromThis { get; private set; } = false;

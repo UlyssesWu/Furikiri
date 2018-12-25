@@ -9,15 +9,15 @@ namespace Furikiri.Emit
         /// <summary>
         /// %0, res, usually void
         /// </summary>
-        public static int Resource = 0;
+        public const short Resource = 0;
         /// <summary>
         /// %-1, this
         /// </summary>
-        public static int This = -1;
+        public const short This = -1;
         /// <summary>
         /// %-2, this ?? global
         /// </summary>
-        public static int ThisProxy = -2;
+        public const short ThisProxy = -2;
     }
 
     [Flags]

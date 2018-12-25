@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
@@ -31,6 +32,7 @@ namespace Furikiri.Echo
         {
             Detectors.Add(RegMemberPattern.Match);
             Detectors.Add(BinaryOpPattern.Match);
+            Detectors.Add(CallPattern.Match);
         }
 
         public void Decompile()
@@ -80,18 +82,17 @@ namespace Furikiri.Echo
                 }
             }
 
-            var p = context.Blocks;
-            foreach (var pattern in p)
+            var blocks = context.Blocks;
+            StringBuilder sb = new StringBuilder();
+            foreach (var block in blocks)
             {
-                var pp = pattern;
-                var p1 = pp as BinaryOpPattern;
-                if (p1 == null)
+                if (block is IExpressionPattern exp && block.Terminal)
                 {
-                    continue;
+                    sb.AppendLine(exp.ToString());
                 }
-                var l = p1.Left as ChainGetPattern;
-                
             }
+
+            var text = sb.ToString();
         }
 
         private void Compact(Method method)

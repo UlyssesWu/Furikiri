@@ -12,12 +12,13 @@ namespace Furikiri.Echo.Patterns
     {
         public bool IsParameter { get; private set; } = false;
         public int Length => 1;
+        public bool Terminal { get; set; }
         public TjsVarType Type { get; set; }
-        public int Slot { get; set; }
+        public short Slot { get; set; }
         public string Name { get; set; }
         public string DefaultName => $"{(IsParameter ? "p" : "l")}{Math.Abs(Slot) + 2}";
 
-        public LocalPattern(bool isParam, int slot)
+        public LocalPattern(bool isParam, short slot)
         {
             IsParameter = isParam;
             Slot = slot;

@@ -31,6 +31,8 @@ namespace Furikiri.Echo.Patterns
         public IExpressionPattern Right { get; set; }
         public BinaryOp Op { get; set; }
 
+        public bool Terminal { get; set; }
+
         /// <summary>
         /// Left Type
         /// </summary>
@@ -47,11 +49,11 @@ namespace Furikiri.Echo.Patterns
                 case OpCode.DIV:
                 case OpCode.IDIV:
                 {
-                    context.PopExpressionPatterns(codes[i].Registers[1].GetSlot());
+                    context.PopExpressionPatterns(codes[i].GetRelatedSlots());
                     var exps = context.Expressions;
-                    b.Slot = codes[i].Registers[0].GetSlot();
+                    b.Slot = codes[i].GetRegisterSlot(0);
                     b.Left = exps[b.Slot];
-                    b.Right = exps[codes[i].Registers[1].GetSlot()];
+                    b.Right = exps[codes[i].GetRegisterSlot(1)];
                     b.Op = GetOp(codes[i].OpCode);
                     return b;
                 }
@@ -59,17 +61,18 @@ namespace Furikiri.Echo.Patterns
                 {
                     context.PopExpressionPatterns();
                     var exps = context.Expressions;
-                    var thisSlot = codes[i].Registers[0].GetSlot();
+                    var thisSlot = codes[i].GetRegisterSlot(0);
                     var leftSlot = (OperandData)codes[i].Data;
-                    var rightSlot = codes[i].Registers[2].GetSlot();
+                    var rightSlot = codes[i].GetRegisterSlot(2);
                     b.Right = exps[rightSlot];
                     b.Left = new ChainGetPattern(thisSlot, (TjsString)leftSlot.Variant);
+                    b.Terminal = true;
                     return b;
                 }
                 case OpCode.CP: //var a = b;
                 {
-                    var dst = codes[i].Registers[0].GetSlot();
-                    var src = codes[i].Registers[1].GetSlot();
+                    var dst = codes[i].GetRegisterSlot(0);
+                    var src = codes[i].GetRegisterSlot(1);
                     if (dst < Const.ThisProxy && src > Const.Resource)
                     {
                             //set var
@@ -80,6 +83,7 @@ namespace Furikiri.Echo.Patterns
                             b.Right = exps[src];
                             b.Op = BinaryOp.Assign;
                             context.Expressions[dst] = l;
+                            b.Terminal = true;
                             return b;
                     }
                     return null;
@@ -111,11 +115,11 @@ namespace Furikiri.Echo.Patterns
             return BinaryOp.Unknown;
         }
 
-        public int Slot { get; private set; }
+        public short Slot { get; private set; }
 
         public override string ToString()
         {
-            return $"{Left.ToString()} {Op.ToSymbol()} {Right.ToString()}";
+            return $"{Left.ToString()} {Op.ToSymbol()} {Right.ToString()}{Terminal.TermSymbol()}";
         }
     }
 }

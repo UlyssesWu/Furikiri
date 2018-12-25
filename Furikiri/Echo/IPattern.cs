@@ -7,6 +7,13 @@ namespace Furikiri.Echo
 
     public interface IPattern
     {
+        /// <summary>
+        /// if it's a single line
+        /// </summary>
+        bool Terminal { get; }
+        /// <summary>
+        /// instruction step
+        /// </summary>
         int Length { get; }
     }
 
@@ -16,7 +23,7 @@ namespace Furikiri.Echo
     public interface IExpressionPattern : IPattern
     {
         TjsVarType Type { get; }
-        int Slot { get; }
+        short Slot { get; }
         string ToString();
     }
 }

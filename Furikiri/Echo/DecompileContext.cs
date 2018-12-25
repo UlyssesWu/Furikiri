@@ -46,18 +46,22 @@ namespace Furikiri.Echo
             return TjsVarType.Null;
         }
 
-        public void PopExpressionPatterns(int? slot = null, bool clear = true)
+        public void PopExpressionPatterns(List<short> slots = null, bool clear = true)
         {
-            if (slot != null && Blocks.Count > 0)
+            if (slots != null && slots.Count > 0 && Blocks.Count > 0)
             {
                 for (int i = Blocks.Count - 1; i > 0; i--)
                 {
                     if (Blocks[i] is IExpressionPattern exp)
                     {
-                        if (exp.Slot == slot)
+                        if (slots.Contains(exp.Slot))
                         {
                             Expressions[exp.Slot] = exp;
-                            break;
+                            slots.Remove(exp.Slot);
+                            if (slots.Count == 0)
+                            {
+                                break;
+                            }
                         }
                     }
                 }

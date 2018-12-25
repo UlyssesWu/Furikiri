@@ -11,6 +11,16 @@ namespace Furikiri
     {
         private const int NAMESPACE_DEFAULT_HASH_BITS = 3;
 
+        internal static string TermSymbol(this bool t)
+        {
+            if (t)
+            {
+                return ";";
+            }
+
+            return "";
+        }
+
         public static string ToRealString(this char[] chars)
         {
             return new string(chars);
