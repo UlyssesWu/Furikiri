@@ -32,11 +32,12 @@ namespace Furikiri.Echo.Patterns
         public BinaryOp Op { get; set; }
 
         public bool Terminal { get; set; }
+        public bool IsDeclaration { get; set; }
 
         /// <summary>
         /// Left Type
         /// </summary>
-        public TjsVarType Type => Left.Type != TjsVarType.Null? Left.Type : Right.Type;
+        public TjsVarType Type => Left.Type != TjsVarType.Null ? Left.Type : Right.Type;
 
         public static BinaryOpPattern Match(List<Instruction> codes, int i, DecompileContext context)
         {
@@ -62,11 +63,21 @@ namespace Furikiri.Echo.Patterns
                     context.PopExpressionPatterns();
                     var exps = context.Expressions;
                     var thisSlot = codes[i].GetRegisterSlot(0);
-                    var leftSlot = (OperandData)codes[i].Data;
+                    var leftSlot = codes[i].GetRegisterSlot(1);
+                    var data = (OperandData) codes[i].Data;
                     var rightSlot = codes[i].GetRegisterSlot(2);
                     b.Right = exps[rightSlot];
-                    b.Left = new ChainGetPattern(thisSlot, (TjsString)leftSlot.Variant);
+                    b.Left = new ChainGetPattern(thisSlot, (TjsString) data.Variant);
                     b.Terminal = true;
+
+                    //check declare
+                    if (context.Object.ContextType != TjsContextType.Class &&
+                        !context.Vars.ContainsKey(leftSlot))
+                    {
+                        b.IsDeclaration = true;
+                        context.Vars[leftSlot] = new TjsStub(leftSlot, b.Right.Type);
+                    }
+
                     return b;
                 }
                 case OpCode.CP: //var a = b;
@@ -75,20 +86,30 @@ namespace Furikiri.Echo.Patterns
                     var src = codes[i].GetRegisterSlot(1);
                     if (dst < Const.ThisProxy && src > Const.Resource)
                     {
-                            //set var
-                            context.PopExpressionPatterns();
-                            var exps = context.Expressions;
-                            LocalPattern l = new LocalPattern(true, dst){Type = exps[src].Type};
-                            b.Left = l;
-                            b.Right = exps[src];
-                            b.Op = BinaryOp.Assign;
-                            context.Expressions[dst] = l;
-                            b.Terminal = true;
-                            return b;
+                        //set var
+                        context.PopExpressionPatterns();
+                        var exps = context.Expressions;
+                        LocalPattern l = new LocalPattern(true, dst) {Type = exps[src].Type};
+                        b.Left = l;
+                        b.Right = exps[src];
+                        b.Op = BinaryOp.Assign;
+                        context.Expressions[dst] = l;
+                        b.Terminal = true;
+
+                        //check declare
+                        if (!context.Vars.ContainsKey(l.Slot))
+                        {
+                            b.IsDeclaration = true;
+                            context.Vars[l.Slot] = new TjsStub(l.Slot, exps[src].Type);
+                        }
+
+                        return b;
                     }
+
                     return null;
                 }
             }
+
             return null;
         }
 
@@ -119,6 +140,11 @@ namespace Furikiri.Echo.Patterns
 
         public override string ToString()
         {
+            if (IsDeclaration)
+            {
+                return $"var {Left.ToString()} {Op.ToSymbol()} {Right.ToString()}{Terminal.TermSymbol()}";
+            }
+
             return $"{Left.ToString()} {Op.ToSymbol()} {Right.ToString()}{Terminal.TermSymbol()}";
         }
     }

@@ -24,7 +24,7 @@ namespace Furikiri.Echo
         public List<DetectHandler> Detector { get; set; }
         public List<Instruction> InstructionQueue { get; set; } = new List<Instruction>();
         public List<IPattern> Blocks { get; set; } = new List<IPattern>();
-        public Dictionary<int, TjsVarType> TypeInfo { get; set; } = new Dictionary<int, TjsVarType>();
+        public Dictionary<int, ITjsVariant> Vars { get; set; } = new Dictionary<int, ITjsVariant>();
         public Dictionary<int, IExpressionPattern> Expressions { get; set; } = new Dictionary<int, IExpressionPattern>();
         public DecompileContext(CodeObject obj, List<DetectHandler> detectors)
         {
@@ -38,9 +38,9 @@ namespace Furikiri.Echo
 
         public TjsVarType GetSlotType(int slot)
         {
-            if (TypeInfo.ContainsKey(slot))
+            if (Vars.ContainsKey(slot))
             {
-                return TypeInfo[slot];
+                return Vars[slot].Type;
             }
 
             return TjsVarType.Null;

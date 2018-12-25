@@ -16,8 +16,7 @@ namespace Furikiri.Echo.Patterns
         public TjsVarType Type { get; set; }
         public short Slot { get; set; }
         public string Name { get; set; }
-        public string DefaultName => $"{(IsParameter ? "p" : "l")}{Math.Abs(Slot) + 2}";
-
+        public string DefaultName => Name ?? $"{(IsParameter ? "p" : "v")}{Math.Abs(Slot) + 2}";
         public LocalPattern(bool isParam, short slot)
         {
             IsParameter = isParam;
@@ -64,9 +63,9 @@ namespace Furikiri.Echo.Patterns
         {
             if (IsParameter)
             {
-                return Name;
+                return DefaultName;
             }
-            return $"var {Name}";
+            return $"var {DefaultName}";
         }
     }
 }

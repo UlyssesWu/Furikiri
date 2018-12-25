@@ -90,6 +90,12 @@ namespace Furikiri.Echo
                 {
                     sb.AppendLine(exp.ToString());
                 }
+                if (block is BinaryOpPattern b)
+                {
+                    var l = b.Left;
+                    //var n = (LocalPattern) b.Left;
+                    var r = b.Right;
+                }
             }
 
             var text = sb.ToString();

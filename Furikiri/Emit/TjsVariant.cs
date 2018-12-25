@@ -19,7 +19,9 @@ namespace Furikiri.Emit
         public TjsVarType Type => TjsVarType.Void;
         public object Value => null;
 
-        private TjsVoid() { }
+        private TjsVoid()
+        {
+        }
 
         /// <summary>
         /// Void
@@ -64,6 +66,7 @@ namespace Furikiri.Emit
                 {
                     objName += $"(0x{Object.GetHashCode():X8})";
                 }
+
                 string thisName = This?.Name;
                 thisName = thisName == null ? "0x00000000" : $"[{objName}]";
                 return $"(object)({objName}:{thisName})";
@@ -74,6 +77,7 @@ namespace Furikiri.Emit
         public CodeObject This { get; set; } = null;
         public bool HasThis => This != null;
         public bool Internal { get; set; } = true;
+
         public TjsCodeObject(CodeObject obj)
         {
             Object = obj;
@@ -241,6 +245,21 @@ namespace Furikiri.Emit
         public override string ToString()
         {
             return Value.ToString();
+        }
+    }
+
+    internal class TjsStub : ITjsVariant
+    {
+        public short Slot { get; set; }
+        public TjsVarType Type { get; set; }
+        public object Value => TjsValue;
+        public ITjsVariant TjsValue { get; set; }
+        public string DebugString => "(stub)" + TjsValue.DebugString;
+
+        public TjsStub(short slot, TjsVarType type)
+        {
+            Slot = slot;
+            Type = type;
         }
     }
 }
