@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
@@ -11,30 +9,43 @@ namespace Furikiri.Echo
     {
         public Dictionary<TjsVarType, int> ParamCounts = new Dictionary<TjsVarType, int>()
         {
-            {TjsVarType.Int, 0 },
-            {TjsVarType.Real, 0 },
-            {TjsVarType.String, 0 },
-            {TjsVarType.Octet, 0 },
-            {TjsVarType.Object, 0 },
-            {TjsVarType.Void, 0 },
-            {TjsVarType.Null, 0 },
-        }; 
+            {TjsVarType.Int, 0},
+            {TjsVarType.Real, 0},
+            {TjsVarType.String, 0},
+            {TjsVarType.Octet, 0},
+            {TjsVarType.Object, 0},
+            {TjsVarType.Void, 0},
+            {TjsVarType.Null, 0},
+        };
 
         public CodeObject Object { get; set; }
         public List<DetectHandler> Detector { get; set; }
         public List<Instruction> InstructionQueue { get; set; } = new List<Instruction>();
         public List<IPattern> Blocks { get; set; } = new List<IPattern>();
         public Dictionary<int, ITjsVariant> Vars { get; set; } = new Dictionary<int, ITjsVariant>();
-        public Dictionary<int, IExpressionPattern> Expressions { get; set; } = new Dictionary<int, IExpressionPattern>();
+
+        public Dictionary<int, IExpressionPattern> Expressions { get; set; } =
+            new Dictionary<int, IExpressionPattern>();
+
         public DecompileContext(CodeObject obj, List<DetectHandler> detectors)
         {
             Object = obj;
-            Object = obj;
             Detector = detectors;
+            if (obj.ContextType == TjsContextType.TopLevel || obj.Parent == null)
+            {
+                Expressions[-1] = new ThisPattern(true) {This = obj};
+                Expressions[-2] = new ThisPattern(true, true) { This = obj };
+            }
+            else
+            {
+                Expressions[-1] = new ThisPattern(false) {This = obj};
+                Expressions[-2] = new ThisPattern(false, true) {This = obj};
+            }
         }
 
         public DecompileContext()
-        { }
+        {
+        }
 
         public TjsVarType GetSlotType(int slot)
         {
@@ -100,7 +111,7 @@ namespace Furikiri.Echo
                     InstructionQueue.Clear();
                 }
             }
-            
+
             return;
         }
 
@@ -108,13 +119,11 @@ namespace Furikiri.Echo
         {
             if (up)
             {
-                
             }
 
             for (int j = i; j < instructions.Count; j++)
             {
                 var ins = instructions[j];
-
             }
         }
     }

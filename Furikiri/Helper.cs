@@ -11,7 +11,7 @@ namespace Furikiri
     {
         private const int NAMESPACE_DEFAULT_HASH_BITS = 3;
 
-        internal static string TermSymbol(this bool t)
+        internal static string Term(this bool t)
         {
             if (t)
             {
@@ -28,7 +28,7 @@ namespace Furikiri
 
         public static short ToS(this OpCode code)
         {
-            return (short)code;
+            return (short) code;
         }
 
         public static int RegisterCount(this OpCode code)
@@ -192,7 +192,7 @@ namespace Furikiri
             char[] chars = new char[len];
             for (int i = 0; i < len; i++)
             {
-                chars[i] = (char)br.ReadInt16();
+                chars[i] = (char) br.ReadInt16();
             }
 
             return chars.ToRealString();
@@ -208,13 +208,13 @@ namespace Furikiri
             switch (register)
             {
                 case RegisterParameter registerParameter:
-                    return (short)registerParameter.Slot;
+                    return (short) registerParameter.Slot;
                 case RegisterRef registerRef:
-                    return (short)registerRef.Slot;
+                    return (short) registerRef.Slot;
                 case RegisterShort registerShort:
                     return registerShort.Value;
                 case RegisterValue registerValue:
-                    return (short)registerValue.Slot;
+                    return (short) registerValue.Slot;
             }
 
             return 0;
@@ -222,7 +222,7 @@ namespace Furikiri
 
         internal static void SetSlot(this IRegister register, int value)
         {
-            SetSlot(register, (short)value);
+            SetSlot(register, (short) value);
         }
 
         internal static void SetSlot(this IRegister register, short value)
@@ -318,7 +318,7 @@ namespace Furikiri
                     return NAMESPACE_DEFAULT_HASH_BITS;
             }
         }
-        
+
         internal static string GetParamName(this TjsVarType v, int i)
         {
             string s = i < 0 ? "" : i.ToString();
@@ -370,6 +370,32 @@ namespace Furikiri
                 default:
                     return "#";
             }
+        }
+
+        /// <summary>
+        /// Is OpCode a Jump
+        /// </summary>
+        /// <param name="code"></param>
+        /// <param name="includeJmp">if false, only JF & JNF counts</param>
+        /// <returns></returns>
+        public static bool IsJump(this OpCode code, bool includeJmp = true)
+        {
+            if (includeJmp)
+            {
+                return code == OpCode.JF || code == OpCode.JNF;
+            }
+
+            return code == OpCode.JMP || code == OpCode.JF || code == OpCode.JNF;
+        }
+
+        public static string AsString(this IRegisterData data)
+        {
+            if (data is OperandData op)
+            {
+                return op.Variant.Value.ToString();
+            }
+
+            return null;
         }
     }
 }

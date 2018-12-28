@@ -79,7 +79,15 @@ namespace Furikiri.Echo.Patterns
         }
 
         public bool HasCL { get; set; } = false;
-        public bool Terminal => true;
+        public bool Terminal
+        {
+            get => true;
+            set
+            {
+                return;
+            }
+        }
+
         public int Length => 3 * Members.Count + (HasCL ? 1 : 0);
 
         public Dictionary<string, TjsCodeObject> Members { get; set; } = new Dictionary<string, TjsCodeObject>();

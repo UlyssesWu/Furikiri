@@ -12,7 +12,9 @@ namespace Furikiri.Echo.Patterns
     {
         public int Length => (FromGlobal ? 1 : 0) + Members.Count;
 
-        internal ChainGetPattern() { }
+        internal ChainGetPattern()
+        {
+        }
 
         public ChainGetPattern(short slot, string member)
         {
@@ -30,18 +32,18 @@ namespace Furikiri.Echo.Patterns
                 m = new ChainGetPattern {FromGlobal = true};
                 i++;
             }
+
             while (i < codes.Count && codes[i].OpCode == OpCode.GPD)
             {
                 var slot = codes[i].Registers[1].GetSlot();
                 if (reg == -1 || slot == reg && slot != 0)
                 {
-                    var data = (OperandData)codes[i].Data;
-                    var str = (TjsString)data.Variant;
                     if (m == null)
                     {
                         m = new ChainGetPattern();
                     }
-                    m.Members.Add(str);
+
+                    m.Members.Add(codes[i].Data.AsString());
                     m.Slot = codes[i].Registers[0].GetSlot();
                 }
                 else
@@ -55,7 +57,12 @@ namespace Furikiri.Echo.Patterns
             return m;
         }
 
-        public bool Terminal => false;
+        public bool Terminal
+        {
+            get => false;
+            set { return; }
+        }
+
         public TjsVarType Type { get; private set; } = TjsVarType.Null;
         public short Slot { get; private set; }
 

@@ -15,9 +15,12 @@ namespace Furikiri.Echo.Patterns
         public TjsVarType Type { get; set; }
         public short Slot { get; set; }
         public IExpressionPattern Caller { get; set; }
+
         public string Method { get; set; }
-        public string CallerName { get; set; }
+
+        //public string CallerName { get; set; }
         public List<IExpressionPattern> Parameters { get; set; } = new List<IExpressionPattern>();
+
         public static CallPattern Match(List<Instruction> codes, int i, DecompileContext context)
         {
             if (codes[i].OpCode == OpCode.CALLD)
@@ -29,31 +32,31 @@ namespace Furikiri.Echo.Patterns
                 {
                     call.Terminal = true;
                 }
+
                 var callerSlot = codes[i].GetRegisterSlot(1);
+                call.Caller = context.Expressions[callerSlot];
 
-                switch (callerSlot)
-                {
-                    case 0:
-                        call.Caller = null;
-                        call.CallerName = "";
-                        break;
-                    case Const.This:
-                        call.Caller = null;
-                        call.CallerName = "this";
-                        break;
-                    case Const.ThisProxy:
-                        call.Caller = null;
-                        call.CallerName = "";
-                        break;
-                    default:
-                        call.Caller = context.Expressions[callerSlot];
-                        call.CallerName = null;
-                        break;
-                }
+                //switch (callerSlot)
+                //{
+                //    case 0:
+                //        call.Caller = null;
+                //        call.CallerName = "";
+                //        break;
+                //    case Const.This:
+                //        call.Caller = null;
+                //        call.CallerName = "this";
+                //        break;
+                //    case Const.ThisProxy:
+                //        call.Caller = null;
+                //        call.CallerName = "";
+                //        break;
+                //    default:
+                //        call.Caller = context.Expressions[callerSlot];
+                //        call.CallerName = null;
+                //        break;
+                //}
 
-                var data = (OperandData) codes[i].Data;
-                var m = (TjsString) data.Variant;
-                call.Method = m;
+                call.Method = codes[i].Data.AsString();
                 var paramCount = codes[i].GetRegisterSlot(3);
                 if (paramCount == -1)
                 {
@@ -77,13 +80,14 @@ namespace Furikiri.Echo.Patterns
 
         public override string ToString()
         {
-            var caller = CallerName ?? Caller?.ToString();
             var param = string.Join(", ", Parameters);
+            var caller = Caller?.ToString();
             if (string.IsNullOrEmpty(caller))
             {
-                return $"{Method}({param}){Terminal.TermSymbol()}";
+                return $"{Method}({param}){Terminal.Term()}";
             }
-            return $"{caller}.{Method}({param}){Terminal.TermSymbol()}";
+
+            return $"{caller}.{Method}({param}){Terminal.Term()}";
         }
     }
 }

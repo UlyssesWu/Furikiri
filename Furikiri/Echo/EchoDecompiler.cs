@@ -33,6 +33,7 @@ namespace Furikiri.Echo
             Detectors.Add(RegMemberPattern.Match);
             Detectors.Add(BinaryOpPattern.Match);
             Detectors.Add(CallPattern.Match);
+            Detectors.Add(DeletePattern.Match);
         }
 
         public void Decompile()
@@ -56,7 +57,7 @@ namespace Furikiri.Echo
 
             var context = new DecompileContext(Script.TopLevel, Detectors);
             var m = Methods[Script.TopLevel];
-            Compact(m);
+            m.Compact();
 
             int offset = 0;
             while (offset < m.Instructions.Count)
@@ -99,15 +100,6 @@ namespace Furikiri.Echo
             }
 
             var text = sb.ToString();
-        }
-
-        private void Compact(Method method)
-        {
-            method.Resolve();
-            //HashSet<OpCode> toBeRemoved = new HashSet<OpCode>();
-            method.Instructions.RemoveAll(instruction =>
-                instruction.OpCode == OpCode.NOP || instruction.OpCode == OpCode.DEBUGGER);
-            method.Merge();
         }
     }
 }

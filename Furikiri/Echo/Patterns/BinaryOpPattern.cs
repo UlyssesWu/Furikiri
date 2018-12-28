@@ -64,10 +64,9 @@ namespace Furikiri.Echo.Patterns
                     var exps = context.Expressions;
                     var thisSlot = codes[i].GetRegisterSlot(0);
                     var leftSlot = codes[i].GetRegisterSlot(1);
-                    var data = (OperandData) codes[i].Data;
                     var rightSlot = codes[i].GetRegisterSlot(2);
                     b.Right = exps[rightSlot];
-                    b.Left = new ChainGetPattern(thisSlot, (TjsString) data.Variant);
+                    b.Left = new ChainGetPattern(thisSlot, codes[i].Data.AsString());
                     b.Terminal = true;
 
                     //check declare
@@ -142,10 +141,10 @@ namespace Furikiri.Echo.Patterns
         {
             if (IsDeclaration)
             {
-                return $"var {Left.ToString()} {Op.ToSymbol()} {Right.ToString()}{Terminal.TermSymbol()}";
+                return $"var {Left.ToString()} {Op.ToSymbol()} {Right.ToString()}{Terminal.Term()}";
             }
 
-            return $"{Left.ToString()} {Op.ToSymbol()} {Right.ToString()}{Terminal.TermSymbol()}";
+            return $"{Left.ToString()} {Op.ToSymbol()} {Right.ToString()}{Terminal.Term()}";
         }
     }
 }

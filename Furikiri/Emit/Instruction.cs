@@ -2,6 +2,8 @@
 using System.Linq;
 using static Furikiri.Emit.OpCode;
 
+// ReSharper disable PossibleMultipleEnumeration
+
 namespace Furikiri.Emit
 {
     /// <summary>
@@ -14,6 +16,7 @@ namespace Furikiri.Emit
         public int Offset { get; set; }
         public int Size => 1 + Registers.Sum(i => i.Size);
         public IRegisterData Data { get; set; }
+        public List<Instruction> JumpedFrom { get; set; }
 
         public Instruction(OpCode op)
         {
@@ -37,10 +40,37 @@ namespace Furikiri.Emit
             return Registers.Where(r => r is RegisterRef).Select(rr => rr.GetSlot()).ToList();
         }
 
+        /// <summary>
+        /// Get the max slot in this instruction
+        /// </summary>
+        internal short TopSlot
+        {
+            get
+            {
+                var rs = from r in Registers where r is RegisterRef rr select (RegisterRef) r;
+                if (rs.Any())
+                {
+                    return rs.Max(r => r.Slot);
+                }
+
+                return Const.ThisProxy;
+            }
+        }
+
+        public void SetJumpFrom(Instruction ins)
+        {
+            if (JumpedFrom == null)
+            {
+                JumpedFrom = new List<Instruction>();
+            }
+
+            JumpedFrom.Add(ins);
+        }
+
         public static Instruction Create(in short[] code, int index)
         {
             Instruction ins = null;
-            var op = (OpCode)code[index];
+            var op = (OpCode) code[index];
             switch (op)
             {
                 //0
@@ -80,25 +110,25 @@ namespace Furikiri.Emit
                 case THROW:
                 case GLOBAL:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterRef(code[index + 1]) } };
+                        {Registers = {new RegisterRef(code[index + 1])}};
                     break;
                 //instant
                 case JF:
                 case JNF:
                 case JMP:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterShort(code[index + 1]) } };
+                        {Registers = {new RegisterShort(code[index + 1])}};
                     break;
                 //2
                 //%, %
                 case ENTRY:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterShort(code[index + 1]), new RegisterRef(code[index + 2]) } };
+                        {Registers = {new RegisterShort(code[index + 1]), new RegisterRef(code[index + 2])}};
                     break;
                 //%, *
                 case CONST:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterRef(code[index + 1]), new RegisterValue(code[index + 2]) } };
+                        {Registers = {new RegisterRef(code[index + 1]), new RegisterValue(code[index + 2])}};
                     break;
                 //%, %
                 case CP:
@@ -129,7 +159,7 @@ namespace Furikiri.Emit
                 case CHGTHIS:
                 case ADDCI:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]) } };
+                        {Registers = {new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2])}};
                     break;
 
                 //3
@@ -158,7 +188,13 @@ namespace Furikiri.Emit
                 case DECPI:
                 case TYPEOFI:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]), new RegisterRef(code[index + 3]) } };
+                    {
+                        Registers =
+                        {
+                            new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]),
+                            new RegisterRef(code[index + 3])
+                        }
+                    };
                     break;
 
                 //%, %, *
@@ -169,7 +205,13 @@ namespace Furikiri.Emit
                 case DECPD:
                 case TYPEOFD:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]), new RegisterValue(code[index + 3]) } };
+                    {
+                        Registers =
+                        {
+                            new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]),
+                            new RegisterValue(code[index + 3])
+                        }
+                    };
                     break;
                 //%, *, %
                 case SPD:
@@ -177,7 +219,13 @@ namespace Furikiri.Emit
                 case SPDEH:
                 case SPDS:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterRef(code[index + 1]), new RegisterValue(code[index + 2]), new RegisterRef(code[index + 3]) } };
+                    {
+                        Registers =
+                        {
+                            new RegisterRef(code[index + 1]), new RegisterValue(code[index + 2]),
+                            new RegisterRef(code[index + 3])
+                        }
+                    };
                     break;
 
                 //%, %, %, %
@@ -196,7 +244,13 @@ namespace Furikiri.Emit
                 case IDIVPI:
                 case MULPI:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]), new RegisterRef(code[index + 3]), new RegisterRef(code[index + 4]) } };
+                    {
+                        Registers =
+                        {
+                            new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]),
+                            new RegisterRef(code[index + 3]), new RegisterRef(code[index + 4])
+                        }
+                    };
                     break;
 
                 //%, %, *, %
@@ -215,7 +269,13 @@ namespace Furikiri.Emit
                 case IDIVPD:
                 case MULPD:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]), new RegisterValue(code[index + 3]), new RegisterRef(code[index + 4]) } };
+                    {
+                        Registers =
+                        {
+                            new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]),
+                            new RegisterValue(code[index + 3]), new RegisterRef(code[index + 4])
+                        }
+                    };
                     break;
 
                 //special
@@ -224,7 +284,7 @@ namespace Furikiri.Emit
                 case CALLI:
                 case NEW:
                     ins = new Instruction(op)
-                    { Registers = { new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2]) } };
+                        {Registers = {new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2])}};
                     int idx = index + 3;
                     int paramCount;
                     if (op == CALLI || op == CALLD)
@@ -251,7 +311,8 @@ namespace Furikiri.Emit
                         for (int i = 0; i < paramCount; i++)
                         {
                             idx++;
-                            ins.Registers.Add(new RegisterParameter(code[idx + 1]) { ParameterExpand = (FuncParameterExpand)code[idx] });
+                            ins.Registers.Add(new RegisterParameter(code[idx + 1])
+                                {ParameterExpand = (FuncParameterExpand) code[idx]});
                             idx++;
                         }
                     }
@@ -261,9 +322,10 @@ namespace Furikiri.Emit
                         {
                             idx++;
                             ins.Registers.Add(new RegisterParameter(code[idx])
-                            { ParameterExpand = FuncParameterExpand.Normal });
+                                {ParameterExpand = FuncParameterExpand.Normal});
                         }
                     }
+
                     break;
             }
 
@@ -319,12 +381,13 @@ namespace Furikiri.Emit
                 case JF:
                 case JNF:
                 case JMP:
-                    return $"{OpCode.ToString().ToLowerInvariant()} {((RegisterShort)Registers[0]).Value + Offset:D8}";
+                    return $"{OpCode.ToString().ToLowerInvariant()} {((RegisterShort) Registers[0]).Value + Offset:D8}";
 
                 //2
                 //instant, %
                 case ENTRY:
-                    return $"{OpCode.ToString().ToLowerInvariant()} {((RegisterShort)Registers[0]).Value + Offset:D8}, {Registers[1]}";
+                    return
+                        $"{OpCode.ToString().ToLowerInvariant()} {((RegisterShort) Registers[0]).Value + Offset:D8}, {Registers[1]}";
 
                 //%, *
                 case CONST:
@@ -336,7 +399,7 @@ namespace Furikiri.Emit
                 //%, %
                 case CCL:
                     return
-                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}-{((RegisterShort)Registers[0]).Value + ((RegisterShort)Registers[1]).Value - 1}";
+                        $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}-{((RegisterShort) Registers[0]).Value + ((RegisterShort) Registers[1]).Value - 1}";
                 //real
                 //return
                 //    $"{OpCode.ToString().ToLowerInvariant()} {Registers[0].ToString()}, {Registers[1].ToString()}";
@@ -454,6 +517,7 @@ namespace Furikiri.Emit
                     {
                         pcPos = 3;
                     }
+
                     int paramCount = Registers[pcPos].GetSlot();
                     if (paramCount == -1)
                     {
@@ -470,10 +534,11 @@ namespace Furikiri.Emit
 
                     if (OpCode == CALLD || OpCode == CALLI)
                     {
-                        return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}.{Registers[2]}({param})";
+                        return
+                            $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}.{Registers[2]}({param})";
                     }
-                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}({param})";
 
+                    return $"{OpCode.ToString().ToLowerInvariant()} {Registers[0]}, {Registers[1]}({param})";
             }
 
             return OpCode.ToString().ToLowerInvariant();
@@ -481,23 +546,23 @@ namespace Furikiri.Emit
 
         public short[] ToCodes()
         {
-            List<short> output = new List<short>(Size) { OpCode.ToS() };
+            List<short> output = new List<short>(Size) {OpCode.ToS()};
             foreach (var register in Registers)
             {
                 switch (register)
                 {
                     case RegisterParameter p:
-                        output.Add((short)p.ParameterExpand);
-                        output.Add((short)p.Slot);
+                        output.Add((short) p.ParameterExpand);
+                        output.Add((short) p.Slot);
                         break;
                     case RegisterShort s:
                         output.Add(s.Value);
                         break;
                     case RegisterValue v:
-                        output.Add((short)v.Slot);
+                        output.Add((short) v.Slot);
                         break;
                     case RegisterRef r:
-                        output.Add((short)r.Slot);
+                        output.Add((short) r.Slot);
                         break;
                 }
             }

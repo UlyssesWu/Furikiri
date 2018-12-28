@@ -12,11 +12,11 @@ namespace Furikiri.Emit
 
     class RegisterRef : IRegister
     {
-        public int Slot { get; set; }
+        public short Slot { get; set; }
         public virtual int Size => 1;
         public bool Indirect => true;
 
-        public RegisterRef(int slot)
+        public RegisterRef(short slot)
         {
             Slot = slot;
         }
@@ -77,7 +77,7 @@ namespace Furikiri.Emit
             }
         }
 
-        public RegisterParameter(int slot) : base(slot)
+        public RegisterParameter(short slot) : base(slot)
         {
         }
 

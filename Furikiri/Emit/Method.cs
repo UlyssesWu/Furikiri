@@ -23,6 +23,37 @@ namespace Furikiri.Emit
             Resolve();
         }
 
+        public void Compact()
+        {
+            Resolve();
+            //HashSet<OpCode> toBeRemoved = new HashSet<OpCode>();
+            Instructions.RemoveAll(instruction =>
+                instruction.OpCode == OpCode.NOP || instruction.OpCode == OpCode.DEBUGGER);
+
+            List<Instruction> toBeRemoved = new List<Instruction>();
+            for (int i = 0; i < Instructions.Count; i++)
+            {
+                if (i + 1 < Instructions.Count)
+                {
+                    if (
+                        (Instructions[i].OpCode == OpCode.INC && Instructions[i+1].OpCode == OpCode.DEC || Instructions[i].OpCode == OpCode.DEC && Instructions[i + 1].OpCode == OpCode.INC)
+                        && Instructions[i].GetRegisterSlot(0) == Instructions[i+1].GetRegisterSlot(0))
+                    {
+                        toBeRemoved.Add(Instructions[i]);
+                        toBeRemoved.Add(Instructions[i+1]);
+                        i++;
+                    }
+                }
+            }
+
+            foreach (var ins in toBeRemoved)
+            {
+                Instructions.Remove(ins);
+            }
+
+            Merge();
+        }
+
         /// <summary>
         /// Get code data from context
         /// </summary>
@@ -36,9 +67,11 @@ namespace Furikiri.Emit
                     case OpCode.JF:
                     case OpCode.JNF:
                     case OpCode.JMP:
-                        instruction.Data = new JumpData(instruction,
+                        var jmp = new JumpData(instruction,
                             Instructions.FirstOrDefault(ins =>
                                 ins.Offset == instruction.Registers[0].GetSlot() + instruction.Offset));
+                        instruction.Data = jmp;
+                        jmp.Instruction.SetJumpFrom(instruction);
                         break;
                     case OpCode.CONST:
                     case OpCode.SPD:
@@ -109,7 +142,7 @@ namespace Furikiri.Emit
                         case OpCode.SPDE:
                         case OpCode.SPDEH:
                         case OpCode.SPDS:
-                            var data = (OperandData)instruction.Data;
+                            var data = (OperandData) instruction.Data;
                             var reg = instruction.Registers[1];
                             reg.SetSlot(code.Variants.IndexOf(data.Variant));
                             break;
@@ -134,7 +167,7 @@ namespace Furikiri.Emit
                         case OpCode.DELD:
                         case OpCode.TYPEOFD:
                         case OpCode.CALLD:
-                            var data2 = (OperandData)instruction.Data;
+                            var data2 = (OperandData) instruction.Data;
                             var reg2 = instruction.Registers[2];
                             reg2.SetSlot(code.Variants.IndexOf(data2.Variant));
                             break;

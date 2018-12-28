@@ -10,7 +10,8 @@ namespace Furikiri.Echo
         /// <summary>
         /// if it's a single line
         /// </summary>
-        bool Terminal { get; }
+        bool Terminal { get; set; }
+
         /// <summary>
         /// instruction step
         /// </summary>
@@ -24,6 +25,14 @@ namespace Furikiri.Echo
     {
         TjsVarType Type { get; }
         short Slot { get; }
+        string ToString();
+    }
+
+    /// <summary>
+    /// Branch
+    /// </summary>
+    public interface IBranchPattern : IPattern
+    {
         string ToString();
     }
 }
