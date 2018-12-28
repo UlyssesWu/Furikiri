@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Text;
 
 namespace Furikiri.Emit
 {
@@ -10,6 +8,11 @@ namespace Furikiri.Emit
         {
             Module m = new Module(path);
 
+            return Disassemble(m);
+        }
+
+        public string Disassemble(Module m)
+        {
             StringBuilder sb = new StringBuilder();
             if (m.TopLevel != null)
             {

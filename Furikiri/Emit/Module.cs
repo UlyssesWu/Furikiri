@@ -22,7 +22,7 @@ namespace Furikiri.Emit
         private const int MIN_LONG_COUNT = 8;
         private const int MIN_STRING_COUNT = 1024;
 
-        private static readonly string NO_SCRIPT = "no script";
+        private const string NO_SCRIPT = "no script";
 
         private byte[] _bytes;
         private int[] _ints;
@@ -49,14 +49,17 @@ namespace Furikiri.Emit
                 var tag = br.ReadChars(4).ToRealString();
                 if (tag != FILE_TAG_LE)
                 {
-                    return;
+                    throw new TjsFormatException(TjsBadFormatReason.Header, "Signature wrong");
                 }
 
                 // 100'\0'
-                if (br.ReadChars(3).ToRealString() != VER_TAG_LE)
+                var ver = br.ReadChars(3).ToRealString();
+                if (ver != VER_TAG_LE)
                 {
-                    return;
+                    Debug.WriteLine($"Unknown version: {ver}");
+                    //throw new TjsFormatException(TjsBadFormatReason.Version, "Version unsupported");
                 }
+
                 br.ReadChar();
 
                 //file size
@@ -79,6 +82,7 @@ namespace Furikiri.Emit
                 {
                     return;
                 }
+
                 ReadObjects(br);
             }
         }
@@ -109,7 +113,7 @@ namespace Furikiri.Emit
             {
                 if (br.ReadChars(4).ToRealString() != FILE_TAG_LE)
                 {
-                    throw new TjsFormatException("ByteCode error");
+                    throw new TjsFormatException(TjsBadFormatReason.Header, "ByteCode Signature error");
                 }
 
                 int objSize = br.ReadInt32();
@@ -167,21 +171,21 @@ namespace Furikiri.Emit
                     int p = j * 2;
                     var type = _varTypes[p];
                     int index = _varTypes[p + 1];
-                    switch ((TjsInternalType)type)
+                    switch ((TjsInternalType) type)
                     {
                         case TjsInternalType.Void:
                             vars.Add(TjsVoid.Void);
                             break;
                         case TjsInternalType.Object:
-                            vars.Add(new TjsObject(null) { Internal = false });
+                            vars.Add(new TjsObject(null) {Internal = false});
                             break;
                         case TjsInternalType.InterObject:
-                            var co = new TjsCodeObject(null) { Internal = true };
+                            var co = new TjsCodeObject(null) {Internal = true};
                             vars.Add(co);
                             replacements.Add((co, index));
                             break;
                         case TjsInternalType.InterGenerator:
-                            var co2 = new TjsCodeObject(null) { Internal = true };
+                            var co2 = new TjsCodeObject(null) {Internal = true};
                             vars.Add(co2);
                             replacements.Add((co2, index));
                             break;
@@ -250,14 +254,17 @@ namespace Furikiri.Emit
                 {
                     parent = objects[parents[i]];
                 }
+
                 if (propSetters[i] >= 0)
                 {
                     propSetter = objects[propSetters[i]];
                 }
+
                 if (propGetters[i] >= 0)
                 {
                     propGetter = objects[propGetters[i]];
                 }
+
                 if (superClassGetters[i] >= 0)
                 {
                     superClassGetter = objects[superClassGetters[i]];
@@ -330,6 +337,7 @@ namespace Furikiri.Emit
                 {
                     _shorts[i] = br.ReadInt16();
                 }
+
                 //padding
                 var padding = 4 - (count * 2) % 4;
                 if (padding > 0 && padding < 4)
@@ -426,7 +434,6 @@ namespace Furikiri.Emit
                     }
                 }
             }
-
         }
     }
 }

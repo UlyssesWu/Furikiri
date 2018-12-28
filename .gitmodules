@@ -1,8 +1,0 @@
-[submodule "KrkrSharp"]
-	path = KrkrSharp
-	url = https://github.com/Project-AZUSA/KirikiriSharp.git
-	branch = master
-[submodule "IronTJS"]
-	path = IronTJS
-	url = https://github.com/Project-AZUSA/IronTJS.git
-	branch = master

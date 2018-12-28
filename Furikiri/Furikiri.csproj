@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFrameworks>netstandard2.0;net47</TargetFrameworks>
     <Authors>Ulysses</Authors>
     <Company>Project AZUSA</Company>
     <Description>Furikiri TJS2 Decompiler</Description>
@@ -9,9 +9,5 @@
     <PackageProjectUrl>https://github.com/UlyssesWu/Furikiri</PackageProjectUrl>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Folder Include="Narcissus\" />
-  </ItemGroup>
 
 </Project>
