@@ -5,13 +5,13 @@ VisualStudioVersion = 15.0.28307.136
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Furikiri", "Furikiri\Furikiri.csproj", "{94DA3084-7672-4BE8-AA05-7873577E0C37}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tjs2Disassembler", "KrkrSharp\Tjs2Disassembler\Tjs2Disassembler.csproj", "{008C53BE-3787-4671-AC14-4C18194BD916}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Tjs2Net", "KrkrSharp\Tjs2Net\Tjs2Net.csproj", "{DBF7929F-382B-435D-81D4-1145279B5D1F}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IronTJS", "IronTJS\IronTJS\IronTJS.csproj", "{C3DE4146-6BEF-4817-ABC5-69CC09E0253E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Furikiri.Tests", "Furikiri.Tests\Furikiri.Tests.csproj", "{F99F9BBF-A418-46BC-8D66-35BEEF929481}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Girigiri", "Girigiri\Girigiri.csproj", "{2BB3148B-048E-41E1-BD15-9A66C0AA94CB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,10 +23,6 @@ Global
 		{94DA3084-7672-4BE8-AA05-7873577E0C37}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{94DA3084-7672-4BE8-AA05-7873577E0C37}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{94DA3084-7672-4BE8-AA05-7873577E0C37}.Release|Any CPU.Build.0 = Release|Any CPU
-		{008C53BE-3787-4671-AC14-4C18194BD916}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{008C53BE-3787-4671-AC14-4C18194BD916}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{008C53BE-3787-4671-AC14-4C18194BD916}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{008C53BE-3787-4671-AC14-4C18194BD916}.Release|Any CPU.Build.0 = Release|Any CPU
 		{DBF7929F-382B-435D-81D4-1145279B5D1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{DBF7929F-382B-435D-81D4-1145279B5D1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DBF7929F-382B-435D-81D4-1145279B5D1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -39,6 +35,10 @@ Global
 		{F99F9BBF-A418-46BC-8D66-35BEEF929481}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F99F9BBF-A418-46BC-8D66-35BEEF929481}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F99F9BBF-A418-46BC-8D66-35BEEF929481}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2BB3148B-048E-41E1-BD15-9A66C0AA94CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2BB3148B-048E-41E1-BD15-9A66C0AA94CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2BB3148B-048E-41E1-BD15-9A66C0AA94CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2BB3148B-048E-41E1-BD15-9A66C0AA94CB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
