@@ -71,7 +71,7 @@ namespace Furikiri.Emit
                             Instructions.FirstOrDefault(ins =>
                                 ins.Offset == instruction.Registers[0].GetSlot() + instruction.Offset));
                         instruction.Data = jmp;
-                        jmp.Instruction.SetJumpFrom(instruction);
+                        jmp.Goto.SetJumpFrom(instruction);
                         break;
                     case OpCode.CONST:
                     case OpCode.SPD:

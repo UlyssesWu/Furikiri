@@ -33,6 +33,7 @@ namespace Furikiri.Echo
     /// </summary>
     public interface IBranchPattern : IPattern
     {
+        BranchType BranchType { get; }
         string ToString();
     }
 }

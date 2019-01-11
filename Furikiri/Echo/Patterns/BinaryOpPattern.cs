@@ -92,7 +92,8 @@ namespace Furikiri.Echo.Patterns
                         b.Left = l;
                         b.Right = exps[src];
                         b.Op = BinaryOp.Assign;
-                        context.Expressions[dst] = l;
+                        context.Expressions[dst] = l; //Which is better?
+                        //context.Expressions[dst] = b;
                         b.Terminal = true;
 
                         //check declare

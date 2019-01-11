@@ -16,6 +16,7 @@ namespace Furikiri.Echo
         public Dictionary<CodeObject, Method> Methods { get; set; } = new Dictionary<CodeObject, Method>();
 
         internal List<DetectHandler> Detectors = new List<DetectHandler>();
+        internal List<DetectHandler> BranchDetectors = new List<DetectHandler>();
 
         public EchoDecompiler()
         {
@@ -30,7 +31,9 @@ namespace Furikiri.Echo
 
         private void Init()
         {
+            BranchDetectors.Add(LoopPattern.Match);
             Detectors.Add(RegMemberPattern.Match);
+            Detectors.Add(UnaryOpPattern.Match);
             Detectors.Add(BinaryOpPattern.Match);
             Detectors.Add(CallPattern.Match);
             Detectors.Add(DeletePattern.Match);
@@ -63,6 +66,23 @@ namespace Furikiri.Echo
             while (offset < m.Instructions.Count)
             {
                 bool found = false;
+                foreach (var branchDetect in BranchDetectors)
+                {
+                    var result = branchDetect(m.Instructions, offset, context);
+                    if (result != null)
+                    {
+                        context.Blocks.Add(result);
+                        offset += result.Length;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (found)
+                {
+                    continue;
+                }
+
                 foreach (var detect in Detectors)
                 {
                     var result = detect(m.Instructions, offset, context);
@@ -90,6 +110,10 @@ namespace Furikiri.Echo
                 if (block is IExpressionPattern exp && block.Terminal)
                 {
                     sb.AppendLine(exp.ToString());
+                }
+                else if (block is IBranchPattern exp2 && block.Terminal)
+                {
+                    sb.AppendLine(exp2.ToString());
                 }
                 if (block is BinaryOpPattern b)
                 {

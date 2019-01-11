@@ -64,7 +64,10 @@ namespace Furikiri.Emit
                 JumpedFrom = new List<Instruction>();
             }
 
-            JumpedFrom.Add(ins);
+            if (!JumpedFrom.Contains(ins))
+            {
+                JumpedFrom.Add(ins);
+            }
         }
 
         public static Instruction Create(in short[] code, int index)

@@ -18,8 +18,12 @@ namespace Furikiri.Echo
             {TjsVarType.Null, 0},
         };
 
+        internal Dictionary<int, HashSet<BranchType>> Branches { get; set; } =
+            new Dictionary<int, HashSet<BranchType>>();
+
         public CodeObject Object { get; set; }
-        public List<DetectHandler> Detector { get; set; }
+        public List<DetectHandler> Detectors { get; set; }
+        public List<DetectHandler> BranchDetectors { get; set; }
         public List<Instruction> InstructionQueue { get; set; } = new List<Instruction>();
         public List<IPattern> Blocks { get; set; } = new List<IPattern>();
         public Dictionary<int, ITjsVariant> Vars { get; set; } = new Dictionary<int, ITjsVariant>();
@@ -30,11 +34,11 @@ namespace Furikiri.Echo
         public DecompileContext(CodeObject obj, List<DetectHandler> detectors)
         {
             Object = obj;
-            Detector = detectors;
+            Detectors = detectors;
             if (obj.ContextType == TjsContextType.TopLevel || obj.Parent == null)
             {
                 Expressions[-1] = new ThisPattern(true) {This = obj};
-                Expressions[-2] = new ThisPattern(true, true) { This = obj };
+                Expressions[-2] = new ThisPattern(true, true) {This = obj};
             }
             else
             {
@@ -47,6 +51,26 @@ namespace Furikiri.Echo
         {
         }
 
+        public void AddBranch(int line, BranchType type)
+        {
+            if (!Branches.ContainsKey(line))
+            {
+                Branches[line] = new HashSet<BranchType>();
+            }
+
+            Branches[line].Add(type);
+        }
+
+        public bool ContainsBranch(int line, BranchType type)
+        {
+            if (!Branches.ContainsKey(line))
+            {
+                return false;
+            }
+
+            return Branches[line].Contains(type);
+        }
+
         public TjsVarType GetSlotType(int slot)
         {
             if (Vars.ContainsKey(slot))
@@ -57,6 +81,28 @@ namespace Furikiri.Echo
             return TjsVarType.Null;
         }
 
+        public bool DetectPattern(List<Instruction> instructions, int offset, out IPattern pattern)
+        {
+            foreach (var detect in Detectors)
+            {
+                var result = detect(instructions, offset, this);
+                if (result != null)
+                {
+                    pattern = result;
+                    return true;
+                }
+            }
+
+            InstructionQueue.Add(instructions[offset]);
+            pattern = null;
+            return false;
+        }
+
+        /// <summary>
+        /// Pop Instruction Queue
+        /// </summary>
+        /// <param name="slots"></param>
+        /// <param name="clear"></param>
         public void PopExpressionPatterns(List<short> slots = null, bool clear = true)
         {
             if (slots != null && slots.Count > 0 && Blocks.Count > 0)
