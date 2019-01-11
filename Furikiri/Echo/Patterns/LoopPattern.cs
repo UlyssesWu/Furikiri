@@ -43,7 +43,7 @@ namespace Furikiri.Echo.Patterns
                     !context.ContainsBranch(i, BranchType.For)) //for
                 {
                     loop.BranchType = BranchType.For;
-                    loop.ForOperand = (IExpressionPattern)context.Blocks.Last(p => p is BinaryOpPattern bop && bop.Op == BinaryOp.Assign);
+                    loop.ForOperand = (IExpressionPattern)context.Patterns.Last(p => p is BinaryOpPattern bop && bop.Op == BinaryOp.Assign);
                     loop.ForOperand.Terminal = false;
                     loop.Entry = codes[i];
                     loop.Exit = jumped;

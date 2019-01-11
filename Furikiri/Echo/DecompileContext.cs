@@ -20,12 +20,12 @@ namespace Furikiri.Echo
 
         internal Dictionary<int, HashSet<BranchType>> Branches { get; set; } =
             new Dictionary<int, HashSet<BranchType>>();
-
+        internal List<Block> Blocks { get; set; } = new List<Block>();
         public CodeObject Object { get; set; }
         public List<DetectHandler> Detectors { get; set; }
         public List<DetectHandler> BranchDetectors { get; set; }
         public List<Instruction> InstructionQueue { get; set; } = new List<Instruction>();
-        public List<IPattern> Blocks { get; set; } = new List<IPattern>();
+        public List<IPattern> Patterns { get; set; } = new List<IPattern>();
         public Dictionary<int, ITjsVariant> Vars { get; set; } = new Dictionary<int, ITjsVariant>();
 
         public Dictionary<int, IExpressionPattern> Expressions { get; set; } =
@@ -71,6 +71,11 @@ namespace Furikiri.Echo
             return Branches[line].Contains(type);
         }
 
+        public void ScanBlocks()
+        {
+
+        }
+
         public TjsVarType GetSlotType(int slot)
         {
             if (Vars.ContainsKey(slot))
@@ -105,11 +110,11 @@ namespace Furikiri.Echo
         /// <param name="clear"></param>
         public void PopExpressionPatterns(List<short> slots = null, bool clear = true)
         {
-            if (slots != null && slots.Count > 0 && Blocks.Count > 0)
+            if (slots != null && slots.Count > 0 && Patterns.Count > 0)
             {
-                for (int i = Blocks.Count - 1; i > 0; i--)
+                for (int i = Patterns.Count - 1; i > 0; i--)
                 {
-                    if (Blocks[i] is IExpressionPattern exp)
+                    if (Patterns[i] is IExpressionPattern exp)
                     {
                         if (slots.Contains(exp.Slot))
                         {

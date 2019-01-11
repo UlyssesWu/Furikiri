@@ -71,7 +71,7 @@ namespace Furikiri.Echo
                     var result = branchDetect(m.Instructions, offset, context);
                     if (result != null)
                     {
-                        context.Blocks.Add(result);
+                        context.Patterns.Add(result);
                         offset += result.Length;
                         found = true;
                         break;
@@ -88,7 +88,7 @@ namespace Furikiri.Echo
                     var result = detect(m.Instructions, offset, context);
                     if (result != null)
                     {
-                        context.Blocks.Add(result);
+                        context.Patterns.Add(result);
                         offset += result.Length;
                         found = true;
                         break;
@@ -103,7 +103,7 @@ namespace Furikiri.Echo
                 }
             }
 
-            var blocks = context.Blocks;
+            var blocks = context.Patterns;
             StringBuilder sb = new StringBuilder();
             foreach (var block in blocks)
             {
