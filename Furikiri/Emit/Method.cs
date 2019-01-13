@@ -36,11 +36,12 @@ namespace Furikiri.Emit
                 if (i + 1 < Instructions.Count)
                 {
                     if (
-                        (Instructions[i].OpCode == OpCode.INC && Instructions[i+1].OpCode == OpCode.DEC || Instructions[i].OpCode == OpCode.DEC && Instructions[i + 1].OpCode == OpCode.INC)
-                        && Instructions[i].GetRegisterSlot(0) == Instructions[i+1].GetRegisterSlot(0))
+                        (Instructions[i].OpCode == OpCode.INC && Instructions[i + 1].OpCode == OpCode.DEC ||
+                         Instructions[i].OpCode == OpCode.DEC && Instructions[i + 1].OpCode == OpCode.INC)
+                        && Instructions[i].GetRegisterSlot(0) == Instructions[i + 1].GetRegisterSlot(0))
                     {
                         toBeRemoved.Add(Instructions[i]);
-                        toBeRemoved.Add(Instructions[i+1]);
+                        toBeRemoved.Add(Instructions[i + 1]);
                         i++;
                     }
                 }
@@ -60,8 +61,11 @@ namespace Furikiri.Emit
         public void Resolve()
         {
             var code = Object;
-            foreach (var instruction in Instructions)
+            for (var i = 0; i < Instructions.Count; i++)
             {
+                var instruction = Instructions[i];
+                instruction.Line = i;
+                instruction.Data = null;
                 switch (instruction.OpCode)
                 {
                     case OpCode.JF:
@@ -135,7 +139,7 @@ namespace Furikiri.Emit
                         case OpCode.JNF:
                         case OpCode.JMP:
                             instruction.Registers[0]
-                                .SetSlot(instruction.Data.Instruction.Offset - instruction.Offset);
+                                .SetSlot(((JumpData) instruction.Data).Goto.Offset - instruction.Offset);
                             break;
                         case OpCode.CONST:
                         case OpCode.SPD:

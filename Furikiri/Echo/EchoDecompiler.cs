@@ -62,6 +62,7 @@ namespace Furikiri.Echo
             var m = Methods[Script.TopLevel];
             m.Compact();
 
+            context.ScanBlocks(m.Instructions);
             int offset = 0;
             while (offset < m.Instructions.Count)
             {
@@ -115,6 +116,7 @@ namespace Furikiri.Echo
                 {
                     sb.AppendLine(exp2.ToString());
                 }
+
                 if (block is BinaryOpPattern b)
                 {
                     var l = b.Left;

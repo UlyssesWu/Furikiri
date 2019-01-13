@@ -376,11 +376,11 @@ namespace Furikiri
         /// Is OpCode a Jump
         /// </summary>
         /// <param name="code"></param>
-        /// <param name="includeJmp">if false, only JF & JNF counts</param>
+        /// <param name="conditionalOnly">if true, only JF & JNF counts</param>
         /// <returns></returns>
-        public static bool IsJump(this OpCode code, bool includeJmp = true)
+        public static bool IsJump(this OpCode code, bool conditionalOnly = false)
         {
-            if (includeJmp)
+            if (conditionalOnly)
             {
                 return code == OpCode.JF || code == OpCode.JNF;
             }

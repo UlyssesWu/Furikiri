@@ -21,7 +21,7 @@ namespace Furikiri.Echo.Patterns
             if (codes[i].OpCode == OpCode.TT)
             {
                 var exp = context.Expressions[codes[i].GetRegisterSlot(0)];
-                if (i + 1 < codes.Count && codes[i + 1].OpCode.IsJump(false)) //if
+                if (i + 1 < codes.Count && codes[i + 1].OpCode.IsJump(true)) //if
                 {
                     if (exp != null)
                     {

@@ -53,7 +53,7 @@ namespace Furikiri.Echo.Patterns
                     var binOp = BinaryOpPattern.Match(codes, i, context);
                     if (binOp != null)
                     {
-                        if (codes[i + binOp.Length].OpCode.IsJump(false))
+                        if (codes[i + binOp.Length].OpCode.IsJump(true))
                         {
                             //has condition
                             binOp.Terminal = false;

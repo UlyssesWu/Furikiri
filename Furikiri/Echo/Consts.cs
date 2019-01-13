@@ -6,7 +6,8 @@ namespace Furikiri.Echo
 {
     public enum BranchType
     {
-        While = 0,
+        None = 0,
+        While = 1,
         DoWhile,
         For,
         If,

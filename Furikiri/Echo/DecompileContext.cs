@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
@@ -20,10 +21,10 @@ namespace Furikiri.Echo
 
         internal Dictionary<int, HashSet<BranchType>> Branches { get; set; } =
             new Dictionary<int, HashSet<BranchType>>();
+
         internal List<Block> Blocks { get; set; } = new List<Block>();
         public CodeObject Object { get; set; }
         public List<DetectHandler> Detectors { get; set; }
-        public List<DetectHandler> BranchDetectors { get; set; }
         public List<Instruction> InstructionQueue { get; set; } = new List<Instruction>();
         public List<IPattern> Patterns { get; set; } = new List<IPattern>();
         public Dictionary<int, ITjsVariant> Vars { get; set; } = new Dictionary<int, ITjsVariant>();
@@ -71,9 +72,104 @@ namespace Furikiri.Echo
             return Branches[line].Contains(type);
         }
 
-        public void ScanBlocks()
+        public void ScanBlocks(List<Instruction> instructions)
         {
+            int currentAddr = 0;
+            var block = GetOrCreateBlockAt(currentAddr);
+            Stack<int> workList = new Stack<int>();
+            workList.Push(currentAddr);
+            while (workList.Count > 0)
+            {
+                currentAddr = workList.Pop();
+                block = GetOrCreateBlockAt(currentAddr);
 
+                NEXT:
+                Instruction label = null;
+                Instruction branch = null;
+                for (int i = currentAddr + 1; i < instructions.Count; i++)
+                {
+                    var ins = instructions[i];
+                    if (label == null && ins.JumpedFrom != null)
+                    {
+                        if (ins.Line > currentAddr)
+                        {
+                            label = ins;
+                        }
+                    }
+
+                    if (branch == null && ins.OpCode.IsJump())
+                    {
+                        branch = ins;
+                    }
+
+                    if (label != null && branch != null)
+                    {
+                        break;
+                    }
+                }
+
+                if (label == null || branch == null)
+                {
+                    //should reach end now
+                    block.Length = instructions.Count - block.Start;
+                    continue;
+                }
+
+                var gotoLine = ((JumpData) branch.Data).Goto.Line;
+                var addrAfterBranch = branch.Line + 1;
+                if (label.Line < addrAfterBranch) //Take from start to label as a straight block
+                {
+                    block.Length = label.Line - block.Start;
+                    currentAddr = label.Line;
+                    var nextBlock1 = GetOrCreateBlockAt(currentAddr);
+                    nextBlock1.From.Add(block);
+                    block.To.Add(nextBlock1);
+                    block = nextBlock1;
+                    goto NEXT;
+                }
+
+                block.Length = addrAfterBranch - block.Start;
+                if (branch.OpCode == OpCode.RET)
+                {
+                    continue;
+                }
+
+                // ReSharper disable once SimplifyLinqExpression
+                if (!Blocks.Any(b => b.Start == gotoLine))
+                {
+                    workList.Push(gotoLine);
+                }
+
+                var nextBlock = GetOrCreateBlockAt(gotoLine);
+                nextBlock.From.Add(block);
+                block.To.Add(nextBlock);
+
+                if (!branch.OpCode.IsJump(true))
+                {
+                    continue;
+                }
+
+                nextBlock = GetOrCreateBlockAt(addrAfterBranch);
+                nextBlock.From.Add(block);
+                block.To.Add(nextBlock);
+                block = nextBlock;
+                currentAddr = block.Start;
+                goto NEXT;
+            }
+
+            Blocks.Sort((b1, b2) => b1.Start - b2.Start);
+        }
+
+        internal Block GetOrCreateBlockAt(int line)
+        {
+            var block = Blocks.FirstOrDefault(b => b.Start == line);
+            if (block == null)
+            {
+                block = new Block(line);
+                Blocks.Add(block);
+            }
+
+            return block;
         }
 
         public TjsVarType GetSlotType(int slot)

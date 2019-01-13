@@ -11,12 +11,25 @@ namespace Furikiri.Emit
     /// </summary>
     public class Instruction
     {
+        /// <summary>
+        /// Instruction No.
+        /// </summary>
+        public int Line { get; internal set; }
         public OpCode OpCode { get; set; }
         public List<IRegister> Registers { get; set; } = new List<IRegister>();
-        public int Offset { get; set; }
+        /// <summary>
+        /// Byte Offset
+        /// </summary>
+        public int Offset { get; internal set; }
+        /// <summary>
+        /// Byte Size
+        /// </summary>
         public int Size => 1 + Registers.Sum(i => i.Size);
-        public IRegisterData Data { get; set; }
-        public List<Instruction> JumpedFrom { get; set; }
+        public IRegisterData Data { get; internal set; }
+        /// <summary>
+        /// Can be jumped from which instructions
+        /// </summary>
+        public List<Instruction> JumpedFrom { get; internal set; }
 
         public Instruction(OpCode op)
         {
