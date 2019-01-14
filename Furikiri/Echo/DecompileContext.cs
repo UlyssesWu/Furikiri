@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Furikiri.Echo.Patterns;
@@ -22,7 +23,10 @@ namespace Furikiri.Echo
         internal Dictionary<int, HashSet<BranchType>> Branches { get; set; } =
             new Dictionary<int, HashSet<BranchType>>();
 
+        internal Block EntryBlock { get; set; }
         internal List<Block> Blocks { get; set; } = new List<Block>();
+        internal List<Loop> LoopSet { get; set; } = new List<Loop>();
+
         public CodeObject Object { get; set; }
         public List<DetectHandler> Detectors { get; set; }
         public List<Instruction> InstructionQueue { get; set; } = new List<Instruction>();
@@ -70,106 +74,6 @@ namespace Furikiri.Echo
             }
 
             return Branches[line].Contains(type);
-        }
-
-        public void ScanBlocks(List<Instruction> instructions)
-        {
-            int currentAddr = 0;
-            var block = GetOrCreateBlockAt(currentAddr);
-            Stack<int> workList = new Stack<int>();
-            workList.Push(currentAddr);
-            while (workList.Count > 0)
-            {
-                currentAddr = workList.Pop();
-                block = GetOrCreateBlockAt(currentAddr);
-
-                NEXT:
-                Instruction label = null;
-                Instruction branch = null;
-                for (int i = currentAddr + 1; i < instructions.Count; i++)
-                {
-                    var ins = instructions[i];
-                    if (label == null && ins.JumpedFrom != null)
-                    {
-                        if (ins.Line > currentAddr)
-                        {
-                            label = ins;
-                        }
-                    }
-
-                    if (branch == null && ins.OpCode.IsJump())
-                    {
-                        branch = ins;
-                    }
-
-                    if (label != null && branch != null)
-                    {
-                        break;
-                    }
-                }
-
-                if (label == null || branch == null)
-                {
-                    //should reach end now
-                    block.Length = instructions.Count - block.Start;
-                    continue;
-                }
-
-                var gotoLine = ((JumpData) branch.Data).Goto.Line;
-                var addrAfterBranch = branch.Line + 1;
-                if (label.Line < addrAfterBranch) //Take from start to label as a straight block
-                {
-                    block.Length = label.Line - block.Start;
-                    currentAddr = label.Line;
-                    var nextBlock1 = GetOrCreateBlockAt(currentAddr);
-                    nextBlock1.From.Add(block);
-                    block.To.Add(nextBlock1);
-                    block = nextBlock1;
-                    goto NEXT;
-                }
-
-                block.Length = addrAfterBranch - block.Start;
-                if (branch.OpCode == OpCode.RET)
-                {
-                    continue;
-                }
-
-                // ReSharper disable once SimplifyLinqExpression
-                if (!Blocks.Any(b => b.Start == gotoLine))
-                {
-                    workList.Push(gotoLine);
-                }
-
-                var nextBlock = GetOrCreateBlockAt(gotoLine);
-                nextBlock.From.Add(block);
-                block.To.Add(nextBlock);
-
-                if (!branch.OpCode.IsJump(true))
-                {
-                    continue;
-                }
-
-                nextBlock = GetOrCreateBlockAt(addrAfterBranch);
-                nextBlock.From.Add(block);
-                block.To.Add(nextBlock);
-                block = nextBlock;
-                currentAddr = block.Start;
-                goto NEXT;
-            }
-
-            Blocks.Sort((b1, b2) => b1.Start - b2.Start);
-        }
-
-        internal Block GetOrCreateBlockAt(int line)
-        {
-            var block = Blocks.FirstOrDefault(b => b.Start == line);
-            if (block == null)
-            {
-                block = new Block(line);
-                Blocks.Add(block);
-            }
-
-            return block;
         }
 
         public TjsVarType GetSlotType(int slot)
@@ -273,5 +177,227 @@ namespace Furikiri.Echo
                 var ins = instructions[j];
             }
         }
+
+        #region Decompiler Core
+
+        public void ScanBlocks(List<Instruction> instructions)
+        {
+            int currentAddr = 0;
+            var block = GetOrCreateBlockAt(currentAddr);
+            Stack<int> workList = new Stack<int>();
+            workList.Push(currentAddr);
+            while (workList.Count > 0)
+            {
+                currentAddr = workList.Pop();
+                block = GetOrCreateBlockAt(currentAddr);
+
+                NEXT:
+                Instruction label = null;
+                Instruction branch = null;
+                for (int i = currentAddr + 1; i < instructions.Count; i++)
+                {
+                    var ins = instructions[i];
+                    if (label == null && ins.JumpedFrom != null)
+                    {
+                        if (ins.Line > currentAddr)
+                        {
+                            label = ins;
+                        }
+                    }
+
+                    if (branch == null && (ins.OpCode.IsJump() || ins.OpCode == OpCode.RET))
+                    {
+                        branch = ins;
+                    }
+
+                    if (label != null && branch != null)
+                    {
+                        break;
+                    }
+                }
+
+                if (label == null || branch == null)
+                {
+                    //should reach end now
+                    block.End = instructions.Count - 1;
+                    continue;
+                }
+
+                var addrAfterBranch = branch.Line + 1;
+                if (label.Line < addrAfterBranch) //Take from start to label as a straight block
+                {
+                    block.End = label.Line - 1;
+                    currentAddr = label.Line;
+                    var nextBlock1 = GetOrCreateBlockAt(currentAddr);
+                    nextBlock1.From.Add(block);
+                    block.To.Add(nextBlock1);
+                    block = nextBlock1;
+                    goto NEXT;
+                }
+
+                block.End = addrAfterBranch - 1; //current block: before branch
+                if (branch.OpCode == OpCode.RET)
+                {
+                    continue;
+                }
+
+                var gotoLine = ((JumpData) branch.Data).Goto.Line;
+                // ReSharper disable once SimplifyLinqExpression
+                if (!Blocks.Any(b => b.Start == gotoLine))
+                {
+                    workList.Push(gotoLine); //stashed block: created, process later
+                }
+
+                var nextBlock = GetOrCreateBlockAt(gotoLine);
+                nextBlock.From.Add(block);
+                block.To.Add(nextBlock);
+
+                if (!branch.OpCode.IsJump(true))
+                {
+                    continue;
+                }
+
+                nextBlock = GetOrCreateBlockAt(addrAfterBranch); //next block: right after branch (if not jumped)
+                nextBlock.From.Add(block);
+                block.To.Add(nextBlock);
+                block = nextBlock;
+                currentAddr = block.Start;
+                goto NEXT;
+            }
+
+            Blocks.Sort((b1, b2) => b1.Start - b2.Start);
+
+            if (Blocks.Count > 0)
+            {
+                //TJS2 is a simple language, the entry block is always the start block
+                EntryBlock = Blocks[0];
+            }
+        }
+
+        internal Block GetOrCreateBlockAt(int line)
+        {
+            var block = Blocks.FirstOrDefault(b => b.Start == line);
+            if (block == null)
+            {
+                block = new Block(line);
+                Blocks.Add(block);
+            }
+
+            return block;
+        }
+
+        /// <summary>
+        /// <remarks>Connect to SIBYL SYSTEM and fetch Dominators</remarks>
+        /// </summary>
+        internal void ComputeDominators()
+        {
+            if (Blocks.Count == 0)
+            {
+                return;
+            }
+
+            Blocks.Sort((b1, b2) => b1.Start - b2.Start);
+
+            for (int i = 0; i < Blocks.Count; i++)
+            {
+                var b = Blocks[i];
+                b.Id = i;
+                b.Dominator = new BitArray(Blocks.Count);
+                b.Dominator.SetAll(true);
+            }
+
+            var block = Blocks[0];
+            block.Dominator.SetAll(false);
+            block.Dominator[block.Id] = true;
+
+            var temp = new BitArray(Blocks.Count);
+            bool changed = true;
+
+            while (changed)
+            {
+                changed = false;
+                foreach (var bl in Blocks)
+                {
+                    if (bl == EntryBlock)
+                    {
+                        continue;
+                    }
+
+                    foreach (var pred in bl.From)
+                    {
+                        temp.SetAll(false);
+                        temp.Or(bl.Dominator);
+                        bl.Dominator.And(pred.Dominator);
+                        bl.Dominator[bl.Id] = true;
+                        if (!bl.Dominator.SameAs(temp))
+                        {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        internal void ComputeNaturalLoops()
+        {
+            foreach (var block in Blocks)
+            {
+                if (block == EntryBlock)
+                {
+                    continue;
+                }
+
+                foreach (var to in block.To)
+                {
+                    // Every successor that dominates its predecessor
+                    // must be the header of a loop.
+                    // That is, block -> succ is a back edge.
+                    if (block.Dominator[to.Id])
+                    {
+                        var natureLoop = NaturalLoopForEdge(to, block);
+                        if (natureLoop != null)
+                        {
+                            LoopSet.Add(natureLoop);
+                        }
+                    }
+                }
+            }
+        }
+
+        internal Loop NaturalLoopForEdge(Block head, Block tail)
+        {
+            if (head == null || tail == null)
+            {
+                return null;
+            }
+
+            Stack<Block> workList = new Stack<Block>();
+            Loop loop = new Loop {Header = head};
+
+            loop.Blocks.Add(head);
+
+            if (head != tail)
+            {
+                loop.Blocks.Add(tail);
+                workList.Push(tail);
+            }
+
+            while (workList.Count > 0)
+            {
+                var block = workList.Pop();
+                foreach (var pred in block.From)
+                {
+                    if (!loop.Blocks.Contains(pred))
+                    {
+                        loop.Blocks.Add(pred);
+                        workList.Push(pred);
+                    }
+                }
+            }
+
+            return loop;
+        }
+
+        #endregion
     }
 }

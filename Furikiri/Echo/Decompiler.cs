@@ -7,9 +7,9 @@ using Furikiri.Emit;
 namespace Furikiri.Echo
 {
     /// <summary>
-    /// A naive TJS decompiler
+    /// TJS decompiler
     /// </summary>
-    public class EchoDecompiler
+    public class Decompiler
     {
         public Module Script { get; set; }
 
@@ -18,12 +18,12 @@ namespace Furikiri.Echo
         internal List<DetectHandler> Detectors = new List<DetectHandler>();
         internal List<DetectHandler> BranchDetectors = new List<DetectHandler>();
 
-        public EchoDecompiler()
+        public Decompiler()
         {
             Init();
         }
 
-        public EchoDecompiler(string path)
+        public Decompiler(string path)
         {
             Init();
             Script = new Module(path);
