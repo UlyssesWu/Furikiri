@@ -8,7 +8,7 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// <example>a.b.c</example>
     /// </summary>
-    class ChainGetPattern : IExpressionPattern
+    class ChainGetPattern : IExpression
     {
         public int Length => (FromGlobal ? 1 : 0) + Members.Count;
 

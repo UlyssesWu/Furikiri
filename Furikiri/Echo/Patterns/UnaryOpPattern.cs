@@ -14,14 +14,14 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// <example>!a</example>
     /// </summary>
-    class UnaryOpPattern : IExpressionPattern
+    class UnaryOpPattern : IExpression
     {
         public int Length => 1;
         public bool Terminal { get; set; }
         public TjsVarType Type { get; }
         public short Slot { get; }
         public UnaryOp Op { get; set; }
-        public IExpressionPattern Expression { get; set; }
+        public IExpression Expression { get; set; }
 
         public UnaryOpPattern(UnaryOp op)
         {

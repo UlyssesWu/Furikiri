@@ -7,10 +7,13 @@ namespace Furikiri.Echo
     public enum BranchType
     {
         None = 0,
-        While = 1,
+        Goto,
+        While,
         DoWhile,
         For,
         If,
+        Continue,
+        Break,
     }
 
     class Consts

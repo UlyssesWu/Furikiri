@@ -8,18 +8,18 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// <example>a.b()</example>
     /// </summary>
-    class CallPattern : IExpressionPattern
+    class CallPattern : IExpression
     {
         public bool Terminal { get; set; }
         public int Length => 1;
         public TjsVarType Type { get; set; }
         public short Slot { get; set; }
-        public IExpressionPattern Caller { get; set; }
+        public IExpression Caller { get; set; }
 
         public string Method { get; set; }
 
         //public string CallerName { get; set; }
-        public List<IExpressionPattern> Parameters { get; set; } = new List<IExpressionPattern>();
+        public List<IExpression> Parameters { get; set; } = new List<IExpression>();
 
         public static CallPattern Match(List<Instruction> codes, int i, DecompileContext context)
         {

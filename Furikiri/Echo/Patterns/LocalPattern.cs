@@ -8,7 +8,7 @@ namespace Furikiri.Echo.Patterns
     /// parameter or local var
     /// <example>var a / x(a)</example>
     /// </summary>
-    class LocalPattern : IExpressionPattern
+    class LocalPattern : IExpression
     {
         public bool IsParameter { get; private set; } = false;
         public int Length => 1;

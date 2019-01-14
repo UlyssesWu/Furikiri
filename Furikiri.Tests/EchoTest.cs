@@ -70,6 +70,21 @@ namespace Furikiri.Tests
             var s = KAGLoadScript.SourcePosArray;
         }
 
+        [TestMethod]
+        public void TestDecompileBlock()
+        {
+            var path = "..\\..\\Res\\Initialize.tjs.comp";
+            Module md = new Module(path);
+            var mt = md.TopLevel.ResolveMethod();
+            mt.Compact();
+
+            DecompileContext context = new DecompileContext(md.TopLevel);
+            context.ScanBlocks(mt.Instructions);
+            context.ComputeDominators();
+            context.ComputeNaturalLoops();
+            context.LoopSetSort();
+        }
+
         //DO NOT WORK
         [TestMethod]
         public void TestCompileTjs()

@@ -5,7 +5,10 @@ namespace Furikiri.Echo
 {
     internal delegate IPattern DetectHandler(List<Instruction> instructions, int index, DecompileContext context);
 
-    public interface IPattern
+    /// <summary>
+    /// Statement
+    /// </summary>
+    internal interface IPattern
     {
         /// <summary>
         /// if it's a single line
@@ -21,7 +24,7 @@ namespace Furikiri.Echo
     /// <summary>
     /// Displayable pattern
     /// </summary>
-    public interface IExpressionPattern : IPattern
+    internal interface IExpression : IPattern
     {
         TjsVarType Type { get; }
         short Slot { get; }
@@ -31,9 +34,10 @@ namespace Furikiri.Echo
     /// <summary>
     /// Branch
     /// </summary>
-    public interface IBranchPattern : IPattern
+    internal interface IBranch : IPattern
     {
         BranchType BranchType { get; }
+        List<Block> Content { get; }
         string ToString();
     }
 }

@@ -9,17 +9,18 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// For / While / DoWhile
     /// </summary>
-    class LoopPattern : IBranchPattern
+    class LoopPattern : IBranch
     {
         public bool Terminal { get; set; } = true;
         public int Length { get; private set; }
         public BranchType BranchType { get; set; }
         public Instruction Entry { get; set; }
         public Instruction Exit { get; set; }
-        public IExpressionPattern ForOperand { get; set; }
-        public IExpressionPattern Condition { get; set; }
-        public IExpressionPattern ForOperation { get; set; }
-        public List<IPattern> Content { get; set; } = new List<IPattern>();
+        public IExpression ForOperand { get; set; }
+        public IExpression Condition { get; set; }
+        public IExpression ForOperation { get; set; }
+        public List<Block> Content { get; set; } = new List<Block>();
+        public List<IPattern> InsContent { get; set; } = new List<IPattern>();
 
         public static LoopPattern Match(List<Instruction> codes, int i, DecompileContext context)
         {
@@ -43,7 +44,8 @@ namespace Furikiri.Echo.Patterns
                     !context.ContainsBranch(i, BranchType.For)) //for
                 {
                     loop.BranchType = BranchType.For;
-                    loop.ForOperand = (IExpressionPattern)context.Patterns.Last(p => p is BinaryOpPattern bop && bop.Op == BinaryOp.Assign);
+                    loop.ForOperand =
+                        (IExpression) context.Patterns.Last(p => p is BinaryOpPattern bop && bop.Op == BinaryOp.Assign);
                     loop.ForOperand.Terminal = false;
                     loop.Entry = codes[i];
                     loop.Exit = jumped;
@@ -66,7 +68,7 @@ namespace Furikiri.Echo.Patterns
                         loop.DetectContent(codes, i, context);
                     }
 
-                    loop.ForOperation = (IExpressionPattern) loop.Content.LastOrDefault(p => p is IExpressionPattern);
+                    loop.ForOperation = (IExpression) loop.Content.LastOrDefault(p => p is IExpression);
                 }
 
                 else if (jumped2 != null) //while
@@ -90,7 +92,7 @@ namespace Furikiri.Echo.Patterns
                 if (context.DetectPattern(instructions, offset, out var pattern))
                 {
                     offset += pattern.Length;
-                    Content.Add(pattern);
+                    InsContent.Add(pattern);
                 }
                 else
                 {
@@ -116,7 +118,7 @@ namespace Furikiri.Echo.Patterns
                 case BranchType.For:
                     sb.AppendLine($"for ({ForOperand}; {Condition}; {ForOperation})");
                     sb.AppendLine("{");
-                    foreach (var pattern in Content)
+                    foreach (var pattern in InsContent)
                     {
                         sb.AppendLine($"    {pattern}");
                     }
@@ -126,7 +128,7 @@ namespace Furikiri.Echo.Patterns
                 case BranchType.While:
                     sb.AppendLine($"while ({Condition})");
                     sb.AppendLine("{");
-                    foreach (var pattern in Content)
+                    foreach (var pattern in InsContent)
                     {
                         sb.AppendLine($"    {pattern}");
                     }
@@ -136,7 +138,7 @@ namespace Furikiri.Echo.Patterns
                 case BranchType.DoWhile:
                     sb.AppendLine("do");
                     sb.AppendLine("{");
-                    foreach (var pattern in Content)
+                    foreach (var pattern in InsContent)
                     {
                         sb.AppendLine($"    {pattern}");
                     }

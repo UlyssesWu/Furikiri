@@ -58,7 +58,8 @@ namespace Furikiri.Echo
                 Methods[obj] = obj.ResolveMethod();
             }
 
-            var context = new DecompileContext(Script.TopLevel, Detectors);
+            var context = new DecompileContext(Script.TopLevel);
+            context.Detectors = Detectors;
             var m = Methods[Script.TopLevel];
             m.Compact();
 
@@ -108,11 +109,11 @@ namespace Furikiri.Echo
             StringBuilder sb = new StringBuilder();
             foreach (var block in blocks)
             {
-                if (block is IExpressionPattern exp && block.Terminal)
+                if (block is IExpression block.Terminal)
                 {
                     sb.AppendLine(exp.ToString());
                 }
-                else if (block is IBranchPattern exp2 && block.Terminal)
+                else if (block is IBranchIBranch.Terminal)
                 {
                     sb.AppendLine(exp2.ToString());
                 }

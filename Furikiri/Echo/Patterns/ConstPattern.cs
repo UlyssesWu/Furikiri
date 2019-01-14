@@ -6,7 +6,7 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// Constant
     /// </summary>
-    class ConstPattern : IExpressionPattern
+    class ConstPattern : IExpression
     {
         public int Length => 1;
 

@@ -33,13 +33,12 @@ namespace Furikiri.Echo
         public List<IPattern> Patterns { get; set; } = new List<IPattern>();
         public Dictionary<int, ITjsVariant> Vars { get; set; } = new Dictionary<int, ITjsVariant>();
 
-        public Dictionary<int, IExpressionPattern> Expressions { get; set; } =
-            new Dictionary<int, IExpressionPattern>();
+        public Dictionary<int, IExpression> Expressions { get; set; } =
+            new Dictionary<int, IExpression>();
 
-        public DecompileContext(CodeObject obj, List<DetectHandler> detectors)
+        public DecompileContext(CodeObject obj)
         {
             Object = obj;
-            Detectors = detectors;
             if (obj.ContextType == TjsContextType.TopLevel || obj.Parent == null)
             {
                 Expressions[-1] = new ThisPattern(true) {This = obj};
@@ -114,7 +113,7 @@ namespace Furikiri.Echo
             {
                 for (int i = Patterns.Count - 1; i > 0; i--)
                 {
-                    if (Patterns[i] is IExpressionPattern exp)
+                    if (Patterns[i] is IExpression exp)
                     {
                         if (slots.Contains(exp.Slot))
                         {
@@ -287,8 +286,9 @@ namespace Furikiri.Echo
         }
 
         /// <summary>
-        /// <remarks>Connect to SIBYL SYSTEM and fetch Dominators</remarks>
+        /// Connect to SIBYL SYSTEM and fetch Dominators
         /// </summary>
+        /// REF: <value>https://en.wikipedia.org/wiki/Dominator_(graph_theory)</value>
         internal void ComputeDominators()
         {
             if (Blocks.Count == 0)
@@ -364,7 +364,7 @@ namespace Furikiri.Echo
             }
         }
 
-        internal Loop NaturalLoopForEdge(Block head, Block tail)
+        private Loop NaturalLoopForEdge(Block head, Block tail)
         {
             if (head == null || tail == null)
             {
@@ -396,6 +396,56 @@ namespace Furikiri.Echo
             }
 
             return loop;
+        }
+
+        /// <summary>
+        /// Sort loopSet from innermost loop to outermost loop
+        /// </summary>
+        internal void LoopSetSort()
+        {
+            LoopSet.Sort((l1, l2) => l1.Blocks.Count - l2.Blocks.Count);
+            for (var i = 0; i < LoopSet.Count; i++)
+            {
+                var loop = LoopSet[i];
+                for (int j = i + 1; j < LoopSet.Count; j++)
+                {
+                    if (LoopSet[j].Blocks.Contains(loop.Header))
+                    {
+                        LoopSet[j].Children.Add(loop);
+                        loop.Parent = LoopSet[j];
+                        break;
+                    }
+                }
+            }
+
+            List<Loop> newLoopSet = new List<Loop>(LoopSet.Count);
+            foreach (var parent in LoopSet.Where(l => l.Parent == null))
+            {
+                TravelLoop(newLoopSet, parent);
+            }
+
+            LoopSet = newLoopSet;
+        }
+
+        private void TravelLoop(List<Loop> set, Loop loop)
+        {
+            if (!set.Contains(loop))
+            {
+                set.Add(loop);
+            }
+
+            foreach (var child in loop.Children)
+            {
+                TravelLoop(set, child);
+            }
+        }
+
+        internal void IntervalAnalysisDoWhilePass()
+        {
+            foreach (var loop in LoopSet)
+            {
+                
+            }
         }
 
         #endregion

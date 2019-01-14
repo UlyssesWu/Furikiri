@@ -5,7 +5,7 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// this / global
     /// </summary>
-    class ThisPattern : IExpressionPattern
+    class ThisPattern : IExpression
     {
         public bool Terminal
         {

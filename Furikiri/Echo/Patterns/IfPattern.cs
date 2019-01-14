@@ -7,13 +7,15 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// If
     /// </summary>
-    class IfPattern : IBranchPattern
+    class IfPattern : IBranch
     {
         public bool Terminal { get; set; }
         public int Length { get; }
-        public List<IPattern> If { get; set; }
-        public IExpressionPattern Condition { get; set; }
+        public IExpression Condition { get; set; }
         public List<IPattern> Else { get; set; }
+        public BranchType BranchType { get; } = BranchType.If;
+        public List<Block> Content { get; } = new List<Block>();
+        public List<IPattern> InsContent { get; } = new List<IPattern>();
 
         public static IfPattern Match(List<Instruction> codes, int i, DecompileContext context)
         {
@@ -33,14 +35,12 @@ namespace Furikiri.Echo.Patterns
             return null;
         }
 
-        public BranchType BranchType { get; } = BranchType.If;
-
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
             sb.AppendLine($"if ({Condition})");
             sb.AppendLine("{");
-            foreach (var pattern in If)
+            foreach (var pattern in InsContent)
             {
                 sb.AppendLine($"    {pattern}");
             }

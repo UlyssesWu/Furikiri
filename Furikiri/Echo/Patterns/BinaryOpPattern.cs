@@ -24,11 +24,11 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// <example>a+b</example>
     /// </summary>
-    class BinaryOpPattern : IExpressionPattern
+    class BinaryOpPattern : IExpression
     {
         public int Length => 1;
-        public IExpressionPattern Left { get; set; }
-        public IExpressionPattern Right { get; set; }
+        public IExpression Left { get; set; }
+        public IExpression Right { get; set; }
         public BinaryOp Op { get; set; }
 
         public bool Terminal { get; set; }
