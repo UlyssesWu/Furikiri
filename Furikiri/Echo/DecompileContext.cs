@@ -482,6 +482,25 @@ namespace Furikiri.Echo
             }
         }
 
+        private Block FindBreak(Loop loop)
+        {
+            BitArray b = new BitArray(ExitBlock.PostDominator.Length);
+            b.SetAll(true);
+            foreach (var block in loop.Blocks)
+            {
+                b.And(block.PostDominator);
+                b[block.Id] = false; //block after break can not still stay in the loop
+            }
+
+            var id = b.FirstIndexOf(true);
+            if (id >= 0)
+            {
+                return Blocks[id];
+            }
+
+            return null;
+        }
+
         internal void IntervalAnalysisDoWhilePass()
         {
             LoopSetSort();
@@ -490,14 +509,14 @@ namespace Furikiri.Echo
                 var dw = new DoWhilePattern();
                 dw.Condition = loop.FindCondition();
                 dw.Content = loop.Blocks;
-                dw.Break = loop.FindBreak();
+                dw.Break = FindBreak(loop);
                 dw.Continue = null;
 
-                var cont = loop.Blocks.Last();
+                var cont = loop.Blocks.LastOrDefault();
 
                 if (cont != null)
                 {
-                    if (cont.Statements.Last() is IfPattern i)
+                    if (cont.Statements.LastOrDefault() is IfPattern i)
                     {
                         if (i.To == loop.Header)
                         {

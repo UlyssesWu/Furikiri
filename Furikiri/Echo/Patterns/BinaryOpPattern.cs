@@ -19,6 +19,8 @@ namespace Furikiri.Echo.Patterns
         NotEqual,
         Congruent,
         NotCongruent,
+        GreaterThan,
+        LessThan,
     }
 
     /// <summary>

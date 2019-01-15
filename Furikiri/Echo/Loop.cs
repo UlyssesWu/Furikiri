@@ -23,13 +23,13 @@ namespace Furikiri.Echo
                 return null;
             }
 
-            return null; //TODO:
-        }
+            var last = Blocks.Last();
+            if (last.Statements.Count <= 0)
+            {
+                return null;
+            }
 
-        public Block FindBreak()
-        {
-
-            return null;
+            return (IExpression) last.Statements.LastOrDefault(s => s is IExpression && s.IsCompareStatement());
         }
     }
 }

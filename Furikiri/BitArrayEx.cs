@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 
@@ -315,6 +313,32 @@ namespace Furikiri
             }
 
             return true;
+        }
+
+        public static int FirstIndexOf(this BitArray ba, bool val, int start = 0)
+        {
+            for (int i = start; i < ba.Length; i++)
+            {
+                if (ba[i] == val)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        public static int LastIndexOf(this BitArray ba, bool val)
+        {
+            for (int i = ba.Length - 1; i >= 0; i--)
+            {
+                if (ba[i] == val)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
         }
     }
 }

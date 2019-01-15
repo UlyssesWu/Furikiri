@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Furikiri.Echo;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
@@ -388,6 +389,33 @@ namespace Furikiri
             return code == OpCode.JMP || code == OpCode.JF || code == OpCode.JNF;
         }
 
+        public static bool IsCompare(this BinaryOp code)
+        {
+            switch (code)
+            {
+                case BinaryOp.NotEqual:
+                case BinaryOp.Equal:
+                case BinaryOp.NotCongruent:
+                case BinaryOp.Congruent:
+                case BinaryOp.GreaterThan:
+                case BinaryOp.LessThan:
+                    return true;
+            }
+
+            return false;
+        }
+
+        public static bool IsCompare(this UnaryOp code)
+        {
+            switch (code)
+            {
+                case UnaryOp.Not:
+                    return true;
+            }
+
+            return false;
+        }
+
         public static string AsString(this IRegisterData data)
         {
             if (data is OperandData op)
@@ -407,6 +435,21 @@ namespace Furikiri
 
             list.Add(obj);
             return true;
+        }
+
+        public static bool IsCompareStatement(this IPattern pattern)
+        {
+            if (pattern is BinaryOpPattern b && b.Op.IsCompare())
+            {
+                return true;
+            }
+
+            if (pattern is UnaryOpPattern u && u.Op.IsCompare())
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }
