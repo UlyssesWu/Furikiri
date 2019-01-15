@@ -397,5 +397,16 @@ namespace Furikiri
 
             return null;
         }
+
+        public static bool TryAdd<T>(this List<T> list, T obj)
+        {
+            if (list.Contains(obj))
+            {
+                return false;
+            }
+
+            list.Add(obj);
+            return true;
+        }
     }
 }

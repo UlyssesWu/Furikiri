@@ -104,29 +104,8 @@ namespace Furikiri.Echo
                     offset++;
                 }
             }
-
-            var blocks = context.Patterns;
-            StringBuilder sb = new StringBuilder();
-            foreach (var block in blocks)
-            {
-                if (block is IExpression block.Terminal)
-                {
-                    sb.AppendLine(exp.ToString());
-                }
-                else if (block is IBranchIBranch.Terminal)
-                {
-                    sb.AppendLine(exp2.ToString());
-                }
-
-                if (block is BinaryOpPattern b)
-                {
-                    var l = b.Left;
-                    //var n = (LocalPattern) b.Left;
-                    var r = b.Right;
-                }
-            }
-
-            var text = sb.ToString();
+            
+            //var text = sb.ToString();
         }
     }
 }

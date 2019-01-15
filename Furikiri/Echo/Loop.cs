@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace Furikiri.Echo
@@ -13,5 +15,21 @@ namespace Furikiri.Echo
         public List<Loop> Children { get; set; } = new List<Loop>();
         public Block Header { get; set; }
         public List<Block> Blocks { get; set; } = new List<Block>();
+
+        public IExpression FindCondition()
+        {
+            if (Blocks.Count <= 0)
+            {
+                return null;
+            }
+
+            return null; //TODO:
+        }
+
+        public Block FindBreak()
+        {
+
+            return null;
+        }
     }
 }

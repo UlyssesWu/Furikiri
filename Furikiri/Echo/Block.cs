@@ -17,10 +17,14 @@ namespace Furikiri.Echo
         public int Start { get; set; }
         public int End { get; set; }
         public int Length => End - Start + 1;
-        public Instruction Entry { get; set; }
-        public Instruction Exit { get; set; }
-        public BranchType BranchType { get; set; }
         public BitArray Dominator { get; set; }
+        /// <summary>
+        /// Post-Dominator
+        /// </summary>
+        /// REF: https://en.wikipedia.org/wiki/Dominator_(graph_theory)#Postdominance
+        public BitArray PostDominator { get; set; }
+
+        public List<IPattern> Statements { get; set; } = new List<IPattern>();
 
         public Block(int start)
         {
@@ -32,9 +36,9 @@ namespace Furikiri.Echo
             return line >= Start && line <= End;
         }
 
-        public bool IsInBlock(Instruction ins)
+        public override string ToString()
         {
-            return ins.Offset >= Entry.Offset && ins.Offset <= Exit.Offset;
+            return base.ToString();
         }
     }
 }

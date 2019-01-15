@@ -38,6 +38,7 @@ namespace Furikiri.Echo
     {
         BranchType BranchType { get; }
         List<Block> Content { get; }
+        IExpression Condition { get; }
         string ToString();
     }
 }

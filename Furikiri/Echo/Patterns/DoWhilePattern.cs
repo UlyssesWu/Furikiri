@@ -9,7 +9,9 @@ namespace Furikiri.Echo.Patterns
         public bool Terminal { get; set; }
         public int Length { get; }
         public BranchType BranchType => BranchType.DoWhile;
-        public List<Block> Content { get; } = new List<Block>();
-
+        public List<Block> Content { get; set; } = new List<Block>();
+        public Block Continue { get; set; }
+        public Block Break { get; set; }
+        public IExpression Condition { get; set; }
     }
 }

@@ -82,7 +82,7 @@ namespace Furikiri.Tests
             context.ScanBlocks(mt.Instructions);
             context.ComputeDominators();
             context.ComputeNaturalLoops();
-            context.LoopSetSort();
+            context.IntervalAnalysisDoWhilePass();
         }
 
         //DO NOT WORK

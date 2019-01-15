@@ -24,6 +24,12 @@ namespace Furikiri.Echo
             new Dictionary<int, HashSet<BranchType>>();
 
         internal Block EntryBlock { get; set; }
+
+        /// <summary>
+        /// A fake block for any return
+        /// </summary>
+        internal Block ExitBlock { get; set; } = new Block(-1);
+
         internal List<Block> Blocks { get; set; } = new List<Block>();
         internal List<Loop> LoopSet { get; set; } = new List<Loop>();
 
@@ -181,6 +187,8 @@ namespace Furikiri.Echo
 
         public void ScanBlocks(List<Instruction> instructions)
         {
+            ExitBlock = new Block(instructions.Count) {End = instructions.Count};
+
             int currentAddr = 0;
             var block = GetOrCreateBlockAt(currentAddr);
             Stack<int> workList = new Stack<int>();
@@ -215,21 +223,21 @@ namespace Furikiri.Echo
                     }
                 }
 
-                if (label == null || branch == null)
-                {
-                    //should reach end now
-                    block.End = instructions.Count - 1;
-                    continue;
-                }
+                //if (label == null)
+                //{
+                //    //should reach end now
+                //    block.End = instructions.Count - 1;
+                //    continue;
+                //}
 
                 var addrAfterBranch = branch.Line + 1;
-                if (label.Line < addrAfterBranch) //Take from start to label as a straight block
+                if (label != null && label.Line < addrAfterBranch) //Take from start to label as a straight block
                 {
                     block.End = label.Line - 1;
                     currentAddr = label.Line;
                     var nextBlock1 = GetOrCreateBlockAt(currentAddr);
-                    nextBlock1.From.Add(block);
-                    block.To.Add(nextBlock1);
+                    nextBlock1.From.TryAdd(block);
+                    block.To.TryAdd(nextBlock1);
                     block = nextBlock1;
                     goto NEXT;
                 }
@@ -237,6 +245,8 @@ namespace Furikiri.Echo
                 block.End = addrAfterBranch - 1; //current block: before branch
                 if (branch.OpCode == OpCode.RET)
                 {
+                    ExitBlock.From.TryAdd(block);
+                    block.To.TryAdd(ExitBlock);
                     continue;
                 }
 
@@ -248,8 +258,8 @@ namespace Furikiri.Echo
                 }
 
                 var nextBlock = GetOrCreateBlockAt(gotoLine);
-                nextBlock.From.Add(block);
-                block.To.Add(nextBlock);
+                nextBlock.From.TryAdd(block);
+                block.To.TryAdd(nextBlock);
 
                 if (!branch.OpCode.IsJump(true))
                 {
@@ -257,13 +267,14 @@ namespace Furikiri.Echo
                 }
 
                 nextBlock = GetOrCreateBlockAt(addrAfterBranch); //next block: right after branch (if not jumped)
-                nextBlock.From.Add(block);
-                block.To.Add(nextBlock);
+                nextBlock.From.TryAdd(block);
+                block.To.TryAdd(nextBlock);
                 block = nextBlock;
                 currentAddr = block.Start;
                 goto NEXT;
             }
 
+            Blocks.TryAdd(ExitBlock);
             Blocks.Sort((b1, b2) => b1.Start - b2.Start);
 
             if (Blocks.Count > 0)
@@ -304,9 +315,12 @@ namespace Furikiri.Echo
                 b.Id = i;
                 b.Dominator = new BitArray(Blocks.Count);
                 b.Dominator.SetAll(true);
+                b.PostDominator = new BitArray(Blocks.Count);
+                b.PostDominator.SetAll(true);
             }
 
-            var block = Blocks[0];
+            //Dominators
+            var block = EntryBlock;
             block.Dominator.SetAll(false);
             block.Dominator[block.Id] = true;
 
@@ -330,6 +344,34 @@ namespace Furikiri.Echo
                         bl.Dominator.And(pred.Dominator);
                         bl.Dominator[bl.Id] = true;
                         if (!bl.Dominator.SameAs(temp))
+                        {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+
+            //PostDominators
+            block = ExitBlock;
+            block.PostDominator.SetAll(false);
+            block.PostDominator[block.Id] = true;
+
+            temp = new BitArray(Blocks.Count);
+            changed = true;
+
+            while (changed)
+            {
+                changed = false;
+                for (var i = Blocks.Count - 1; i >= 0; i--)
+                {
+                    var bl = Blocks[i];
+                    foreach (var pred in bl.To)
+                    {
+                        temp.SetAll(false);
+                        temp.Or(bl.PostDominator);
+                        bl.PostDominator.And(pred.PostDominator);
+                        bl.PostDominator[bl.Id] = true;
+                        if (!bl.PostDominator.SameAs(temp))
                         {
                             changed = true;
                         }
@@ -442,9 +484,68 @@ namespace Furikiri.Echo
 
         internal void IntervalAnalysisDoWhilePass()
         {
+            LoopSetSort();
             foreach (var loop in LoopSet)
             {
-                
+                var dw = new DoWhilePattern();
+                dw.Condition = loop.FindCondition();
+                dw.Content = loop.Blocks;
+                dw.Break = loop.FindBreak();
+                dw.Continue = null;
+
+                var cont = loop.Blocks.Last();
+
+                if (cont != null)
+                {
+                    if (cont.Statements.Last() is IfPattern i)
+                    {
+                        if (i.To == loop.Header)
+                        {
+                            dw.Continue = cont;
+                        }
+                    }
+                }
+
+                loop.Header.Statements.Clear();
+                loop.Header.Statements.Add(dw);
+                StructureBreakContinue(dw, dw.Continue, dw.Break);
+            }
+        }
+
+        internal void StructureBreakContinue(IBranch stmt, Block continueBlock, Block breakBlock)
+        {
+            switch (stmt)
+            {
+                case IfPattern ifStmt:
+                    if (ifStmt.Else != null && ifStmt.Else.Count > 0)
+                    {
+                        foreach (var el in ifStmt.Else)
+                        {
+                            foreach (var elStmt in el.Statements)
+                            {
+                                if (elStmt is IBranch b)
+                                {
+                                    StructureBreakContinue(b, continueBlock, breakBlock);
+                                }
+                            }
+                        }
+                    }
+
+                    if (ifStmt.Content != null && ifStmt.Content.Count > 0)
+                    {
+                        foreach (var el in ifStmt.Content)
+                        {
+                            foreach (var elStmt in el.Statements)
+                            {
+                                if (elStmt is IBranch b)
+                                {
+                                    StructureBreakContinue(b, continueBlock, breakBlock);
+                                }
+                            }
+                        }
+                    }
+
+                    break;
             }
         }
 
