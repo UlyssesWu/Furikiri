@@ -28,8 +28,10 @@ namespace Furikiri.Echo.Patterns
                     {
                         pattern.HasCL = true;
                     }
+
                     return pattern;
                 }
+
                 if (codes[i].ToString().StartsWith("const %1,") &&
                     codes[i + 1].ToString() == "chgthis %1, %-1" &&
                     codes[i + 2].ToString().StartsWith("spds %-1.") && codes[i + 2].Registers[2].GetSlot() == 1)
@@ -66,6 +68,7 @@ namespace Furikiri.Echo.Patterns
                     {
                         pattern = new RegMemberPattern();
                     }
+
                     pattern.Members[memberName] = func;
                     i += 3;
                 }
@@ -79,13 +82,11 @@ namespace Furikiri.Echo.Patterns
         }
 
         public bool HasCL { get; set; } = false;
+
         public bool Terminal
         {
             get => true;
-            set
-            {
-                return;
-            }
+            set { return; }
         }
 
         public int Length => 3 * Members.Count + (HasCL ? 1 : 0);

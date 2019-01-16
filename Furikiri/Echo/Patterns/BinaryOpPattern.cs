@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Text;
+﻿using System.Collections.Generic;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo.Patterns
@@ -26,14 +23,47 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// <example>a+b</example>
     /// </summary>
-    class BinaryOpPattern : IExpression
+    class BinaryOpPattern : IExpression, ITerminal
     {
         public int Length => 1;
+        public short Slot { get; private set; }
         public IExpression Left { get; set; }
         public IExpression Right { get; set; }
         public BinaryOp Op { get; set; }
 
         public bool Terminal { get; set; }
+        public HashSet<int> Write { get; set; }
+        public HashSet<int> Read { get; set; }
+        public HashSet<int> LiveIn { get; set; }
+        public HashSet<int> LiveOut { get; set; }
+
+        public void ComputeUseDefs()
+        {
+            Write = new HashSet<int>();
+            Read = new HashSet<int>();
+            if (Op == BinaryOp.Assign && Left is LocalPattern l)
+            {
+                Write.Add(l.Slot);
+            }
+            else
+            {
+                Read.Add(Left.Slot);
+            }
+
+            if (Right is LocalPattern r)
+            {
+                Read.Add(r.Slot);
+            }
+            else if (Right is ITerminal t && t.Read != null)
+            {
+                Read.AddRange(t.Read);
+                if (t is BinaryOpPattern b && b.Op == BinaryOp.Assign)
+                {
+                    Read.Add(b.Left.Slot);
+                }
+            }
+        }
+
         public bool IsDeclaration { get; set; }
 
         /// <summary>
@@ -70,6 +100,7 @@ namespace Furikiri.Echo.Patterns
                     b.Right = exps[rightSlot];
                     b.Left = new ChainGetPattern(thisSlot, codes[i].Data.AsString());
                     b.Terminal = true;
+                    b.Slot = thisSlot;
 
                     //check declare
                     if (context.Object.ContextType != TjsContextType.Class &&
@@ -97,7 +128,7 @@ namespace Furikiri.Echo.Patterns
                         context.Expressions[dst] = l; //Which is better?
                         //context.Expressions[dst] = b;
                         b.Terminal = true;
-
+                        b.Slot = l.Slot;
                         //check declare
                         if (!context.Vars.ContainsKey(l.Slot))
                         {
@@ -137,8 +168,6 @@ namespace Furikiri.Echo.Patterns
 
             return BinaryOp.Unknown;
         }
-
-        public short Slot { get; private set; }
 
         public override string ToString()
         {

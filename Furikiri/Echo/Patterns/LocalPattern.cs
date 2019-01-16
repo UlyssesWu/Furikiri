@@ -12,7 +12,6 @@ namespace Furikiri.Echo.Patterns
     {
         public bool IsParameter { get; private set; } = false;
         public int Length => 1;
-        public bool Terminal { get; set; }
         public TjsVarType Type { get; set; }
         public short Slot { get; set; }
         public string Name { get; set; }

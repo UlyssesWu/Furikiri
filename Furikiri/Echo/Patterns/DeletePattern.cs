@@ -6,9 +6,18 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// <example>delete a.b</example>
     /// </summary>
-    class DeletePattern : IExpression
+    class DeletePattern : IExpression, ITerminal
     {
         public bool Terminal { get; set; } = true;
+        public HashSet<int> Write { get; set; }
+        public HashSet<int> Read { get; set; }
+        public HashSet<int> LiveIn { get; set; }
+        public HashSet<int> LiveOut { get; set; }
+        public void ComputeUseDefs()
+        {
+            
+        }
+
         public int Length => 1;
         public TjsVarType Type => TjsVarType.Int;
         public short Slot { get; set; }

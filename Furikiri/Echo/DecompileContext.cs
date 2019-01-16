@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -640,6 +641,33 @@ namespace Furikiri.Echo
             if (gt != null)
             {
                 from.Statements.Remove(gt);
+            }
+        }
+
+        internal void FillInBlock(Block block, List<Instruction> instructions)
+        {
+            block.Statements.Clear();
+            int i = block.Start;
+            while (i <= block.End && i < instructions.Count)
+            {
+                DetectPattern(instructions, i, out var p);
+                if (p != null)
+                {
+                    block.Statements.Add(p);
+                    i += p.Length;
+                }
+                else
+                {
+                    i++;
+                }
+            }
+        }
+
+        internal void FillInBlocks(List<Instruction> instructions)
+        {
+            foreach (var block in Blocks)
+            {
+                FillInBlock(block, instructions);
             }
         }
 

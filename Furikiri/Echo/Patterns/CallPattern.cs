@@ -8,9 +8,24 @@ namespace Furikiri.Echo.Patterns
     /// <summary>
     /// <example>a.b()</example>
     /// </summary>
-    class CallPattern : IExpression
+    class CallPattern : IExpression, ITerminal
     {
         public bool Terminal { get; set; }
+        public HashSet<int> Write { get; set; }
+        public HashSet<int> Read { get; set; }
+        public HashSet<int> LiveIn { get; set; }
+        public HashSet<int> LiveOut { get; set; }
+
+        public void ComputeUseDefs()
+        {
+            Write = new HashSet<int>();
+            Read = new HashSet<int>();
+            if (Slot != 0)
+            {
+                Write.Add(Slot);
+            }
+        }
+
         public int Length => 1;
         public TjsVarType Type { get; set; }
         public short Slot { get; set; }

@@ -46,7 +46,7 @@ namespace Furikiri.Echo.Patterns
                     loop.BranchType = BranchType.For;
                     loop.ForOperand =
                         (IExpression) context.Patterns.Last(p => p is BinaryOpPattern bop && bop.Op == BinaryOp.Assign);
-                    loop.ForOperand.Terminal = false;
+                    //loop.ForOperand.Terminal = false;
                     loop.Entry = codes[i];
                     loop.Exit = jumped;
                     loop.Length = loop.CountLength(codes);

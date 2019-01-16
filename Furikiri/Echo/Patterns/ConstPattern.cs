@@ -28,7 +28,6 @@ namespace Furikiri.Echo.Patterns
             return null;
         }
 
-        public bool Terminal { get; set; }
         public TjsVarType Type => Variant.Type;
         public short Slot { get; private set; }
 

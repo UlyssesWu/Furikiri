@@ -1,5 +1,7 @@
-﻿using System.IO;
+﻿using System.Collections.Generic;
+using System.IO;
 using Furikiri.Echo;
+using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Tjs2;
@@ -82,6 +84,19 @@ namespace Furikiri.Tests
             context.ScanBlocks(mt.Instructions);
             context.ComputeDominators();
             context.ComputeNaturalLoops();
+
+            context.Detectors = new List<DetectHandler>()
+            {
+                RegMemberPattern.Match,
+                UnaryOpPattern.Match,
+                BinaryOpPattern.Match,
+                CallPattern.Match,
+                DeletePattern.Match,
+                GotoPattern.Match
+            };
+
+            context.FillInBlocks(mt.Instructions);
+
             context.IntervalAnalysisDoWhilePass();
         }
 

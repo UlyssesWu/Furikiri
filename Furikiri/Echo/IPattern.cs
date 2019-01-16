@@ -11,11 +11,6 @@ namespace Furikiri.Echo
     internal interface IPattern
     {
         /// <summary>
-        /// if it's a single line
-        /// </summary>
-        bool Terminal { get; set; }
-
-        /// <summary>
         /// instruction step
         /// </summary>
         int Length { get; }
@@ -39,5 +34,35 @@ namespace Furikiri.Echo
         BranchType BranchType { get; }
         IExpression Condition { get; }
         string ToString();
+    }
+
+    internal interface ITerminal : IPattern
+    {
+        /// <summary>
+        /// if it's a single line
+        /// </summary>
+        bool Terminal { get; set; }
+
+        /// <summary>
+        /// Def
+        /// </summary>
+        HashSet<int> Write { get; set; }
+
+        /// <summary>
+        /// Use
+        /// </summary>
+        HashSet<int> Read { get; set; }
+
+        /// <summary>
+        /// variables alive before this
+        /// </summary>
+        HashSet<int> LiveIn { get; set; }
+
+        /// <summary>
+        /// variables alive after this
+        /// </summary>
+        HashSet<int> LiveOut { get; set; }
+
+        void ComputeUseDefs();
     }
 }
