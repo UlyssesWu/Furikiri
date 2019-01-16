@@ -37,7 +37,6 @@ namespace Furikiri.Echo
     internal interface IBranch : IPattern
     {
         BranchType BranchType { get; }
-        List<Block> Content { get; }
         IExpression Condition { get; }
         string ToString();
     }

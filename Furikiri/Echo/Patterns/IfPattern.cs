@@ -12,8 +12,14 @@ namespace Furikiri.Echo.Patterns
         public int Length { get; }
         public IExpression Condition { get; set; }
         public BranchType BranchType { get; } = BranchType.If;
-        public List<Block> Content { get; } = new List<Block>();
-        public List<Block> Else { get; } = new List<Block>();
+        /// <summary>
+        /// True Blocks
+        /// </summary>
+        public List<Block> Content { get; set; } = new List<Block>();
+        /// <summary>
+        /// False Blocks
+        /// </summary>
+        public List<Block> Else { get; set; } = new List<Block>();
 
         public Block To { get; set; }
 

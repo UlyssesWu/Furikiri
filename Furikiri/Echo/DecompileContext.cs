@@ -568,6 +568,81 @@ namespace Furikiri.Echo
             }
         }
 
+        internal bool StructureIfElse(Block block)
+        {
+            //if block.succ.size != 2
+            //return false
+            //trueBlock = block.succ[0]
+            //falseBlock = block.succ[1]
+            //if trueBlock.succ.size != 1 or falseBlock.succ.size != 1
+            //return false
+            //if falseBlock.succ[0] != trueBlock.succ[0]
+            //return false
+
+            //ifStmt = new Statement(If)
+            //ifStmt.expr = NegateCondition(block.lastStmt)
+            //ifStmt.trueBlocks = trueBlock
+            //ifStmt.falseBlocks = falseBlock
+            //removeLastGoto(trueBlock, trueBlock.succ[0])
+            //removeLastGoto(falseBlock, falseBlock.succ[0])
+
+            //return true
+            if (block.To.Count != 2)
+            {
+                return false;
+            }
+
+            var trueB = block.To[0];
+            var falseB = block.To[1];
+            bool hasElse = true;
+            if (trueB.To.Count != 1)
+            {
+                return false;
+            }
+
+            if (trueB.To[0] == falseB)
+            {
+                hasElse = false;
+            }
+            else
+            {
+                if (falseB.To.Count != 1)
+                {
+                    return false;
+                }
+
+                if (falseB.To[0] != trueB.To[0])
+                {
+                    return false;
+                }
+
+                hasElse = true;
+            }
+
+
+            IfPattern i = new IfPattern();
+            //i.Condition
+            i.Content.Add(trueB);
+
+            RemoveLastGoto(trueB, trueB.To[0]);
+            if (hasElse)
+            {
+                i.Else.Add(falseB);
+                RemoveLastGoto(falseB, falseB.To[0]);
+            }
+
+            return true;
+        }
+
+        private void RemoveLastGoto(Block from, Block to)
+        {
+            var gt = from.Statements.LastOrDefault(p => p is GotoPattern g);
+            if (gt != null)
+            {
+                from.Statements.Remove(gt);
+            }
+        }
+
         #endregion
     }
 }
