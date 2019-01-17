@@ -10,6 +10,9 @@ namespace Furikiri.Emit
         bool Indirect { get; }
     }
 
+    /// <summary>
+    /// Ref (%)
+    /// </summary>
     class RegisterRef : IRegister
     {
         public short Slot { get; set; }
@@ -27,6 +30,9 @@ namespace Furikiri.Emit
         }
     }
 
+    /// <summary>
+    /// Instant (*)
+    /// </summary>
     class RegisterValue : IRegister
     {
         public int Size => 1;

@@ -804,6 +804,7 @@ namespace Furikiri.Emit
         THROW = 122,
         /// <summary>
         /// change this
+        /// %dest で表されたオブジェクトのクロージャ部分を、%src で示されたオブジェクトに変更します。
         /// <example>chgthis %dest, %src</example>
         /// </summary>
         CHGTHIS = 123,

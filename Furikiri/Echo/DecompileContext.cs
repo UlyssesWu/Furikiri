@@ -571,23 +571,6 @@ namespace Furikiri.Echo
 
         internal bool StructureIfElse(Block block)
         {
-            //if block.succ.size != 2
-            //return false
-            //trueBlock = block.succ[0]
-            //falseBlock = block.succ[1]
-            //if trueBlock.succ.size != 1 or falseBlock.succ.size != 1
-            //return false
-            //if falseBlock.succ[0] != trueBlock.succ[0]
-            //return false
-
-            //ifStmt = new Statement(If)
-            //ifStmt.expr = NegateCondition(block.lastStmt)
-            //ifStmt.trueBlocks = trueBlock
-            //ifStmt.falseBlocks = falseBlock
-            //removeLastGoto(trueBlock, trueBlock.succ[0])
-            //removeLastGoto(falseBlock, falseBlock.succ[0])
-
-            //return true
             if (block.To.Count != 2)
             {
                 return false;
@@ -644,7 +627,18 @@ namespace Furikiri.Echo
             }
         }
 
-        internal void FillInBlock(Block block, List<Instruction> instructions)
+        private void FillInstructionIntoBlock(Block block, List<Instruction> instructions)
+        {
+            block.Statements.Clear();
+            int i = block.Start;
+            while (i <= block.End && i < instructions.Count)
+            {
+                block.Statements.Add(new InstructionPattern(instructions[i]));
+                i++;
+            }
+        }
+
+        private void FillInBlock(Block block, List<Instruction> instructions)
         {
             block.Statements.Clear();
             int i = block.Start;
@@ -667,7 +661,83 @@ namespace Furikiri.Echo
         {
             foreach (var block in Blocks)
             {
-                FillInBlock(block, instructions);
+                //FillInBlock(block, instructions);
+                FillInstructionIntoBlock(block, instructions);
+            }
+        }
+
+        internal void LifetimeAnalysis()
+        {
+            //Pass 1
+            foreach (var block in Blocks)
+            {
+                block.Use = new HashSet<int>();
+                block.Def = new HashSet<int>();
+                block.Input = new HashSet<int>();
+                block.Output = new HashSet<int>();
+                for (int i = block.Statements.Count - 1; i >= 0; i--)
+                {
+                    if (!(block.Statements[i] is ITerminal ins))
+                    {
+                        continue;
+                    }
+
+                    ins.ComputeUseDefs();
+
+                    ins.LiveOut = ins.Read;
+                    ins.Dead.AddRange(ins.Write.Except(ins.LiveOut));
+                    block.Use.AddRange(ins.LiveOut);
+                    block.Use.AddRange(block.Use.Except(ins.Dead));
+                    block.Def.AddRange(ins.Dead);
+                    block.Def.AddRange(block.Def.Except(ins.LiveOut));
+                }
+            }
+
+            //Pass 2
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                foreach (var block in Blocks)
+                {
+                    var output = new HashSet<int>(block.Def);
+                    foreach (var succ in block.To)
+                    {
+                        output.AddRange(succ.Input);
+                    }
+
+                    var input = new HashSet<int>(block.Use);
+                    input.AddRange(output.Except(block.Def));
+                    if (!input.SetEquals(block.Input) || !output.SetEquals(block.Output))
+                    {
+                        changed = true;
+                        block.Input = input;
+                        block.Output = output;
+                    }
+                }
+            }
+
+            //Pass 3
+            foreach (var block in Blocks)
+            {
+                var live = new HashSet<int>();
+                foreach (var succ in block.To)
+                {
+                    live.AddRange(succ.Input);
+                }
+
+                for (int i = block.Statements.Count - 1; i >= 0; i--)
+                {
+                    if (!(block.Statements[i] is ITerminal ins))
+                    {
+                        continue;
+                    }
+
+                    var newLive = new HashSet<int>(ins.LiveOut);
+                    newLive.AddRange(live.Except(ins.Dead));
+                    ins.LiveOut = live;
+                    live = newLive;
+                }
             }
         }
 

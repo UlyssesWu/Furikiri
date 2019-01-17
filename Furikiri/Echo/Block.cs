@@ -18,11 +18,17 @@ namespace Furikiri.Echo
         public int End { get; set; }
         public int Length => End - Start + 1;
         public BitArray Dominator { get; set; }
+
         /// <summary>
         /// Post-Dominator
         /// </summary>
         /// REF: https://en.wikipedia.org/wiki/Dominator_(graph_theory)#Postdominance
         public BitArray PostDominator { get; set; }
+
+        public HashSet<int> Def { get; set; }
+        public HashSet<int> Use { get; set; }
+        public HashSet<int> Input { get; set; }
+        public HashSet<int> Output { get; set; }
 
         public List<IPattern> Statements { get; set; } = new List<IPattern>();
 

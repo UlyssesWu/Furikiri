@@ -36,11 +36,13 @@ namespace Furikiri.Echo.Patterns
         public HashSet<int> Read { get; set; }
         public HashSet<int> LiveIn { get; set; }
         public HashSet<int> LiveOut { get; set; }
+        public HashSet<int> Dead { get; set; }
 
         public void ComputeUseDefs()
         {
             Write = new HashSet<int>();
             Read = new HashSet<int>();
+            Dead = new HashSet<int>();
             if (Op == BinaryOp.Assign && Left is LocalPattern l)
             {
                 Write.Add(l.Slot);

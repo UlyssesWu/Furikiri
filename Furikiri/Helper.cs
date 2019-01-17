@@ -452,9 +452,9 @@ namespace Furikiri
             return false;
         }
 
-        public static void AddRange<T>(this HashSet<T> hs, IEnumerable<T> hs2)
+        public static void AddRange<T>(this HashSet<T> hs, IEnumerable<T> set)
         {
-            foreach (var t in hs2)
+            foreach (var t in set)
             {
                 hs.Add(t);
             }

@@ -98,6 +98,8 @@ namespace Furikiri.Tests
             context.FillInBlocks(mt.Instructions);
 
             context.IntervalAnalysisDoWhilePass();
+
+            context.LifetimeAnalysis();
         }
 
         //DO NOT WORK

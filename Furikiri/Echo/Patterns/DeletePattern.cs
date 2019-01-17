@@ -13,9 +13,14 @@ namespace Furikiri.Echo.Patterns
         public HashSet<int> Read { get; set; }
         public HashSet<int> LiveIn { get; set; }
         public HashSet<int> LiveOut { get; set; }
+        public HashSet<int> Dead { get; set; }
+
         public void ComputeUseDefs()
         {
-            
+            Write = new HashSet<int>();
+            Read = new HashSet<int>();
+            Dead = new HashSet<int>();
+            Write.Add(Slot);
         }
 
         public int Length => 1;

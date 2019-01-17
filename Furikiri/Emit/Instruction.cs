@@ -15,17 +15,22 @@ namespace Furikiri.Emit
         /// Instruction No.
         /// </summary>
         public int Line { get; internal set; }
+
         public OpCode OpCode { get; set; }
         public List<IRegister> Registers { get; set; } = new List<IRegister>();
+
         /// <summary>
         /// Byte Offset
         /// </summary>
         public int Offset { get; internal set; }
+
         /// <summary>
         /// Byte Size
         /// </summary>
         public int Size => 1 + Registers.Sum(i => i.Size);
+
         public IRegisterData Data { get; internal set; }
+
         /// <summary>
         /// Can be jumped from which instructions
         /// </summary>
@@ -305,7 +310,15 @@ namespace Furikiri.Emit
                     int paramCount;
                     if (op == CALLI || op == CALLD)
                     {
-                        ins.Registers.Add(new RegisterRef(code[idx]));
+                        if (op == CALLD)
+                        {
+                            ins.Registers.Add(new RegisterValue(code[idx]));
+                        }
+                        else
+                        {
+                            ins.Registers.Add(new RegisterRef(code[idx]));
+                        }
+
                         idx++;
                         ins.Registers.Add(new RegisterShort(code[idx]));
                         paramCount = code[idx];

@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo.Patterns
@@ -20,8 +18,13 @@ namespace Furikiri.Echo.Patterns
         public HashSet<int> Read { get; set; }
         public HashSet<int> LiveIn { get; set; }
         public HashSet<int> LiveOut { get; set; }
+        public HashSet<int> Dead { get; set; }
+
         public void ComputeUseDefs()
         {
+            Write = new HashSet<int>();
+            Read = new HashSet<int>();
+            Dead = new HashSet<int>();
         }
 
         public int Length => 1;

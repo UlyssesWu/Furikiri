@@ -63,6 +63,11 @@ namespace Furikiri.Echo
         /// </summary>
         HashSet<int> LiveOut { get; set; }
 
+        /// <summary>
+        /// Dead in this
+        /// </summary>
+        HashSet<int> Dead { get; set; }
+
         void ComputeUseDefs();
     }
 }
