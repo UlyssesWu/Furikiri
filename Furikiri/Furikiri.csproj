@@ -10,4 +10,9 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Folder Include="Echo\Transform\" />
+    <Folder Include="Echo\Visitor\" />
+  </ItemGroup>
+
 </Project>

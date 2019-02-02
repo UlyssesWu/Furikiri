@@ -1,6 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using Furikiri.Echo;
+using Furikiri.Echo.AST;
+using Furikiri.Echo.Pass;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -97,9 +99,34 @@ namespace Furikiri.Tests
 
             context.FillInBlocks(mt.Instructions);
 
-            context.IntervalAnalysisDoWhilePass();
+            //context.IntervalAnalysisDoWhilePass();
 
-            context.LifetimeAnalysis();
+            //context.LifetimeAnalysis();
+
+            var b = context.Blocks;
+        }
+
+        [TestMethod]
+        public void TestDecompileBlock2()
+        {
+            var path = "..\\..\\Res\\Initialize.tjs.comp";
+            Module md = new Module(path);
+            var mt = md.TopLevel.ResolveMethod();
+            mt.Compact();
+
+            DecompileContext context = new DecompileContext(md.TopLevel);
+            context.ScanBlocks(mt.Instructions);
+            context.ComputeDominators();
+            context.ComputeNaturalLoops();
+
+            context.FillInBlocks(mt.Instructions);
+
+            var pass1 = new RegMemberPass();
+            var entry = pass1.Process(context, new BlockStatement());
+            var pass2 = new ExpressionPass();
+            entry = pass2.Process(context, entry);
+
+            var b = context.Blocks;
         }
 
         //DO NOT WORK

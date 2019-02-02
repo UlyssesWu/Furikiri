@@ -30,7 +30,11 @@ namespace Furikiri.Echo
         public HashSet<int> Input { get; set; }
         public HashSet<int> Output { get; set; }
 
-        public List<IPattern> Statements { get; set; } = new List<IPattern>();
+        public List<Instruction> Instructions { get; set; } = new List<Instruction>();
+        //public List<IPattern> Statements { get; set; } = new List<IPattern>();
+
+        public Dictionary<int, IPattern> RegisterMap { get; set; } =
+            new Dictionary<int, IPattern>();
 
         public Block(int start)
         {

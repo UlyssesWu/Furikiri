@@ -459,5 +459,15 @@ namespace Furikiri
                 hs.Add(t);
             }
         }
+
+        public static T TryGet<T>(this List<T> list, int index)
+        {
+            if (list.Count > index)
+            {
+                return list[index];
+            }
+
+            return default;
+        }
     }
 }

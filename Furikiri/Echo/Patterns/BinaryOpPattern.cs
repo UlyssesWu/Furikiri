@@ -3,23 +3,6 @@ using Furikiri.Emit;
 
 namespace Furikiri.Echo.Patterns
 {
-    public enum BinaryOp
-    {
-        Unknown = -1,
-        Assign,
-        Add,
-        Sub,
-        Mul,
-        Div,
-        Idiv,
-        Equal,
-        NotEqual,
-        Congruent,
-        NotCongruent,
-        GreaterThan,
-        LessThan,
-    }
-
     /// <summary>
     /// <example>a+b</example>
     /// </summary>

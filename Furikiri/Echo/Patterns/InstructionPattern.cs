@@ -12,6 +12,7 @@ namespace Furikiri.Echo.Patterns
     /// </summary>
     class InstructionPattern : ITerminal
     {
+        public Block Block { get; set; }
         public int Length => 1;
         public bool Terminal { get; set; } = true;
         public HashSet<int> Write { get; set; }
@@ -119,6 +120,19 @@ namespace Furikiri.Echo.Patterns
                     Read.Add(r.Slot);
                 }
             }
+            //TODO: op such as ADD, reg[0] is both read and wrote
+        }
+    }
+
+    class InstructionRef : IRegister
+    {
+        public int Size { get; }
+        public bool Indirect { get; }
+        public InstructionPattern InsPattern { get; set; }
+
+        public InstructionRef(InstructionPattern ins)
+        {
+            InsPattern = ins;
         }
     }
 }

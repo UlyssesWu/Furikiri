@@ -4,13 +4,7 @@ using Furikiri.Emit;
 
 namespace Furikiri.Echo.Patterns
 {
-    public enum UnaryOp
-    {
-        Unknown = -1,
-        Inc,
-        Dec,
-        Not,
-    }
+
     /// <summary>
     /// <example>!a</example>
     /// </summary>
