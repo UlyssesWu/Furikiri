@@ -1,9 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 using Furikiri.Emit;
 
-namespace Furikiri.Echo.AST
+namespace Furikiri.AST.Expression
 {
     public abstract class Expression : IAstNode
     {

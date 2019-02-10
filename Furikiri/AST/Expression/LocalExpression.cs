@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using Furikiri.Echo.Patterns;
+using Furikiri.Echo;
 using Furikiri.Emit;
 
-namespace Furikiri.Echo.AST
+namespace Furikiri.AST.Expression
 {
     /// <summary>
     /// Define of a var
@@ -23,6 +22,31 @@ namespace Furikiri.Echo.AST
         {
             IsParameter = isParam;
             Slot = slot;
+        }
+
+        public LocalExpression(CodeObject obj, short slot)
+        {
+            IsParameter = CheckIsParameter(obj, slot);
+            Slot = slot;
+        }
+
+        public static bool CheckIsParameter(CodeObject obj, short slot)
+        {
+            var argCount = obj.FuncDeclArgCount;
+            var varCount = obj.MaxVariableCount;
+            if (slot >= -2)
+            {
+                return false;
+            }
+
+            if (slot >= -2 - argCount)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
 
         public override string ToString()

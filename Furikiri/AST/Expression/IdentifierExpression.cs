@@ -1,0 +1,41 @@
+﻿using System.Collections.Generic;
+
+namespace Furikiri.AST.Expression
+{
+    public enum IdentifierType
+    {
+        Normal = 1,
+
+        /// <summary>
+        /// This = -1
+        /// </summary>
+        This = -1,
+
+        /// <summary>
+        /// This Proxy = -2
+        /// </summary>
+        ThisProxy = -2,
+
+        /// <summary>
+        /// Global
+        /// </summary>
+        Global = 0,
+    }
+
+    class IdentifierExpression : Expression
+    {
+        public override AstNodeType Type => AstNodeType.IdentifierExpression;
+        public override List<IAstNode> Children { get; } = new List<IAstNode>();
+
+        public Expression Parent { get; set; }
+
+        public string Name { get; set; }
+
+        public IdentifierType IdentifierType { get; set; }
+
+        public IdentifierExpression(string name, IdentifierType idType = IdentifierType.Normal)
+        {
+            Name = name;
+        }
+    }
+}

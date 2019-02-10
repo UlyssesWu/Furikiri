@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace Furikiri.Echo.AST
+﻿namespace Furikiri.AST
 {
     public enum AstNodeType
     {
@@ -23,7 +19,11 @@ namespace Furikiri.Echo.AST
         CatchClause,
         TryStatement,
 
-        BinaryExpresssion,
+        UnaryExpression,
+        BinaryExpression,
         LocalExpression,
+        ConstantExpression,
+        IdentifierExpression,
+        InvokeExpression,
     }
 }

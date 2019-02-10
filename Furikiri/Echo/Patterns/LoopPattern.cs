@@ -22,67 +22,67 @@ namespace Furikiri.Echo.Patterns
         public List<Block> Content { get; set; } = new List<Block>();
         public List<IPattern> InsContent { get; set; } = new List<IPattern>();
 
-        public static LoopPattern Match(List<Instruction> codes, int i, DecompileContext context)
-        {
-            LoopPattern loop = null;
-            if (codes[i].JumpedFrom != null && codes[i].JumpedFrom.Count > 0 &&
-                codes[i].JumpedFrom[0].Offset > codes[i].Offset)
-            {
-                context.PopExpressionPatterns();
-                loop = new LoopPattern();
-                var jumped = codes[i].JumpedFrom[0];
-                Instruction jumped2 = null;
-                var jmpIdx = codes.IndexOf(jumped);
-                if (jmpIdx < codes.Count - 1)
-                {
-                    jumped2 = codes[jmpIdx + 1].JumpedFrom.Find(ins => ins.Offset < jumped.Offset);
-                }
+        //public static LoopPattern Match(List<Instruction> codes, int i, DecompileContext context)
+        //{
+        //    LoopPattern loop = null;
+        //    if (codes[i].JumpedFrom != null && codes[i].JumpedFrom.Count > 0 &&
+        //        codes[i].JumpedFrom[0].Offset > codes[i].Offset)
+        //    {
+        //        context.PopExpressionPatterns();
+        //        loop = new LoopPattern();
+        //        var jumped = codes[i].JumpedFrom[0];
+        //        Instruction jumped2 = null;
+        //        var jmpIdx = codes.IndexOf(jumped);
+        //        if (jmpIdx < codes.Count - 1)
+        //        {
+        //            jumped2 = codes[jmpIdx + 1].JumpedFrom.Find(ins => ins.Offset < jumped.Offset);
+        //        }
 
-                if (i >= 1 && codes[i - 1].OpCode == OpCode.CP &&
-                    codes[codes.IndexOf(codes[i].JumpedFrom[0]) - 1].GetRegisterSlot(0) ==
-                    codes[i - 1].GetRegisterSlot(0) &&
-                    !context.ContainsBranch(i, BranchType.For)) //for
-                {
-                    loop.BranchType = BranchType.For;
-                    loop.ForOperand =
-                        (IExpression) context.Patterns.Last(p => p is BinaryOpPattern bop && bop.Op == BinaryOp.Assign);
-                    //loop.ForOperand.Terminal = false;
-                    loop.Entry = codes[i];
-                    loop.Exit = jumped;
-                    loop.Length = loop.CountLength(codes);
-                    context.AddBranch(i, BranchType.For);
+        //        if (i >= 1 && codes[i - 1].OpCode == OpCode.CP &&
+        //            codes[codes.IndexOf(codes[i].JumpedFrom[0]) - 1].GetRegisterSlot(0) ==
+        //            codes[i - 1].GetRegisterSlot(0) &&
+        //            !context.ContainsBranch(i, BranchType.For)) //for
+        //        {
+        //            loop.BranchType = BranchType.For;
+        //            loop.ForOperand =
+        //                (IExpression) context.Patterns.Last(p => p is BinaryOpPattern bop && bop.Op == BinaryOp.Assign);
+        //            //loop.ForOperand.Terminal = false;
+        //            loop.Entry = codes[i];
+        //            loop.Exit = jumped;
+        //            loop.Length = loop.CountLength(codes);
+        //            context.AddBranch(i, BranchType.For);
 
-                    var binOp = BinaryOpPattern.Match(codes, i, context);
-                    if (binOp != null)
-                    {
-                        if (codes[i + binOp.Length].OpCode.IsJump(true))
-                        {
-                            //has condition
-                            binOp.Terminal = false;
-                            loop.Condition = binOp;
-                            loop.DetectContent(codes, i + binOp.Length + 1, context);
-                        }
-                    }
-                    else
-                    {
-                        loop.DetectContent(codes, i, context);
-                    }
+        //            var binOp = BinaryOpPattern.Match(codes, i, context);
+        //            if (binOp != null)
+        //            {
+        //                if (codes[i + binOp.Length].OpCode.IsJump(true))
+        //                {
+        //                    //has condition
+        //                    binOp.Terminal = false;
+        //                    loop.Condition = binOp;
+        //                    loop.DetectContent(codes, i + binOp.Length + 1, context);
+        //                }
+        //            }
+        //            else
+        //            {
+        //                loop.DetectContent(codes, i, context);
+        //            }
 
-                    loop.ForOperation = (IExpression) loop.Content.LastOrDefault(p => p is IExpression);
-                }
+        //            loop.ForOperation = (IExpression) loop.Content.LastOrDefault(p => p is IExpression);
+        //        }
 
-                else if (jumped2 != null) //while
-                {
-                    loop.BranchType = BranchType.While;
-                }
-                else
-                {
-                    loop.BranchType = BranchType.DoWhile;
-                }
-            }
+        //        else if (jumped2 != null) //while
+        //        {
+        //            loop.BranchType = BranchType.While;
+        //        }
+        //        else
+        //        {
+        //            loop.BranchType = BranchType.DoWhile;
+        //        }
+        //    }
 
-            return loop;
-        }
+        //    return loop;
+        //}
 
         private void DetectContent(List<Instruction> instructions, int start, DecompileContext context)
         {

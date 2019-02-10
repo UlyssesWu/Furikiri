@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
-namespace Furikiri.Echo.AST
+namespace Furikiri.AST
 {
     public interface IAstNode
     {

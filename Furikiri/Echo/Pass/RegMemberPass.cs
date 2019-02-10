@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using Furikiri.Echo.AST;
+using Furikiri.AST.Statement;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 

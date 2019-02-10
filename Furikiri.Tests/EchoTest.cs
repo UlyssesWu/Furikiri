@@ -1,7 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using Furikiri.AST.Statement;
 using Furikiri.Echo;
-using Furikiri.Echo.AST;
 using Furikiri.Echo.Pass;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
@@ -126,7 +127,9 @@ namespace Furikiri.Tests
             var pass2 = new ExpressionPass();
             entry = pass2.Process(context, entry);
 
-            var b = context.Blocks;
+            var b = context.Blocks[1];
+            var sts = context.BlockExpressions[b];
+            var s1 = sts.FirstOrDefault();
         }
 
         //DO NOT WORK

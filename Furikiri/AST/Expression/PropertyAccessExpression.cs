@@ -1,0 +1,3 @@
+﻿namespace Furikiri.AST.Expression
+{
+}

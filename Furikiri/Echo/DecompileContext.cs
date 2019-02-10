@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using Furikiri.AST.Expression;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
@@ -20,9 +21,6 @@ namespace Furikiri.Echo
             {TjsVarType.Void, 0},
             {TjsVarType.Null, 0},
         };
-
-        internal Dictionary<int, HashSet<BranchType>> Branches { get; set; } =
-            new Dictionary<int, HashSet<BranchType>>();
 
         internal Block EntryBlock { get; set; }
 
@@ -46,6 +44,9 @@ namespace Furikiri.Echo
         internal Dictionary<string, TjsCodeObject> RegisteredMembers { get; set; } =
             new Dictionary<string, TjsCodeObject>();
 
+        internal Dictionary<Block, List<Expression>> BlockExpressions { get; set; } =
+            new Dictionary<Block, List<Expression>>();
+
         public DecompileContext(CodeObject obj)
         {
             Object = obj;
@@ -63,26 +64,6 @@ namespace Furikiri.Echo
 
         public DecompileContext()
         {
-        }
-
-        public void AddBranch(int line, BranchType type)
-        {
-            if (!Branches.ContainsKey(line))
-            {
-                Branches[line] = new HashSet<BranchType>();
-            }
-
-            Branches[line].Add(type);
-        }
-
-        public bool ContainsBranch(int line, BranchType type)
-        {
-            if (!Branches.ContainsKey(line))
-            {
-                return false;
-            }
-
-            return Branches[line].Contains(type);
         }
 
         public TjsVarType GetSlotType(int slot)

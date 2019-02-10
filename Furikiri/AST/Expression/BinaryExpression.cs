@@ -1,15 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
+using Furikiri.Echo;
 using Furikiri.Emit;
 
-namespace Furikiri.Echo.AST
+namespace Furikiri.AST.Expression
 {
+    /// <summary>
+    /// Binary Expression
+    /// </summary>
     class BinaryExpression : Expression
     {
-        public override AstNodeType Type => AstNodeType.BinaryExpresssion;
+        public override AstNodeType Type => AstNodeType.BinaryExpression;
         public override List<IAstNode> Children { get; } = new List<IAstNode>();
-        public BinaryOp BinaryOp { get; set; }
+        public BinaryOp Op { get; set; }
+
+        public TjsVarType? ResultType { get; set; }
 
         public Expression Left
         {
@@ -25,7 +29,8 @@ namespace Furikiri.Echo.AST
 
         public BinaryExpression(Expression left, Expression right, BinaryOp op)
         {
-            Children = new List<IAstNode>(2) {null, null};
+            Children = new List<IAstNode>(2) {left, right};
+            Op = op;
         }
     }
 }
