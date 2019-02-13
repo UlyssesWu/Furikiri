@@ -1,12 +1,12 @@
 ﻿using System.Collections.Generic;
 using Furikiri.Emit;
 
-namespace Furikiri.AST.Expression
+namespace Furikiri.AST.Expressions
 {
     class InvokeExpression : Expression
     {
         public override AstNodeType Type => AstNodeType.InvokeExpression;
-        public override List<IAstNode> Children { get; } = new List<IAstNode>();
+        public override IEnumerable<IAstNode> Children { get; }
 
         public string Method { get; set; }
 
@@ -16,7 +16,7 @@ namespace Furikiri.AST.Expression
 
         public Expression Caller { get; set; }
 
-        //public List<Expression> Parameters { get; set; } = new List<Expression>();
+        public List<Expression> Parameters { get; set; } = new List<Expression>();
 
         public InvokeExpression(string name)
         {

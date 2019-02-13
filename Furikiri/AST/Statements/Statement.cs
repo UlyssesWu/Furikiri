@@ -1,10 +1,10 @@
 ﻿using System.Collections.Generic;
 
-namespace Furikiri.AST.Statement
+namespace Furikiri.AST.Statements
 {
     public abstract class Statement : IAstNode
     {
         public abstract AstNodeType Type { get; }
-        public abstract List<IAstNode> Children { get; }
+        public abstract IEnumerable<IAstNode> Children { get; }
     }
 }

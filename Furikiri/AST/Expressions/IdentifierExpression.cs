@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace Furikiri.AST.Expression
+namespace Furikiri.AST.Expressions
 {
     public enum IdentifierType
     {
@@ -25,9 +25,10 @@ namespace Furikiri.AST.Expression
     class IdentifierExpression : Expression
     {
         public override AstNodeType Type => AstNodeType.IdentifierExpression;
-        public override List<IAstNode> Children { get; } = new List<IAstNode>();
+        public override IEnumerable<IAstNode> Children { get; }
 
         public Expression Parent { get; set; }
+        public Expression Child { get; set; }
 
         public string Name { get; set; }
 

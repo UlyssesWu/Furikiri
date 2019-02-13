@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using Furikiri.AST.Expression;
-using Furikiri.AST.Statement;
+using Furikiri.AST;
+using Furikiri.AST.Expressions;
+using Furikiri.AST.Statements;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo.Pass
@@ -24,16 +25,18 @@ namespace Furikiri.Echo.Pass
             return statement;
         }
 
-        public void BlockProcess(DecompileContext context, Block block, Dictionary<int, Expression> exps)
+        public void BlockProcess(DecompileContext context, Block block,
+            Dictionary<int, Expression> exps) //TODO: If we need flag expression?
         {
-            if (context.BlockExpressions.ContainsKey(block))
+            if (block.Statements != null)
             {
                 return;
             }
 
+            Expression flagExp = null;
             var ex = new Dictionary<int, Expression>(exps);
-            context.BlockExpressions[block] = new List<Expression>();
-            var expList = context.BlockExpressions[block];
+            var expList = new List<IAstNode>();
+            block.Statements = expList;
             for (var i = 0; i < block.Instructions.Count; i++)
             {
                 var ins = block.Instructions[i];
@@ -49,28 +52,60 @@ namespace Furikiri.Echo.Pass
                     }
                         break;
                     case OpCode.CL:
+                    {
+                        ex[ins.GetRegisterSlot(0)] = null;
+                    }
                         break;
                     case OpCode.CCL:
                         break;
                     case OpCode.CEQ:
-                        break;
                     case OpCode.CDEQ:
-                        break;
                     case OpCode.CLT:
-                        break;
                     case OpCode.CGT:
+                    {
+                        var left = ex[ins.GetRegisterSlot(0)];
+                        var right = ex[ins.GetRegisterSlot(1)];
+                        BinaryOp op = BinaryOp.Unknown;
+                        switch (ins.OpCode)
+                        {
+                            case OpCode.CEQ:
+                                op = BinaryOp.Equal;
+                                break;
+                            case OpCode.CDEQ:
+                                op = BinaryOp.Congruent;
+                                break;
+                            case OpCode.CLT:
+                                op = BinaryOp.LessThan;
+                                break;
+                            case OpCode.CGT:
+                                op = BinaryOp.GreaterThan;
+                                break;
+                        }
+
+                        var b = new BinaryExpression(left, right, op);
+                        flagExp = b;
+                    }
                         break;
                     case OpCode.SETF:
                         break;
                     case OpCode.SETNF:
                         break;
                     case OpCode.NF:
+                    {
+                        flagExp = new UnaryExpression(flagExp, UnaryOp.Not);
+                    }
                         break;
                     case OpCode.JF:
-                        break;
                     case OpCode.JNF:
+                    {
+                        bool flag = ins.OpCode == OpCode.JF;
+                        expList.Add(new ConditionExpression(flagExp, flag) {JumpTo = ((JumpData) ins.Data).Goto.Line});
+                    }
                         break;
                     case OpCode.JMP:
+                    {
+                        expList.Add(new GotoExpression());
+                    }
                         break;
                     case OpCode.INC:
                     case OpCode.DEC:
@@ -83,7 +118,6 @@ namespace Furikiri.Echo.Pass
                     case OpCode.TT:
                     case OpCode.TF:
                     case OpCode.LNOT:
-
                     {
                         var dstSlot = ins.GetRegisterSlot(0);
                         var dst = ex[dstSlot];
@@ -205,6 +239,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.SAL:
                     case OpCode.SR:
                     case OpCode.CP:
+                    case OpCode.CHKINS:
                     {
                         var dstSlot = ins.GetRegisterSlot(0);
                         Expression dst = null;
@@ -214,7 +249,12 @@ namespace Furikiri.Echo.Pass
                         }
                         else if (dstSlot < -2)
                         {
-                            dst = new LocalExpression(context.Object, dstSlot);
+                            var l = new LocalExpression(context.Object, dstSlot);
+                            //if (!l.IsParameter)
+                            //{
+                            //    expList.Add(l);
+                            //}
+                            dst = l;
                         }
 
                         var src = ex[ins.GetRegisterSlot(1)];
@@ -262,6 +302,9 @@ namespace Furikiri.Echo.Pass
                                 break;
                             case OpCode.CP:
                                 op = BinaryOp.Assign;
+                                break;
+                            case OpCode.CHKINS:
+                                op = BinaryOp.InstanceOf;
                                 break;
                         }
 
@@ -317,8 +360,6 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.EEXP:
                         break;
-                    case OpCode.CHKINS:
-                        break;
                     case OpCode.ASC:
                         break;
                     case OpCode.CHR:
@@ -343,7 +384,7 @@ namespace Furikiri.Echo.Pass
                             for (int j = 0; j < paramCount; j++)
                             {
                                 var pSlot = ins.GetRegisterSlot(3 + j);
-                                call.Children.Add(ex[pSlot]);
+                                call.Parameters.Add(ex[pSlot]);
                             }
                         }
 
@@ -371,7 +412,7 @@ namespace Furikiri.Echo.Pass
                             for (int j = 0; j < paramCount; j++)
                             {
                                 var pSlot = ins.GetRegisterSlot(4 + j);
-                                call.Children.Add(ex[pSlot]);
+                                call.Parameters.Add(ex[pSlot]);
                             }
                         }
 
@@ -409,7 +450,7 @@ namespace Furikiri.Echo.Pass
                             for (int j = 0; j < paramCount; j++)
                             {
                                 var pSlot = ins.GetRegisterSlot(4 + j);
-                                call.Children.Add(ex[pSlot]);
+                                call.Parameters.Add(ex[pSlot]);
                             }
                         }
 
@@ -436,7 +477,7 @@ namespace Furikiri.Echo.Pass
                             for (int j = 0; j < paramCount; j++)
                             {
                                 var pSlot = ins.GetRegisterSlot(3 + j);
-                                call.Children.Add(ex[pSlot]);
+                                call.Parameters.Add(ex[pSlot]);
                             }
                         }
 
@@ -456,7 +497,7 @@ namespace Furikiri.Echo.Pass
                         var name = ins.Data.AsString();
                         var newId = new IdentifierExpression(name);
                         newId.Parent = id;
-                        id.Children.Add(newId);
+                        id.Child = newId;
                         ex[dst] = newId;
                     }
                         break;
@@ -492,6 +533,9 @@ namespace Furikiri.Echo.Pass
                     case OpCode.SRV:
                         break;
                     case OpCode.RET:
+                    {
+                        expList.Add(new ReturnExpression());
+                    }
                         break;
                     case OpCode.ENTRY:
                         break;

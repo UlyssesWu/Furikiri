@@ -28,6 +28,7 @@ namespace Furikiri.Echo
         BitShiftLeft,
         NumberShiftRight,
         NumberShiftLeft,
+        InstanceOf,
     }
 
     public enum UnaryOp

@@ -11,8 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Echo\Transform\" />
-    <Folder Include="Echo\Visitor\" />
+    <Folder Include="Echo\Transforms\" />
   </ItemGroup>
 
 </Project>

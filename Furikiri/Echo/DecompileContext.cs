@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using Furikiri.AST.Expression;
+using Furikiri.AST.Expressions;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
@@ -465,25 +465,6 @@ namespace Furikiri.Echo
             {
                 TravelLoop(set, child);
             }
-        }
-
-        private Block FindBreak(Loop loop)
-        {
-            BitArray b = new BitArray(ExitBlock.PostDominator.Length);
-            b.SetAll(true);
-            foreach (var block in loop.Blocks)
-            {
-                b.And(block.PostDominator);
-                b[block.Id] = false; //block after break can not still stay in the loop
-            }
-
-            var id = b.FirstIndexOf(true);
-            if (id >= 0)
-            {
-                return Blocks[id];
-            }
-
-            return null;
         }
 
         //internal void IntervalAnalysisDoWhilePass()

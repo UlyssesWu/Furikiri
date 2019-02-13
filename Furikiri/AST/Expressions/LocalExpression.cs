@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using Furikiri.Echo;
 using Furikiri.Emit;
 
-namespace Furikiri.AST.Expression
+namespace Furikiri.AST.Expressions
 {
     /// <summary>
     /// Define of a var
@@ -13,7 +12,7 @@ namespace Furikiri.AST.Expression
         public bool IsParameter { get; private set; } = false;
         public TjsVarType VarType { get; set; }
         public override AstNodeType Type => AstNodeType.LocalExpression;
-        public override List<IAstNode> Children { get; } = null;
+        public override IEnumerable<IAstNode> Children { get; } = null;
         public short Slot { get; set; }
         public string Name { get; set; }
         public string DefaultName => Name ?? $"{(IsParameter ? "p" : "v")}{Math.Abs(Slot) + 2}";

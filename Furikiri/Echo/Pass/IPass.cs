@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using Furikiri.AST.Statement;
+using Furikiri.AST.Statements;
 
 namespace Furikiri.Echo.Pass
 {

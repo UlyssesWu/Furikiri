@@ -5,6 +5,6 @@ namespace Furikiri.AST
     public interface IAstNode
     {
         AstNodeType Type { get; }
-        List<IAstNode> Children { get; }
+        IEnumerable<IAstNode> Children { get; }
     }
 }

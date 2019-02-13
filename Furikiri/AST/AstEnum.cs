@@ -25,5 +25,9 @@
         ConstantExpression,
         IdentifierExpression,
         InvokeExpression,
+        ReturnExpression,
+        GotoExpression,
+        ConditionExpression,
     }
+
 }

@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Furikiri.AST.Statement;
+using Furikiri.AST.Statements;
 using Furikiri.Echo;
 using Furikiri.Echo.Pass;
 using Furikiri.Echo.Patterns;
@@ -114,7 +114,7 @@ namespace Furikiri.Tests
             Module md = new Module(path);
             var mt = md.TopLevel.ResolveMethod();
             mt.Compact();
-
+            
             DecompileContext context = new DecompileContext(md.TopLevel);
             context.ScanBlocks(mt.Instructions);
             context.ComputeDominators();
@@ -130,6 +130,7 @@ namespace Furikiri.Tests
             var b = context.Blocks[1];
             var sts = context.BlockExpressions[b];
             var s1 = sts.FirstOrDefault();
+
         }
 
         //DO NOT WORK

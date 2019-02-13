@@ -1,6 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Furikiri.AST;
+using Furikiri.AST.Expressions;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo
@@ -31,7 +33,7 @@ namespace Furikiri.Echo
         public HashSet<int> Output { get; set; }
 
         public List<Instruction> Instructions { get; set; } = new List<Instruction>();
-        //public List<IPattern> Statements { get; set; } = new List<IPattern>();
+        public List<IAstNode> Statements { get; set; } = null;
 
         public Dictionary<int, IPattern> RegisterMap { get; set; } =
             new Dictionary<int, IPattern>();
