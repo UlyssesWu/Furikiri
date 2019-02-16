@@ -1,22 +1,19 @@
 ﻿using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
 namespace Furikiri.Echo.Language
 {
-    class TjsTextFormatter : IFormatter
+    class TjsTextFormatter : IFormatter, IDisposable
     {
-        public TextWriter Writer { get; private set; }
+        public IndentedTextWriter Writer { get; private set; }
 
-        public TjsTextFormatter(TextWriter tw)
+        public TjsTextFormatter(IndentedTextWriter tw)
         {
             Writer = tw;
         }
-
-        public int IndentLength { get; set; } = 0;
-
-        public string Indenter { get; internal set; } = "    ";
 
         public void Write(string str)
         {
@@ -25,12 +22,12 @@ namespace Furikiri.Echo.Language
 
         public void WriteLine()
         {
-            throw new NotImplementedException();
+            Writer.WriteLine();
         }
 
         public void WriteSpace()
         {
-            throw new NotImplementedException();
+            Writer.Write(" ");
         }
 
         public void WriteToken(string token)
@@ -92,17 +89,18 @@ namespace Furikiri.Echo.Language
 
         public void StartWritingComment()
         {
-            throw new NotImplementedException();
+            Writer.Write("// ");
         }
 
         public void EndWritingComment()
         {
-            throw new NotImplementedException();
+            Writer.Write(" ");
         }
 
         public void WriteStartBlock()
         {
-            throw new NotImplementedException();
+            Writer.WriteLine("{");
+            Indent();
         }
 
         public void WriteDocumentationStartBlock()
@@ -112,17 +110,8 @@ namespace Furikiri.Echo.Language
 
         public void WriteEndBlock()
         {
-            throw new NotImplementedException();
-        }
-
-        public void WriteNamespaceStartBlock()
-        {
-            throw new NotImplementedException();
-        }
-
-        public void WriteNamespaceEndBlock()
-        {
-            throw new NotImplementedException();
+            Writer.WriteLine("}");
+            Outdent();
         }
 
         public void WriteStartUsagesBlock()
@@ -136,5 +125,10 @@ namespace Furikiri.Echo.Language
         }
 
         public event EventHandler NewLineWritten;
+
+        public void Dispose()
+        {
+            Writer?.Dispose();
+        }
     }
 }

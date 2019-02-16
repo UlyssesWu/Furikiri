@@ -1,8 +1,10 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Furikiri.AST.Statements;
 using Furikiri.Echo;
+using Furikiri.Echo.Language;
 using Furikiri.Echo.Pass;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
@@ -114,7 +116,7 @@ namespace Furikiri.Tests
             Module md = new Module(path);
             var mt = md.TopLevel.ResolveMethod();
             mt.Compact();
-            
+
             DecompileContext context = new DecompileContext(md.TopLevel);
             context.ScanBlocks(mt.Instructions);
             context.ComputeDominators();
@@ -137,6 +139,21 @@ namespace Furikiri.Tests
             {
                 var s = st;
             }
+
+            var pass4 = new StatementCollectPass();
+            entry = pass4.Process(context, entry);
+
+            foreach (var statement in entry.Statements)
+            {
+                var s = statement;
+            }
+
+            var stream = new MemoryStream();
+            var sWriter = new StreamWriter(stream);
+            TjsWriter writer = new TjsWriter(sWriter);
+            writer.WriteBlock(entry);
+            sWriter.Flush();
+            var result = Encoding.UTF8.GetString(stream.ToArray());
         }
 
         //DO NOT WORK

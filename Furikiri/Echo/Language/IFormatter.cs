@@ -35,8 +35,6 @@ namespace Furikiri.Echo.Language
         void WriteStartBlock();
         void WriteDocumentationStartBlock();
         void WriteEndBlock();
-        void WriteNamespaceStartBlock();
-        void WriteNamespaceEndBlock();
         void WriteStartUsagesBlock();
         void WriteEndUsagesBlock();
 

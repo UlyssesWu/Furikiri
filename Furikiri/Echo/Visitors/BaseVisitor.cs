@@ -7,7 +7,7 @@ using Furikiri.AST.Statements;
 
 namespace Furikiri.Echo.Visitors
 {
-    class BaseVisitor : IVisitor
+    internal class BaseVisitor : IVisitor
     {
         public void Visit(IAstNode node)
         {
@@ -41,6 +41,7 @@ namespace Furikiri.Echo.Visitors
                 case Expression expression:
                     break;
                 case BlockStatement blockStatement:
+                    VisitBlockStmt(blockStatement);
                     break;
                 case DoWhileStatement doWhileStatement:
                     break;
@@ -53,11 +54,19 @@ namespace Furikiri.Echo.Visitors
             }
         }
 
-        public virtual void VisitIdentifierExpr(IdentifierExpression id)
+        internal virtual void VisitBlockStmt(BlockStatement blockStatement)
+        {
+            foreach (var st in blockStatement.Statements)
+            {
+                Visit(st);
+            }
+        }
+
+        internal virtual void VisitIdentifierExpr(IdentifierExpression id)
         {
         }
 
-        public virtual void VisitBinaryExpr(BinaryExpression bin)
+        internal virtual void VisitBinaryExpr(BinaryExpression bin)
         {
         }
     }

@@ -256,6 +256,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.CP:
                     case OpCode.CHKINS:
                     {
+                        bool store = true;
                         var dstSlot = ins.GetRegisterSlot(0);
                         Expression dst = null;
                         if (ex.ContainsKey(dstSlot))
@@ -270,10 +271,13 @@ namespace Furikiri.Echo.Pass
                             //    expList.Add(l);
                             //}
                             dst = l;
+                            ex[dstSlot] = l;
+                            store = false;
                         }
 
                         var src = ex[ins.GetRegisterSlot(1)];
                         var op = BinaryOp.Unknown;
+                        var push = false;
                         switch (ins.OpCode)
                         {
                             case OpCode.ADD:
@@ -317,6 +321,7 @@ namespace Furikiri.Echo.Pass
                                 break;
                             case OpCode.CP:
                                 op = BinaryOp.Assign;
+                                push = true;
                                 break;
                             case OpCode.CHKINS:
                                 op = BinaryOp.InstanceOf;
@@ -324,7 +329,15 @@ namespace Furikiri.Echo.Pass
                         }
 
                         BinaryExpression b = new BinaryExpression(dst, src, op);
-                        ex[dstSlot] = b;
+                        if (store)
+                        {
+                            ex[dstSlot] = b;
+                        }
+
+                        if (push)
+                        {
+                            expList.Add(b);
+                        }
                     }
                         break;
                     case OpCode.ADDPD:

@@ -18,14 +18,14 @@ namespace Furikiri.Echo.Pass
 
             foreach (var b in _context.Blocks)
             {
-                StructureIfElse(b);
+                if (StructureIfElse(b, out var st))
+                {
+                    b.Statements.Replace(st.Condition, st);
+                    st.Then.Blocks.ForEach(bl => bl.Hidden = true);
+                    st.Else?.Blocks.ForEach(bl => bl.Hidden = true);
+                }
             }
-
-            foreach (var b in _context.Blocks)
-            {
-                StatementPass(statement, b);
-            }
-
+            
             return statement;
         }
 
@@ -116,13 +116,63 @@ namespace Furikiri.Echo.Pass
                     }
                 }
 
+                Statement st = dw;
+                if (DoWhileToFor(loop, dw, out var f))
+                {
+                    st = f;
+                }
+
                 loop.Header.Statements.Clear();
-                loop.Header.Statements.Add(dw);
-                StructureBreakContinue(dw, dw.Continue, dw.Break);
+                loop.Header.Statements.Add(st);
+                StructureBreakContinue(st, dw.Continue?.Blocks[0], dw.Break.Blocks[0]);
             }
         }
 
-        internal void StructureBreakContinue(Statement stmt, BlockStatement continueBlock, BlockStatement breakBlock)
+        internal bool DoWhileToFor(Loop loop, DoWhileStatement dw, out ForStatement f)
+        {
+            f = null;
+            var idx = _context.Blocks.IndexOf(loop.Blocks.First());
+            if (idx < 1)
+            {
+                return false;
+            }
+
+            var prev = _context.Blocks[idx - 1];
+            var lastAssign =
+                (BinaryExpression) prev.Statements.LastOrDefault(
+                    n => n is BinaryExpression b && b.Op == BinaryOp.Assign);
+            if (lastAssign == null || !(lastAssign.Left is LocalExpression l))
+            {
+                return false;
+            }
+
+            Expression step = null;
+            UnaryExpression step1 = (UnaryExpression) dw.Continue.Blocks.Last().Statements
+                .LastOrDefault(n => (n is UnaryExpression));
+            if (step1 != null && (step1.Op == UnaryOp.Inc || step1.Op == UnaryOp.Dec) && step1.Target == l)
+            {
+                step = step1;
+            }
+            else
+            {
+                var step2 = (BinaryExpression) dw.Continue.Blocks.Last().Statements
+                    .LastOrDefault(n => (n is BinaryExpression));
+                if (step2 != null)
+                {
+                    step = step2;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            f = new ForStatement(lastAssign, dw.Condition, step);
+
+            return true;
+        }
+
+        internal void StructureBreakContinue(Statement stmt, Block continueBlock, Block breakBlock)
         {
             switch (stmt)
             {
@@ -153,8 +203,9 @@ namespace Furikiri.Echo.Pass
             }
         }
 
-        internal bool StructureIfElse(Block block)
+        internal bool StructureIfElse(Block block, out IfStatement st)
         {
+            st = null;
             if (block.To.Count != 2)
             {
                 return false;
@@ -188,7 +239,7 @@ namespace Furikiri.Echo.Pass
             }
 
 
-            IfStatement i = new IfStatement((Expression) block.Statements.LastOrDefault(n => n is Expression),
+            IfStatement i = new IfStatement((Expression) block.Statements.LastOrDefault(n => n is ConditionExpression),
                 new BlockStatement(trueB), null);
 
             RemoveLastGoto(trueB, trueB.To[0]);
@@ -198,6 +249,7 @@ namespace Furikiri.Echo.Pass
                 RemoveLastGoto(falseB, falseB.To[0]);
             }
 
+            st = i;
             return true;
         }
 

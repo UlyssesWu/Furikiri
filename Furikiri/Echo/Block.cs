@@ -21,6 +21,8 @@ namespace Furikiri.Echo
         public int Length => End - Start + 1;
         public BitArray Dominator { get; set; }
 
+        public bool Hidden { get; set; } = false;
+
         /// <summary>
         /// Post-Dominator
         /// </summary>

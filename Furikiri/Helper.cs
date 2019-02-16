@@ -469,5 +469,10 @@ namespace Furikiri
 
             return default;
         }
+
+        public static void Replace<T>(this List<T> l, T from, T to)
+        {
+            l[l.IndexOf(from)] = to;
+        }
     }
 }
