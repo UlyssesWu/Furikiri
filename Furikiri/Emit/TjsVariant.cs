@@ -12,7 +12,7 @@ namespace Furikiri.Emit
         string DebugString { get; }
     }
 
-    [DebuggerDisplay("DebugString")]
+    [DebuggerDisplay("{DebugString}")]
     public class TjsVoid : ITjsVariant
     {
         private static TjsVoid _void;
@@ -50,7 +50,7 @@ namespace Furikiri.Emit
         }
     }
 
-    [DebuggerDisplay("DebugString")]
+    [DebuggerDisplay("{DebugString}")]
     public class TjsCodeObject : ITjsVariant
     {
         public TjsVarType Type => TjsVarType.Object;
@@ -95,7 +95,7 @@ namespace Furikiri.Emit
         }
     }
 
-    [DebuggerDisplay("DebugString")]
+    [DebuggerDisplay("{DebugString}")]
     public class TjsString : ITjsVariant
     {
         public TjsVarType Type => TjsVarType.String;
@@ -125,7 +125,7 @@ namespace Furikiri.Emit
         }
     }
 
-    [DebuggerDisplay("DebugString")]
+    [DebuggerDisplay("{DebugString}")]
     public class TjsOctet : ITjsVariant
     {
         public TjsVarType Type => TjsVarType.Octet;
@@ -145,7 +145,7 @@ namespace Furikiri.Emit
         }
     }
 
-    [DebuggerDisplay("DebugString")]
+    [DebuggerDisplay("{DebugString}")]
     public class TjsInt : ITjsVariant
     {
         internal TjsInternalType InternalType { get; set; }
@@ -201,7 +201,7 @@ namespace Furikiri.Emit
         }
     }
 
-    [DebuggerDisplay("DebugString")]
+    [DebuggerDisplay("{DebugString}")]
     public class TjsReal : ITjsVariant
     {
         internal TjsInternalType InternalType { get; set; }
@@ -248,6 +248,7 @@ namespace Furikiri.Emit
         }
     }
 
+    [DebuggerDisplay("{DebugString}")]
     internal class TjsStub : ITjsVariant
     {
         public short Slot { get; set; }

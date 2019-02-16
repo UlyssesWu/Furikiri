@@ -1,11 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
 namespace Furikiri.Echo.Language
 {
-    class TjsFormatter : IFormatter
+    class TjsTextFormatter : IFormatter
     {
+        public TextWriter Writer { get; private set; }
+
+        public TjsTextFormatter(TextWriter tw)
+        {
+            Writer = tw;
+        }
+
+        public int IndentLength { get; set; } = 0;
+
+        public string Indenter { get; internal set; } = "    ";
+
         public void Write(string str)
         {
             throw new NotImplementedException();

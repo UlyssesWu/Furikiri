@@ -20,6 +20,7 @@ namespace Furikiri.AST.Expressions
 
         public UnaryExpression(Expression target, UnaryOp op)
         {
+            Target = target;
             Op = op;
         }
     }

@@ -128,9 +128,15 @@ namespace Furikiri.Tests
             entry = pass2.Process(context, entry);
 
             var b = context.Blocks[1];
-            var sts = context.BlockExpressions[b];
-            var s1 = sts.FirstOrDefault();
+            var s1 = b.Statements.FirstOrDefault();
 
+            var pass3 = new ControlFlowPass();
+            entry = pass3.Process(context, entry);
+            var c = entry.Statements.Count;
+            foreach (var st in entry.Statements)
+            {
+                var s = st;
+            }
         }
 
         //DO NOT WORK

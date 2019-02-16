@@ -30,6 +30,8 @@ namespace Furikiri.AST.Expressions
 
         public BinaryExpression(Expression left, Expression right, BinaryOp op)
         {
+            Left = left;
+            Right = right;
             Op = op;
         }
 

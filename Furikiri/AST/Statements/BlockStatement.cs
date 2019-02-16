@@ -26,5 +26,10 @@ namespace Furikiri.AST.Statements
         {
             Blocks = blockses;
         }
+
+        public void AddStatement(Statement st)
+        {
+            Statements.Add(st);
+        }
     }
 }

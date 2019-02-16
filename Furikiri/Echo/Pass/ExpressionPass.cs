@@ -90,6 +90,16 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.SETNF:
                         break;
+                    case OpCode.TT:
+                    {
+                        flagExp = ex[ins.GetRegisterSlot(0)];
+                    }
+                        break;
+                    case OpCode.TF:
+                    {
+                        flagExp = new UnaryExpression(ex[ins.GetRegisterSlot(0)], UnaryOp.Not);
+                    }
+                        break;
                     case OpCode.NF:
                     {
                         flagExp = new UnaryExpression(flagExp, UnaryOp.Not);
@@ -104,7 +114,7 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.JMP:
                     {
-                        expList.Add(new GotoExpression());
+                        expList.Add(new GotoExpression {JumpTo = ((JumpData) ins.Data).Goto.Line});
                     }
                         break;
                     case OpCode.INC:
@@ -115,20 +125,21 @@ namespace Furikiri.Echo.Pass
                     case OpCode.STR:
                     case OpCode.NUM:
                     case OpCode.OCTET:
-                    case OpCode.TT:
-                    case OpCode.TF:
                     case OpCode.LNOT:
                     {
                         var dstSlot = ins.GetRegisterSlot(0);
                         var dst = ex[dstSlot];
                         var op = UnaryOp.Unknown;
+                        bool push = false;
                         switch (ins.OpCode)
                         {
                             case OpCode.INC:
                                 op = UnaryOp.Inc;
+                                push = true;
                                 break;
                             case OpCode.DEC:
                                 op = UnaryOp.Dec;
+                                push = true;
                                 break;
                             case OpCode.CHS:
                                 op = UnaryOp.InvertSign;
@@ -148,12 +159,12 @@ namespace Furikiri.Echo.Pass
                             case OpCode.OCTET:
                                 op = UnaryOp.ToByteArray;
                                 break;
-                            case OpCode.TT:
-                                op = UnaryOp.IsTrue;
-                                break;
-                            case OpCode.TF:
-                                op = UnaryOp.IsFalse;
-                                break;
+                            //case OpCode.TT:
+                            //    op = UnaryOp.IsTrue;
+                            //    break;
+                            //case OpCode.TF:
+                            //    op = UnaryOp.IsFalse;
+                            //    break;
                             case OpCode.LNOT:
                                 op = UnaryOp.Not;
                                 break;
@@ -161,6 +172,10 @@ namespace Furikiri.Echo.Pass
 
                         var u = new UnaryExpression(dst, op);
                         ex[dstSlot] = u;
+                        if (push)
+                        {
+                            expList.Add(u);
+                        }
                     }
                         break;
                     case OpCode.INCPD:
@@ -542,6 +557,10 @@ namespace Furikiri.Echo.Pass
                     case OpCode.EXTRY:
                         break;
                     case OpCode.THROW:
+                    {
+                        var th = new ThrowExpression(ex[ins.GetRegisterSlot(0)]);
+                        expList.Add(th);
+                    }
                         break;
                     case OpCode.CHGTHIS:
                         break;

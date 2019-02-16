@@ -7,6 +7,7 @@ namespace Furikiri.AST.Expressions
         public override AstNodeType Type => AstNodeType.GotoExpression;
         public override IEnumerable<IAstNode> Children { get; }
 
+        public int JumpTo { get; set; }
         public GotoExpression()
         {
         }
