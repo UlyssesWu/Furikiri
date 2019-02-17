@@ -11,6 +11,7 @@ namespace Furikiri.AST.Statements
         public Expression Initializer { get; set; }
         public Expression Condition { get; set; }
         public Expression Increment { get; set; }
+        public BlockStatement Body { get; set; }
 
         public ForStatement(Expression init, Expression cond, Expression inc)
         {

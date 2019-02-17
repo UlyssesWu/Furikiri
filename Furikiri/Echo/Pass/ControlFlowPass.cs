@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
@@ -25,25 +26,25 @@ namespace Furikiri.Echo.Pass
                     st.Else?.Blocks.ForEach(bl => bl.Hidden = true);
                 }
             }
-            
+
             return statement;
         }
 
-        public void StatementPass(BlockStatement entry, Block block)
-        {
-            foreach (var node in block.Statements)
-            {
-                switch (node)
-                {
-                    case GotoExpression _:
-                    case ConditionExpression _:
-                        break;
-                    case Expression expr:
-                        entry.AddStatement(new ExpressionStatement(expr));
-                        break;
-                }
-            }
-        }
+        //public void StatementPass(BlockStatement entry, Block block)
+        //{
+        //    foreach (var node in block.Statements)
+        //    {
+        //        switch (node)
+        //        {
+        //            case GotoExpression _:
+        //            case ConditionExpression _:
+        //                break;
+        //            case Expression expr:
+        //                entry.AddStatement(new ExpressionStatement(expr));
+        //                break;
+        //        }
+        //    }
+        //}
 
         public Expression FindCondition(Loop l)
         {
@@ -88,10 +89,12 @@ namespace Furikiri.Echo.Pass
             foreach (var loop in _context.LoopSet)
             {
                 var conditionBlock = loop.Blocks.Last();
+                conditionBlock.Hidden = true;
                 var dw = new DoWhileStatement();
                 dw.Condition =
                     (Expression) conditionBlock.Statements.LastOrDefault(s => s is BinaryExpression b && b.IsCompare);
                 dw.Body = new BlockStatement(loop.Blocks);
+                dw.Body.Blocks.Remove(conditionBlock);
                 dw.Break = new BlockStatement(FindBreak(loop));
                 dw.Continue = null;
 
@@ -122,8 +125,9 @@ namespace Furikiri.Echo.Pass
                     st = f;
                 }
 
-                loop.Header.Statements.Clear();
-                loop.Header.Statements.Add(st);
+                loop.LoopStatement = st;
+                //loop.Header.Statements.Clear();
+                //loop.Header.Statements.Add(st);
                 StructureBreakContinue(st, dw.Continue?.Blocks[0], dw.Break.Blocks[0]);
             }
         }
@@ -168,9 +172,36 @@ namespace Furikiri.Echo.Pass
             }
 
             f = new ForStatement(lastAssign, dw.Condition, step);
+            prev.Statements.Remove(lastAssign);
+
+            f.Body = dw.Body;
+            foreach (var bodyBlock in f.Body.Blocks)
+            {
+                StructureBreakContinue(bodyBlock, dw.Continue.Blocks[0], dw.Break.Blocks[0]);
+            }
 
             return true;
         }
+
+        internal void StructureBreakContinue(Block b, Block continueBlock, Block breakBlock)
+        {
+            for (var i = 0; i < b.Statements.Count; i++)
+            {
+                var node = b.Statements[i];
+                if (node is GotoExpression g)
+                {
+                    if (continueBlock != null && g.JumpTo == continueBlock.Start)
+                    {
+                        b.Statements[i] = new ContinueStatement();
+                    }
+                    else if (breakBlock != null && g.JumpTo == breakBlock.Start)
+                    {
+                        b.Statements[i] = new BreakStatement();
+                    }
+                }
+            }
+        }
+
 
         internal void StructureBreakContinue(Statement stmt, Block continueBlock, Block breakBlock)
         {
@@ -211,44 +242,61 @@ namespace Furikiri.Echo.Pass
                 return false;
             }
 
-            var trueB = block.To[0];
-            var falseB = block.To[1];
-            bool hasElse = true;
-            if (trueB.To.Count != 1)
+            var cond = (ConditionExpression) block.Statements.Last(stmt => stmt is ConditionExpression);
+
+            BlockStatement then = null;
+            BlockStatement el = null;
+            var loop = _context.LoopSet.FirstOrDefault(l => l.Contains(block));
+
+            var tb = block.To[0];
+            var eb = block.To[1];
+            bool hasElse = false;
+            if (tb.To.Count != 1)
             {
                 return false;
             }
 
-            if (trueB.To[0] == falseB)
+            if (tb.To[0] == eb)
             {
                 hasElse = false;
             }
             else
             {
-                if (falseB.To.Count != 1)
+                if (loop != null)
                 {
-                    return false;
+                    if (eb.Start >= loop.Exit)
+                    {
+                        el = new BlockStatement();
+                        el.AddStatement(new BreakStatement());
+                        el.Resolved = true;
+                    }
                 }
-
-                if (falseB.To[0] != trueB.To[0])
+                else
                 {
-                    return false;
-                }
+                    if (eb.To.Count != 1)
+                    {
+                        return false;
+                    }
 
-                hasElse = true;
+                    if (eb.To[0] != tb.To[0])
+                    {
+                        return false;
+                    }
+
+                    hasElse = true;
+                }
             }
 
-
-            IfStatement i = new IfStatement((Expression) block.Statements.LastOrDefault(n => n is ConditionExpression),
-                new BlockStatement(trueB), null);
-
-            RemoveLastGoto(trueB, trueB.To[0]);
             if (hasElse)
             {
-                i.Else = new BlockStatement(falseB);
-                RemoveLastGoto(falseB, falseB.To[0]);
+                el = new BlockStatement(eb);
+                RemoveLastGoto(eb, eb.To[0]);
             }
 
+            IfStatement i = new IfStatement((Expression) block.Statements.LastOrDefault(n => n is ConditionExpression),
+                new BlockStatement(tb), el);
+
+            RemoveLastGoto(tb, tb.To[0]);
             st = i;
             return true;
         }

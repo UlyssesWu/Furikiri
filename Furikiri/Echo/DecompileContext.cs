@@ -262,6 +262,13 @@ namespace Furikiri.Echo
             Blocks.TryAdd(ExitBlock);
             Blocks.Sort((b1, b2) => b1.Start - b2.Start);
 
+            foreach (var bl in Blocks)
+            {
+                bl.From.Sort((b1, b2) => b1.Start - b2.Start);
+                bl.To.Sort((b1, b2) => b1.Start - b2.Start);
+            }
+
+
             if (Blocks.Count > 0)
             {
                 //TJS2 is a simple language, the entry block is always the start block

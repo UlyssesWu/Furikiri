@@ -13,6 +13,8 @@ namespace Furikiri.AST.Statements
         public List<Block> Blocks { get; set; }
         public List<Statement> Statements { get; set; } = new List<Statement>();
 
+        public bool Resolved { get; set; } = false;
+
         public BlockStatement()
         {
         }
@@ -24,7 +26,7 @@ namespace Furikiri.AST.Statements
 
         public BlockStatement(List<Block> blockses)
         {
-            Blocks = blockses;
+            Blocks = new List<Block>(blockses);
         }
 
         public void AddStatement(Statement st)
