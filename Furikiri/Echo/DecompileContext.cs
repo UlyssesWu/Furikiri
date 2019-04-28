@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Furikiri.AST.Expressions;
+using Furikiri.Echo.Logical;
 using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
@@ -21,6 +22,8 @@ namespace Furikiri.Echo
             {TjsVarType.Void, 0},
             {TjsVarType.Null, 0},
         };
+
+        internal List<ILogical> Logicals { get; set; } = new List<ILogical>();
 
         internal Block EntryBlock { get; set; }
 

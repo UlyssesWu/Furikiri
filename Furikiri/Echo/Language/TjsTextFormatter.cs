@@ -1,8 +1,5 @@
 ﻿using System;
 using System.CodeDom.Compiler;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
 
 namespace Furikiri.Echo.Language
 {
@@ -17,7 +14,7 @@ namespace Furikiri.Echo.Language
 
         public void Write(string str)
         {
-            throw new NotImplementedException();
+            Writer.Write(str);
         }
 
         public void WriteLine()
@@ -32,12 +29,13 @@ namespace Furikiri.Echo.Language
 
         public void WriteToken(string token)
         {
-            throw new NotImplementedException();
+            Writer.Write(token);
         }
 
         public void WriteComment(string comment)
         {
-            throw new NotImplementedException();
+            StartWritingComment();
+            Writer.Write(comment);
         }
 
         public void WriteDocumentationTag(string documentationTag)
@@ -47,42 +45,41 @@ namespace Furikiri.Echo.Language
 
         public void WriteKeyword(string keyword)
         {
-            throw new NotImplementedException();
+            Writer.Write(keyword);
         }
 
         public void WriteLiteral(string literal)
         {
-            throw new NotImplementedException();
+            Writer.Write(literal);
         }
 
-        public void WriteDefinition(string value, object definition)
+        public void WriteDefinition(string value)
         {
             throw new NotImplementedException();
         }
 
-        public void WriteReference(string value, object reference)
+        public void WriteReference(string value)
         {
             throw new NotImplementedException();
         }
 
-        public void WriteIdentifier(string value, object identifier)
+        public void WriteIdentifier(string value)
         {
-            throw new NotImplementedException();
+            Writer.Write(value);
         }
 
         public void WriteException(string[] exceptionLines)
         {
-            throw new NotImplementedException();
         }
 
         public void Indent()
         {
-            throw new NotImplementedException();
+            Writer.Indent++;
         }
 
         public void Outdent()
         {
-            throw new NotImplementedException();
+            Writer.Indent--;
         }
 
         public int CurrentPosition { get; }
@@ -105,7 +102,6 @@ namespace Furikiri.Echo.Language
 
         public void WriteDocumentationStartBlock()
         {
-            throw new NotImplementedException();
         }
 
         public void WriteEndBlock()
@@ -116,12 +112,10 @@ namespace Furikiri.Echo.Language
 
         public void WriteStartUsagesBlock()
         {
-            throw new NotImplementedException();
         }
 
         public void WriteEndUsagesBlock()
         {
-            throw new NotImplementedException();
         }
 
         public event EventHandler NewLineWritten;

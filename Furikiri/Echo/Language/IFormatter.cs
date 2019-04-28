@@ -14,9 +14,9 @@ namespace Furikiri.Echo.Language
         void WriteDocumentationTag(string documentationTag);
         void WriteKeyword(string keyword);
         void WriteLiteral(string literal);
-        void WriteDefinition(string value, object definition);
-        void WriteReference(string value, object reference);
-        void WriteIdentifier(string value, object identifier);
+        void WriteDefinition(string value);
+        void WriteReference(string value);
+        void WriteIdentifier(string value);
         void WriteException(string[] exceptionLines);
         void Indent();
         void Outdent();

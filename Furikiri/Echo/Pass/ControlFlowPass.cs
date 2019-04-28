@@ -23,7 +23,7 @@ namespace Furikiri.Echo.Pass
                 {
                     b.Statements.Replace(st.Condition, st);
                     st.Then.Blocks.ForEach(bl => bl.Hidden = true);
-                    st.Else?.Blocks.ForEach(bl => bl.Hidden = true);
+                    st.Else?.Blocks?.ForEach(bl => bl.Hidden = true);
                 }
             }
 

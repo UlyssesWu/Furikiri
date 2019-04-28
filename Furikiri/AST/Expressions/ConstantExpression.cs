@@ -17,5 +17,10 @@ namespace Furikiri.AST.Expressions
         {
             Variant = v;
         }
+
+        public override string ToString()
+        {
+            return Variant.ToString();
+        }
     }
 }

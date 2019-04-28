@@ -20,6 +20,8 @@ namespace Furikiri.AST.Expressions
             }
         }
 
+        public bool IsDeclaration { get; set; }
+
         public BinaryOp Op { get; set; }
 
         public TjsVarType? ResultType { get; set; }

@@ -11,7 +11,7 @@ namespace Furikiri.AST.Statements
         public IEnumerable<IAstNode> Children => Statements;
 
         public List<Block> Blocks { get; set; }
-        public List<Statement> Statements { get; set; } = new List<Statement>();
+        public List<IAstNode> Statements { get; set; } = new List<IAstNode>();
 
         public bool Resolved { get; set; } = false;
 

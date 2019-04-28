@@ -20,29 +20,38 @@ namespace Furikiri.Echo.Visitors
                     VisitIdentifierExpr(identifierExpression);
                     break;
                 case InvokeExpression invokeExpression:
+                    VisitInvokeExpr(invokeExpression);
+                    break;
+                case ConstantExpression constantExpression:
+                    VisitConstantExpr(constantExpression);
+                    break;
+                case LocalExpression localExpression:
+                    VisitLocalExpr(localExpression);
+                    break;
+                case ExpressionStatement expressionStatement:
+                    VisitExpressionStmt(expressionStatement);
+                    break;
+                case BlockStatement blockStatement:
+                    VisitBlockStmt(blockStatement);
                     break;
                 case null:
                     break;
                 case ConditionExpression conditionExpression:
                     break;
-                case ConstantExpression constantExpression:
-                    break;
+
 
                 case GotoExpression gotoExpression:
                     break;
 
 
-                case LocalExpression localExpression:
-                    break;
+
                 case ReturnExpression returnExpression:
                     break;
                 case UnaryExpression unaryExpression:
                     break;
                 case Expression expression:
                     break;
-                case BlockStatement blockStatement:
-                    VisitBlockStmt(blockStatement);
-                    break;
+
                 case DoWhileStatement doWhileStatement:
                     break;
                 case ForStatement forStatement:
@@ -54,9 +63,25 @@ namespace Furikiri.Echo.Visitors
             }
         }
 
-        internal virtual void VisitBlockStmt(BlockStatement blockStatement)
+        internal virtual void VisitLocalExpr(LocalExpression local)
         {
-            foreach (var st in blockStatement.Statements)
+        }
+
+        internal virtual void VisitExpressionStmt(ExpressionStatement expression)
+        {
+        }
+
+        internal virtual void VisitConstantExpr(ConstantExpression constant)
+        {
+        }
+
+        internal virtual void VisitInvokeExpr(InvokeExpression invoke)
+        {
+        }
+
+        internal virtual void VisitBlockStmt(BlockStatement block)
+        {
+            foreach (var st in block.Statements)
             {
                 Visit(st);
             }
@@ -68,6 +93,8 @@ namespace Furikiri.Echo.Visitors
 
         internal virtual void VisitBinaryExpr(BinaryExpression bin)
         {
+            Visit(bin.Left);
+            Visit(bin.Right);
         }
     }
 }

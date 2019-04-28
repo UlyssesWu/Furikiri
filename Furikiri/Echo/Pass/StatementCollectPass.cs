@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
@@ -12,26 +10,36 @@ namespace Furikiri.Echo.Pass
     {
         public BlockStatement Process(DecompileContext context, BlockStatement statement)
         {
+            //TODO:
+            Dictionary<Block, List<IAstNode>> blockStmts = new Dictionary<Block, List<IAstNode>>();
             foreach (var block in context.Blocks)
             {
                 var newStmts = new List<IAstNode>();
-                foreach (var node in block.Statements)
+                var loop = context.LoopSet.FirstOrDefault(l => l.Header == block);
+                if (loop != null)
                 {
-                    switch (node)
+                    newStmts.Add(loop.LoopStatement);
+                }
+                else
+                {
+                    foreach (var node in block.Statements)
                     {
-                        case GotoExpression _:
-                        case ConditionExpression _:
-                            break;
-                        case Expression expr:
-                            newStmts.Add(new ExpressionStatement(expr));
-                            break;
-                        case Statement stmt:
-                            newStmts.Add(stmt);
-                            break;
+                        switch (node)
+                        {
+                            case GotoExpression _:
+                            case ConditionExpression _:
+                                break;
+                            case Expression expr:
+                                newStmts.Add(new ExpressionStatement(expr));
+                                break;
+                            case Statement stmt:
+                                newStmts.Add(stmt);
+                                break;
+                        }
                     }
                 }
 
-                block.Statements = newStmts;
+                blockStmts[block] = newStmts;
             }
 
             foreach (var block in context.Blocks)
@@ -41,7 +49,7 @@ namespace Furikiri.Echo.Pass
                     continue;
                 }
 
-                statement.Statements.AddRange(block.Statements.OfType<Statement>());
+                statement.Statements.AddRange(blockStmts[block]);
             }
 
             return statement;

@@ -148,12 +148,11 @@ namespace Furikiri.Tests
                 var s = statement;
             }
 
-            var stream = new MemoryStream();
-            var sWriter = new StreamWriter(stream);
+            var sWriter = new StringWriter();
             TjsWriter writer = new TjsWriter(sWriter);
             writer.WriteBlock(entry);
             sWriter.Flush();
-            var result = Encoding.UTF8.GetString(stream.ToArray());
+            var result = sWriter.ToString();
         }
 
         //DO NOT WORK

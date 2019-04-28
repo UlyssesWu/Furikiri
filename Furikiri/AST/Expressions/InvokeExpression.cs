@@ -8,7 +8,15 @@ namespace Furikiri.AST.Expressions
         public override AstNodeType Type => AstNodeType.InvokeExpression;
         public override IEnumerable<IAstNode> Children { get; }
 
-        public string Method { get; set; }
+        public string Method
+        {
+            get { return string.IsNullOrEmpty(MethodName) ? MethodExpression.ToString() : MethodName; }
+            set { MethodName = value; }
+        }
+
+        public bool IsCtor { get; set; }
+
+        public string MethodName { get; set; }
 
         public TjsCodeObject MethodObject { get; set; } //TODO: handle anonymous method
 
@@ -20,7 +28,7 @@ namespace Furikiri.AST.Expressions
 
         public InvokeExpression(string name)
         {
-            Method = name;
+            MethodName = name;
         }
 
         public InvokeExpression(TjsCodeObject methodObj)
@@ -31,6 +39,24 @@ namespace Furikiri.AST.Expressions
         public InvokeExpression(Expression exp)
         {
             MethodExpression = exp;
+        }
+
+        public bool HideCaller
+        {
+            get
+            {
+                if (Caller == null)
+                {
+                    return true;
+                }
+
+                if (Caller is IdentifierExpression id && id.IdentifierType != IdentifierType.Normal)
+                {
+                    return true;
+                }
+
+                return false;
+            }
         }
     }
 }
