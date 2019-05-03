@@ -41,9 +41,15 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitInvokeExpr(InvokeExpression invoke)
         {
-            if (invoke.Caller != null && !invoke.HideCaller)
+            if (invoke.IsCtor)
             {
-                Visit(invoke.Caller);
+                //TODO: quick ctor syntax for Dictionary, Array
+                _formatter.WriteKeyword("new");
+                _formatter.WriteSpace();
+            }
+            if (invoke.Instance != null && !invoke.HideInstance)
+            {
+                Visit(invoke.Instance);
                 _formatter.WriteToken(".");
             }
             _formatter.WriteIdentifier(invoke.Method);

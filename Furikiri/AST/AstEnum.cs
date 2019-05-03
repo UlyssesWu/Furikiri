@@ -28,6 +28,7 @@
         ReturnExpression,
         GotoExpression,
         ConditionExpression,
+        DeleteExpression,
     }
 
 }

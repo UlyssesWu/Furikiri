@@ -3,15 +3,15 @@ using Furikiri.Emit;
 
 namespace Furikiri.AST.Expressions
 {
-    class InvokeExpression : Expression
+    class InvokeExpression : Expression, IInstance
     {
         public override AstNodeType Type => AstNodeType.InvokeExpression;
         public override IEnumerable<IAstNode> Children { get; }
 
         public string Method
         {
-            get { return string.IsNullOrEmpty(MethodName) ? MethodExpression.ToString() : MethodName; }
-            set { MethodName = value; }
+            get => string.IsNullOrEmpty(MethodName) ? MethodExpression.ToString() : MethodName;
+            set => MethodName = value;
         }
 
         public bool IsCtor { get; set; }
@@ -22,7 +22,7 @@ namespace Furikiri.AST.Expressions
 
         public Expression MethodExpression { get; set; }
 
-        public Expression Caller { get; set; }
+        public Expression Instance { get; set; }
 
         public List<Expression> Parameters { get; set; } = new List<Expression>();
 
@@ -41,16 +41,16 @@ namespace Furikiri.AST.Expressions
             MethodExpression = exp;
         }
 
-        public bool HideCaller
+        public bool HideInstance
         {
             get
             {
-                if (Caller == null)
+                if (Instance == null)
                 {
                     return true;
                 }
 
-                if (Caller is IdentifierExpression id && id.IdentifierType != IdentifierType.Normal)
+                if (Instance is IdentifierExpression id && id.IdentifierType != IdentifierType.Normal)
                 {
                     return true;
                 }

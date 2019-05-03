@@ -400,7 +400,7 @@ namespace Furikiri.Echo.Pass
                     {
                         var call = new InvokeExpression(((OperandData) ins.Data).Variant as TjsCodeObject);
                         var dst = ins.GetRegisterSlot(0);
-                        call.Caller = null;
+                        call.Instance = null;
                         var paramCount = ins.GetRegisterSlot(2);
                         if (paramCount == -1)
                         {
@@ -428,7 +428,7 @@ namespace Furikiri.Echo.Pass
                         var call = new InvokeExpression(ins.Data.AsString());
                         var dst = ins.GetRegisterSlot(0);
                         var callerSlot = ins.GetRegisterSlot(1);
-                        call.Caller = ex[callerSlot];
+                        call.Instance = ex[callerSlot];
                         var paramCount = ins.GetRegisterSlot(3);
                         if (paramCount == -1)
                         {
@@ -466,7 +466,7 @@ namespace Furikiri.Echo.Pass
                         InvokeExpression call = new InvokeExpression(ex[ins.GetRegisterSlot(2)]);
                         var dst = ins.GetRegisterSlot(0);
                         var callerSlot = ins.GetRegisterSlot(1);
-                        call.Caller = ex[callerSlot];
+                        call.Instance = ex[callerSlot];
                         var paramCount = ins.GetRegisterSlot(3);
                         if (paramCount == -1)
                         {
@@ -492,8 +492,9 @@ namespace Furikiri.Echo.Pass
                     case OpCode.NEW:
                     {
                         InvokeExpression call = new InvokeExpression(ex[ins.GetRegisterSlot(1)]);
+                        call.IsCtor = true;
                         var dst = ins.GetRegisterSlot(0);
-                        call.Caller = null;
+                        call.Instance = null;
                         var paramCount = ins.GetRegisterSlot(2);
                         if (paramCount == -1)
                         {
