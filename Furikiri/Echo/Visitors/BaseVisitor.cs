@@ -28,6 +28,9 @@ namespace Furikiri.Echo.Visitors
                 case LocalExpression localExpression:
                     VisitLocalExpr(localExpression);
                     break;
+                case DeleteExpression deleteExpression:
+                    VisitDeleteExpr(deleteExpression);
+                    break;
                 case ExpressionStatement expressionStatement:
                     VisitExpressionStmt(expressionStatement);
                     break;
@@ -61,6 +64,10 @@ namespace Furikiri.Echo.Visitors
                 case Statement statement:
                     break;
             }
+        }
+
+        internal virtual void VisitDeleteExpr(DeleteExpression delete)
+        {
         }
 
         internal virtual void VisitLocalExpr(LocalExpression local)

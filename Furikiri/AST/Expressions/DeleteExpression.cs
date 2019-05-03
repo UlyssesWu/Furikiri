@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace Furikiri.AST.Expressions
 {
@@ -27,7 +25,7 @@ namespace Furikiri.AST.Expressions
             }
         }
 
-        public Expression Instance { get; }
+        public Expression Instance { get; set; }
         public string IdentifierName { get; set; }
         public Expression IdentifierExpression { get; set; }
         public string Identifier

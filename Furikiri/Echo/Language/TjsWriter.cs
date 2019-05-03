@@ -47,11 +47,13 @@ namespace Furikiri.Echo.Language
                 _formatter.WriteKeyword("new");
                 _formatter.WriteSpace();
             }
+
             if (invoke.Instance != null && !invoke.HideInstance)
             {
                 Visit(invoke.Instance);
                 _formatter.WriteToken(".");
             }
+
             _formatter.WriteIdentifier(invoke.Method);
             _formatter.WriteToken("(");
             for (var i = 0; i < invoke.Parameters.Count; i++)
@@ -82,6 +84,19 @@ namespace Furikiri.Echo.Language
         internal override void VisitLocalExpr(LocalExpression local)
         {
             _formatter.WriteIdentifier(local.ToString());
+        }
+
+        internal override void VisitDeleteExpr(DeleteExpression delete)
+        {
+            _formatter.WriteKeyword("delete");
+            _formatter.WriteSpace();
+            if (delete.Instance != null && !delete.HideInstance)
+            {
+                Visit(delete.Instance);
+                _formatter.WriteToken(".");
+            }
+
+            _formatter.WriteIdentifier(delete.Identifier);
         }
     }
 }

@@ -556,8 +556,14 @@ namespace Furikiri.Echo.Pass
                     case OpCode.GETP:
                         break;
                     case OpCode.DELD:
+                        DeleteExpression d = new DeleteExpression(ins.Data.AsString());
+                        d.Instance = ex[ins.GetRegisterSlot(1)];
+                        expList.Add(d);
                         break;
                     case OpCode.DELI:
+                        DeleteExpression d2 = new DeleteExpression(ex[ins.GetRegisterSlot(2)]);
+                        d2.Instance = ex[ins.GetRegisterSlot(1)];
+                        expList.Add(d2);
                         break;
                     case OpCode.SRV:
                         break;
