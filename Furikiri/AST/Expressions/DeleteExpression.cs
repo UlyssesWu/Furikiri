@@ -42,6 +42,7 @@ namespace Furikiri.AST.Expressions
         public DeleteExpression(Expression name)
         {
             IdentifierExpression = name;
+            IdentifierExpression.Parent = this;
         }
     }
 }

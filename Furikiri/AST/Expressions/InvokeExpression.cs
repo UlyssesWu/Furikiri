@@ -39,6 +39,7 @@ namespace Furikiri.AST.Expressions
         public InvokeExpression(Expression exp)
         {
             MethodExpression = exp;
+            MethodExpression.Parent = this;
         }
 
         public bool HideInstance

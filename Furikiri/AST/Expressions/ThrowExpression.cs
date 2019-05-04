@@ -16,6 +16,7 @@ namespace Furikiri.AST.Expressions
         public ThrowExpression(Expression target)
         {
             Target = target;
+            Target.Parent = this;
         }
     }
 }

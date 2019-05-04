@@ -27,7 +27,6 @@ namespace Furikiri.AST.Expressions
         public override AstNodeType Type => AstNodeType.IdentifierExpression;
         public override IEnumerable<IAstNode> Children { get; }
 
-        public Expression Parent { get; set; }
         public Expression Child { get; set; }
 
         public string Name { get; set; }

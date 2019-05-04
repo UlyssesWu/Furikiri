@@ -35,6 +35,8 @@ namespace Furikiri.AST.Expressions
             Left = left;
             Right = right;
             Op = op;
+            Left.Parent = this;
+            Right.Parent = this;
         }
 
         public bool IsCompare

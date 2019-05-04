@@ -22,6 +22,7 @@ namespace Furikiri.AST.Expressions
         {
             Target = target;
             Op = op;
+            Target.Parent = this;
         }
     }
 }

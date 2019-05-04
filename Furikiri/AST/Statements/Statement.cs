@@ -6,5 +6,6 @@ namespace Furikiri.AST.Statements
     {
         public abstract AstNodeType Type { get; }
         public abstract IEnumerable<IAstNode> Children { get; }
+        public IAstNode Parent { get; set; }
     }
 }

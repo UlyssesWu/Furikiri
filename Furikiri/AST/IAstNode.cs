@@ -7,6 +7,8 @@ namespace Furikiri.AST
     {
         AstNodeType Type { get; }
         IEnumerable<IAstNode> Children { get; }
+
+        IAstNode Parent { get; set; }
     }
 
     /// <summary>

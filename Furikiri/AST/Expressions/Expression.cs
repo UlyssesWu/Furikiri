@@ -7,6 +7,7 @@ namespace Furikiri.AST.Expressions
     {
         public abstract AstNodeType Type { get; }
         public abstract IEnumerable<IAstNode> Children { get; }
+        public IAstNode Parent { get; set; }
 
         protected List<Instruction> Instructions { get; } = new List<Instruction>();
     }

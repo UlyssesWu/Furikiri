@@ -4,11 +4,11 @@ using Furikiri.Echo;
 
 namespace Furikiri.AST.Statements
 {
-    class BlockStatement : IAstNode
+    class BlockStatement : Statement
     {
-        public AstNodeType Type => AstNodeType.BlockStatement;
+        public override AstNodeType Type => AstNodeType.BlockStatement;
 
-        public IEnumerable<IAstNode> Children => Statements;
+        public override IEnumerable<IAstNode> Children => Statements;
 
         public List<Block> Blocks { get; set; }
         public List<IAstNode> Statements { get; set; } = new List<IAstNode>();
