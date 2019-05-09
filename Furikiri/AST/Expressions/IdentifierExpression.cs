@@ -33,6 +33,9 @@ namespace Furikiri.AST.Expressions
 
         public IdentifierType IdentifierType { get; set; } = IdentifierType.Normal;
 
+        /// <summary>
+        /// (this.)name
+        /// </summary>
         public bool Implicit { get; set; }
 
         public IdentifierExpression(string name, IdentifierType idType = IdentifierType.Normal)
@@ -60,10 +63,6 @@ namespace Furikiri.AST.Expressions
                         }
 
                         return $"{id.FullName}.{Name}";
-                    }
-                    else
-                    {
-                        return $"{Parent}.{Name}";
                     }
                 }
 

@@ -527,8 +527,7 @@ namespace Furikiri.Echo.Pass
                         var slot = ins.GetRegisterSlot(1);
                         var id = ex[slot] as IdentifierExpression;
                         var name = ins.Data.AsString();
-                        var newId = new IdentifierExpression(name);
-                        newId.Parent = id;
+                        var newId = new IdentifierExpression(name) {Parent = id};
                         id.Child = newId;
                         ex[dst] = newId;
                     }
@@ -547,6 +546,21 @@ namespace Furikiri.Echo.Pass
                         var left = new IdentifierExpression(ins.Data.AsString()) {Parent = ex[ins.GetRegisterSlot(0)]};
                         var right = ex[ins.GetRegisterSlot(2)];
                         BinaryExpression b = new BinaryExpression(left, right, BinaryOp.Assign);
+                        //check declare
+                        if (context.Object.ContextType == TjsContextType.TopLevel)
+                        {
+                                if (!context.RegisteredMembers.ContainsKey(left.Name))
+                                {
+                                    b.IsDeclaration = true;
+                                    var stub = new TjsStub();
+                                    if (right is ConstantExpression con) //TODO: better type check
+                                    {
+                                        stub.Type = con.DataType;
+                                    }
+                                    context.RegisteredMembers[left.Name] = stub;
+                                }
+                        }
+
                         expList.Add(b);
                     }
                         break;
@@ -566,6 +580,14 @@ namespace Furikiri.Echo.Pass
                     case OpCode.DELI:
                         DeleteExpression d2 = new DeleteExpression(ex[ins.GetRegisterSlot(2)]);
                         d2.Instance = ex[ins.GetRegisterSlot(1)];
+                        //Check declare
+                        if (d2.Instance is IdentifierExpression toDel)
+                        {
+                            if (context.RegisteredMembers.ContainsKey(toDel.Name))
+                            {
+                                context.RegisteredMembers.Remove(toDel.Name);
+                            }
+                        }
                         expList.Add(d2);
                         break;
                     case OpCode.SRV:

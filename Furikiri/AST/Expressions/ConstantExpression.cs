@@ -11,7 +11,7 @@ namespace Furikiri.AST.Expressions
         public override AstNodeType Type => AstNodeType.ConstantExpression;
         public override IEnumerable<IAstNode> Children { get; } = null;
         public ITjsVariant Variant { get; set; }
-        public TjsVarType VarType => Variant.Type;
+        public TjsVarType DataType => Variant.Type;
 
         public ConstantExpression(ITjsVariant v)
         {

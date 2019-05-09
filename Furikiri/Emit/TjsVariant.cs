@@ -262,5 +262,10 @@ namespace Furikiri.Emit
             Slot = slot;
             Type = type;
         }
+
+        public TjsStub(TjsVarType type = TjsVarType.Unknown)
+        {
+            Type = type;
+        }
     }
 }

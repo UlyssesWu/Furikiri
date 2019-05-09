@@ -72,6 +72,7 @@ namespace Furikiri.Emit
 
     public enum TjsVarType
     {
+        Unknown = -2,
         Null = -1,
         Void = 0,
         Object = 1,

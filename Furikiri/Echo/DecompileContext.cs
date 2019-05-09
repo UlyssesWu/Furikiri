@@ -44,8 +44,8 @@ namespace Furikiri.Echo
         public Dictionary<int, IExpression> Expressions { get; set; } =
             new Dictionary<int, IExpression>();
 
-        internal Dictionary<string, TjsCodeObject> RegisteredMembers { get; set; } =
-            new Dictionary<string, TjsCodeObject>();
+        internal Dictionary<string, ITjsVariant> RegisteredMembers { get; set; } =
+            new Dictionary<string, ITjsVariant>();
 
         internal Dictionary<Block, List<Expression>> BlockExpressions { get; set; } =
             new Dictionary<Block, List<Expression>>();

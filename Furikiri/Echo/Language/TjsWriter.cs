@@ -32,6 +32,12 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitBinaryExpr(BinaryExpression bin)
         {
+            if (bin.IsDeclaration)
+            {
+                _formatter.WriteIdentifier("var");
+                _formatter.WriteSpace();
+            }
+
             Visit(bin.Left);
             _formatter.WriteSpace();
             _formatter.WriteToken(bin.Op.ToSymbol());
