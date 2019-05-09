@@ -373,6 +373,38 @@ namespace Furikiri
             }
         }
 
+        internal static string ToSymbol(this UnaryOp op)
+        {
+            switch (op)
+            {
+                case UnaryOp.Inc:
+                    return "++";
+                case UnaryOp.Dec:
+                    return "--";
+                case UnaryOp.Not:
+                    return "!";
+                case UnaryOp.InvertSign:
+                    return "-";
+                case UnaryOp.ToInt:
+                    return "(int)";
+                case UnaryOp.ToReal:
+                    return "(real)";
+                case UnaryOp.ToString:
+                    return "(string)";
+                case UnaryOp.ToNumber:
+                    return "(number)"; //FIXME: fix this
+                case UnaryOp.ToByteArray:
+                    return "(octet)"; //FIXME: fix this
+                case UnaryOp.IsTrue:
+                    break;
+                case UnaryOp.IsFalse:
+                    break;
+                default:
+                    break;
+            }
+            return "";
+        }
+
         /// <summary>
         /// Is OpCode a Jump
         /// </summary>
@@ -435,21 +467,6 @@ namespace Furikiri
 
             list.Add(obj);
             return true;
-        }
-
-        public static bool IsCompareStatement(this IPattern pattern)
-        {
-            if (pattern is BinaryOpPattern b && b.Op.IsCompare())
-            {
-                return true;
-            }
-
-            if (pattern is UnaryOpPattern u && u.Op.IsCompare())
-            {
-                return true;
-            }
-
-            return false;
         }
 
         public static void AddRange<T>(this HashSet<T> hs, IEnumerable<T> set)

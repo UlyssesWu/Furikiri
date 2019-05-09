@@ -151,6 +151,7 @@ namespace Furikiri.Echo.Pass
             }
 
             Expression step = null;
+            //the increment statement can be unary or binary
             UnaryExpression step1 = (UnaryExpression) dw.Continue.Blocks.Last().Statements
                 .LastOrDefault(n => (n is UnaryExpression));
             if (step1 != null && (step1.Op == UnaryOp.Inc || step1.Op == UnaryOp.Dec) && step1.Target == l)
@@ -175,6 +176,11 @@ namespace Furikiri.Echo.Pass
             prev.Statements.Remove(lastAssign);
 
             f.Body = dw.Body;
+            if (!f.Body.Resolved)
+            {
+                f.Body.ResolveFromBlocks();
+            }
+
             foreach (var bodyBlock in f.Body.Blocks)
             {
                 StructureBreakContinue(bodyBlock, dw.Continue.Blocks[0], dw.Break.Blocks[0]);

@@ -50,12 +50,7 @@ namespace Furikiri.AST.Expressions
 
         public override string ToString()
         {
-            if (IsParameter)
-            {
-                return DefaultName;
-            }
-
-            return $"var {DefaultName}";
+            return DefaultName;
         }
     }
 }

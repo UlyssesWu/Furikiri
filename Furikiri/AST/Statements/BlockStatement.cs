@@ -19,6 +19,22 @@ namespace Furikiri.AST.Statements
         {
         }
 
+        public void ResolveFromBlocks()
+        {
+            if (Blocks == null || Blocks.Count == 0)
+            {
+                return;
+            }
+
+            Statements.Clear();
+            foreach (var block in Blocks)
+            {
+                Statements.AddRange(block.Statements);
+            }
+
+            Resolved = true;
+        }
+
         public BlockStatement(Block block)
         {
             Blocks = new List<Block> {block};

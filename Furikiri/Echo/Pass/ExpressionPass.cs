@@ -256,7 +256,9 @@ namespace Furikiri.Echo.Pass
                     case OpCode.CP:
                     case OpCode.CHKINS:
                     {
-                        bool store = true;
+                        var store = true; //Set to Expression
+                        var push = false; //Add to Statement
+                        var declare = false; //Is declaration
                         var dstSlot = ins.GetRegisterSlot(0);
                         Expression dst = null;
                         if (ex.ContainsKey(dstSlot))
@@ -273,11 +275,11 @@ namespace Furikiri.Echo.Pass
                             dst = l;
                             ex[dstSlot] = l;
                             store = false;
+                            declare = true;
                         }
 
                         var src = ex[ins.GetRegisterSlot(1)];
                         var op = BinaryOp.Unknown;
-                        var push = false;
                         switch (ins.OpCode)
                         {
                             case OpCode.ADD:
@@ -328,7 +330,8 @@ namespace Furikiri.Echo.Pass
                                 break;
                         }
 
-                        BinaryExpression b = new BinaryExpression(dst, src, op);
+                        BinaryExpression b = new BinaryExpression(dst, src, op) {IsDeclaration = declare};
+
                         if (store)
                         {
                             ex[dstSlot] = b;
@@ -549,16 +552,17 @@ namespace Furikiri.Echo.Pass
                         //check declare
                         if (context.Object.ContextType == TjsContextType.TopLevel)
                         {
-                                if (!context.RegisteredMembers.ContainsKey(left.Name))
+                            if (!context.RegisteredMembers.ContainsKey(left.Name))
+                            {
+                                b.IsDeclaration = true;
+                                var stub = new TjsStub();
+                                if (right is ConstantExpression con) //TODO: better type check
                                 {
-                                    b.IsDeclaration = true;
-                                    var stub = new TjsStub();
-                                    if (right is ConstantExpression con) //TODO: better type check
-                                    {
-                                        stub.Type = con.DataType;
-                                    }
-                                    context.RegisteredMembers[left.Name] = stub;
+                                    stub.Type = con.DataType;
                                 }
+
+                                context.RegisteredMembers[left.Name] = stub;
+                            }
                         }
 
                         expList.Add(b);
@@ -588,6 +592,7 @@ namespace Furikiri.Echo.Pass
                                 context.RegisteredMembers.Remove(toDel.Name);
                             }
                         }
+
                         expList.Add(d2);
                         break;
                     case OpCode.SRV:

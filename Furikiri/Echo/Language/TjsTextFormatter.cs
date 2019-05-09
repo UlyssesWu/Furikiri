@@ -106,8 +106,8 @@ namespace Furikiri.Echo.Language
 
         public void WriteEndBlock()
         {
-            Writer.WriteLine("}");
             Outdent();
+            Writer.WriteLine("}");
         }
 
         public void WriteStartUsagesBlock()

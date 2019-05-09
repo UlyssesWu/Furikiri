@@ -104,5 +104,83 @@ namespace Furikiri.Echo.Language
 
             _formatter.WriteIdentifier(delete.Identifier);
         }
+
+        internal override void VisitUnaryExpr(UnaryExpression unary)
+        {
+            switch (unary.Op)
+            {
+                case UnaryOp.Inc:
+                case UnaryOp.Dec:
+                    Visit(unary.Target);
+                    _formatter.WriteToken(unary.Op.ToSymbol());
+                    break;
+                case UnaryOp.InvertSign:
+                case UnaryOp.Not:
+                    _formatter.WriteToken(unary.Op.ToSymbol());
+                    Visit(unary.Target);
+                    break;
+                case UnaryOp.ToInt:
+                case UnaryOp.ToReal:
+                case UnaryOp.ToString:
+                case UnaryOp.ToNumber:
+                case UnaryOp.ToByteArray:
+                    _formatter.WriteToken(unary.Op.ToSymbol());
+                    Visit(unary.Target);
+                    break;
+                case UnaryOp.IsTrue:
+                    Visit(unary.Target);
+                    break;
+                case UnaryOp.IsFalse:
+                    _formatter.WriteToken("!");
+                    Visit(unary.Target);
+                    break;
+                default:
+                    Visit(unary.Target);
+                    break;
+            }
+        }
+
+        internal override void VisitIfStmt(IfStatement ifStmt)
+        {
+            _formatter.WriteIdentifier("if");
+            _formatter.WriteToken("(");
+            Visit(ifStmt.Condition);
+            _formatter.WriteToken(")");
+            _formatter.WriteLine();
+
+            _formatter.WriteStartBlock();
+            Visit(ifStmt.Then);
+            _formatter.WriteEndBlock();
+            if (ifStmt.Else != null && ifStmt.Else.Statements.Count > 0)
+            {
+                _formatter.WriteIdentifier("else");
+                _formatter.WriteStartBlock();
+                Visit(ifStmt.Else);
+                _formatter.WriteEndBlock();
+            }
+        }
+
+        internal override void VisitForStmt(ForStatement forStmt)
+        {
+            _formatter.WriteIdentifier("for");
+            _formatter.WriteToken("(");
+
+            Visit(forStmt.Initializer);
+            _formatter.WriteToken(";");
+            _formatter.WriteSpace();
+
+            Visit(forStmt.Condition);
+            _formatter.WriteToken(";");
+            _formatter.WriteSpace();
+
+            Visit(forStmt.Increment);
+            //_formatter.WriteSpace();
+
+            _formatter.WriteToken(")");
+            _formatter.WriteLine();
+            _formatter.WriteStartBlock();
+            Visit(forStmt.Body);
+            _formatter.WriteEndBlock();
+        }
     }
 }

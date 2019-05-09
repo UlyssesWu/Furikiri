@@ -1,18 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using Furikiri.AST;
+﻿using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
 
 namespace Furikiri.Echo.Visitors
 {
-    internal class BaseVisitor : IVisitor
+    internal abstract class BaseVisitor : IVisitor
     {
         public void Visit(IAstNode node)
         {
             switch (node)
             {
+                //Expression
                 case BinaryExpression binaryExpression:
                     VisitBinaryExpr(binaryExpression);
                     break;
@@ -31,39 +29,55 @@ namespace Furikiri.Echo.Visitors
                 case DeleteExpression deleteExpression:
                     VisitDeleteExpr(deleteExpression);
                     break;
+                case UnaryExpression unaryExpression:
+                    VisitUnaryExpr(unaryExpression);
+                    break;
+                case ConditionExpression conditionExpression:
+                    break;
                 case ExpressionStatement expressionStatement:
                     VisitExpressionStmt(expressionStatement);
                     break;
                 case BlockStatement blockStatement:
                     VisitBlockStmt(blockStatement);
                     break;
-                case null:
-                    break;
-                case ConditionExpression conditionExpression:
-                    break;
-
-
                 case GotoExpression gotoExpression:
                     break;
-
-
-
                 case ReturnExpression returnExpression:
-                    break;
-                case UnaryExpression unaryExpression:
+                    VisitReturnExpr(returnExpression);
                     break;
                 case Expression expression:
                     break;
 
-                case DoWhileStatement doWhileStatement:
-                    break;
+                //Statement
                 case ForStatement forStatement:
+                    VisitForStmt(forStatement);
                     break;
                 case IfStatement ifStatement:
+                    VisitIfStmt(ifStatement);
+                    break;
+                case DoWhileStatement doWhileStatement:
                     break;
                 case Statement statement:
                     break;
+                default:
+                    break;
             }
+        }
+
+        internal virtual void VisitIfStmt(IfStatement ifStmt)
+        {
+        }
+
+        internal virtual void VisitReturnExpr(ReturnExpression ret)
+        {
+        }
+
+        internal virtual void VisitUnaryExpr(UnaryExpression unary)
+        {
+        }
+
+        internal virtual void VisitForStmt(ForStatement forStmt)
+        {
         }
 
         internal virtual void VisitDeleteExpr(DeleteExpression delete)
