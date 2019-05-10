@@ -33,6 +33,7 @@ namespace Furikiri.Echo.Visitors
                     VisitUnaryExpr(unaryExpression);
                     break;
                 case ConditionExpression conditionExpression:
+                    VisitConditionExpr(conditionExpression);
                     break;
                 case ExpressionStatement expressionStatement:
                     VisitExpressionStmt(expressionStatement);
@@ -57,11 +58,29 @@ namespace Furikiri.Echo.Visitors
                     break;
                 case DoWhileStatement doWhileStatement:
                     break;
+                case BreakStatement breakStatement:
+                    VisitBreakStmt(breakStatement);
+                    break;
+                case ContinueStatement continueStatement:
+                    VisitContinueStmt(continueStatement);
+                    break;
                 case Statement statement:
                     break;
                 default:
                     break;
             }
+        }
+
+        internal virtual void VisitContinueStmt(ContinueStatement continueStmt)
+        {
+        }
+
+        internal virtual void VisitBreakStmt(BreakStatement breakStmt)
+        {
+        }
+
+        internal virtual void VisitConditionExpr(ConditionExpression condition)
+        {
         }
 
         internal virtual void VisitIfStmt(IfStatement ifStmt)

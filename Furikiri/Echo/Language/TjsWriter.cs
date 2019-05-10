@@ -34,8 +34,16 @@ namespace Furikiri.Echo.Language
         {
             if (bin.IsDeclaration)
             {
-                _formatter.WriteIdentifier("var");
-                _formatter.WriteSpace();
+                if (bin.Left is IdentifierExpression id && id.Instance is IdentifierExpression instance && !instance.HideInstance)
+                {
+                    //do nothing
+                }
+                else
+                {
+                    _formatter.WriteIdentifier("var");
+                    _formatter.WriteSpace();
+                }
+
             }
 
             Visit(bin.Left);
@@ -140,6 +148,33 @@ namespace Furikiri.Echo.Language
             }
         }
 
+        internal override void VisitConditionExpr(ConditionExpression condition)
+        {
+            Visit(condition.Condition);
+        }
+
+        internal override void VisitBreakStmt(BreakStatement breakStmt)
+        {
+            _formatter.WriteKeyword("break");
+            _formatter.WriteToken(";");
+            _formatter.WriteLine();
+        }
+
+        internal override void VisitContinueStmt(ContinueStatement continueStmt)
+        {
+            _formatter.WriteKeyword("continue");
+            _formatter.WriteToken(";");
+            _formatter.WriteLine();
+        }
+
+        internal override void VisitReturnExpr(ReturnExpression ret)
+        {
+            //TODO: return value
+            _formatter.WriteKeyword("return");
+            _formatter.WriteToken(";");
+            _formatter.WriteLine();
+        }
+
         internal override void VisitIfStmt(IfStatement ifStmt)
         {
             _formatter.WriteIdentifier("if");
@@ -154,6 +189,7 @@ namespace Furikiri.Echo.Language
             if (ifStmt.Else != null && ifStmt.Else.Statements.Count > 0)
             {
                 _formatter.WriteIdentifier("else");
+                _formatter.WriteLine();
                 _formatter.WriteStartBlock();
                 Visit(ifStmt.Else);
                 _formatter.WriteEndBlock();

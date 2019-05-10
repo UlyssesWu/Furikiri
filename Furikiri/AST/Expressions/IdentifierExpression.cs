@@ -22,7 +22,7 @@ namespace Furikiri.AST.Expressions
         Global = 0,
     }
 
-    class IdentifierExpression : Expression
+    class IdentifierExpression : Expression, IInstance
     {
         public override AstNodeType Type => AstNodeType.IdentifierExpression;
         public override IEnumerable<IAstNode> Children { get; }
@@ -32,11 +32,6 @@ namespace Furikiri.AST.Expressions
         public string Name { get; set; }
 
         public IdentifierType IdentifierType { get; set; } = IdentifierType.Normal;
-
-        /// <summary>
-        /// (this.)name
-        /// </summary>
-        public bool Implicit { get; set; }
 
         public IdentifierExpression(string name, IdentifierType idType = IdentifierType.Normal)
         {
@@ -48,11 +43,11 @@ namespace Furikiri.AST.Expressions
         {
             get
             {
-                if (Parent != null)
+                if (Instance != null)
                 {
-                    if (Parent is IdentifierExpression id)
+                    if (Instance is IdentifierExpression id)
                     {
-                        if (id.IdentifierType != IdentifierType.Normal && id.Implicit)
+                        if (id.IdentifierType != IdentifierType.Normal && id.HideInstance)
                         {
                             return Name;
                         }
@@ -74,5 +69,8 @@ namespace Furikiri.AST.Expressions
         {
             return Name;
         }
+
+        public bool HideInstance { get; set; }
+        public Expression Instance { get; set; }
     }
 }

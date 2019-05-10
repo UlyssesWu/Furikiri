@@ -18,6 +18,6 @@ namespace Furikiri.AST
     {
         bool HideInstance { get; } //TODO: use C#8 default implementations  
 
-        Expression Instance { get; }
+        Expression Instance { get; set; }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using Furikiri.AST.Expressions;
 using Furikiri.Echo;
 
 namespace Furikiri.AST.Statements
@@ -29,7 +30,12 @@ namespace Furikiri.AST.Statements
             Statements.Clear();
             foreach (var block in Blocks)
             {
-                Statements.AddRange(block.Statements);
+                if (block.Hidden)
+                {
+                    continue;
+                }
+                Statements.AddRange(block.Statements.Select(node =>
+                    node is Expression exp ? new ExpressionStatement(exp) : node));
             }
 
             Resolved = true;

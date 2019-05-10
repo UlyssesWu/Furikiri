@@ -14,9 +14,7 @@ namespace Furikiri.Echo.Pass
         {
             _context = context;
             _context.LoopSetSort();
-
-            IntervalAnalysisDoWhilePass();
-
+            
             foreach (var b in _context.Blocks)
             {
                 if (StructureIfElse(b, out var st))
@@ -26,6 +24,9 @@ namespace Furikiri.Echo.Pass
                     st.Else?.Blocks?.ForEach(bl => bl.Hidden = true);
                 }
             }
+
+            IntervalAnalysisDoWhilePass();
+
 
             return statement;
         }
@@ -248,21 +249,21 @@ namespace Furikiri.Echo.Pass
                 return false;
             }
 
-            var cond = (ConditionExpression) block.Statements.Last(stmt => stmt is ConditionExpression);
+            var cond = (ConditionExpression) block.Statements.LastOrDefault(stmt => stmt is ConditionExpression);
 
             BlockStatement then = null;
             BlockStatement el = null;
             var loop = _context.LoopSet.FirstOrDefault(l => l.Contains(block));
 
-            var tb = block.To[0];
-            var eb = block.To[1];
+            var thenBlock = block.To[0];
+            var elseBlock = block.To[1];
             bool hasElse = false;
-            if (tb.To.Count != 1)
+            if (thenBlock.To.Count != 1)
             {
                 return false;
             }
 
-            if (tb.To[0] == eb)
+            if (thenBlock.To[0] == elseBlock)
             {
                 hasElse = false;
             }
@@ -270,7 +271,7 @@ namespace Furikiri.Echo.Pass
             {
                 if (loop != null)
                 {
-                    if (eb.Start >= loop.Exit)
+                    if (elseBlock.Start >= loop.Exit)
                     {
                         el = new BlockStatement();
                         el.AddStatement(new BreakStatement());
@@ -279,12 +280,12 @@ namespace Furikiri.Echo.Pass
                 }
                 else
                 {
-                    if (eb.To.Count != 1)
+                    if (elseBlock.To.Count != 1)
                     {
                         return false;
                     }
 
-                    if (eb.To[0] != tb.To[0])
+                    if (elseBlock.To[0] != thenBlock.To[0])
                     {
                         return false;
                     }
@@ -295,14 +296,17 @@ namespace Furikiri.Echo.Pass
 
             if (hasElse)
             {
-                el = new BlockStatement(eb);
-                RemoveLastGoto(eb, eb.To[0]);
+                el = new BlockStatement(elseBlock);
+                RemoveLastGoto(elseBlock, elseBlock.To[0]);
+                el.ResolveFromBlocks();
             }
 
-            IfStatement i = new IfStatement((Expression) block.Statements.LastOrDefault(n => n is ConditionExpression),
-                new BlockStatement(tb), el);
+            then = new BlockStatement(thenBlock);
+            RemoveLastGoto(thenBlock, thenBlock.To[0]);
+            then.ResolveFromBlocks();
 
-            RemoveLastGoto(tb, tb.To[0]);
+            IfStatement i = new IfStatement(cond, then, el);
+
             st = i;
             return true;
         }

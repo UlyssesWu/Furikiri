@@ -9,13 +9,23 @@ namespace Furikiri.Echo.Pass
 {
     class ExpressionPass : IPass
     {
-        public static IdentifierExpression Global = new IdentifierExpression("global", IdentifierType.Global);
-        public static IdentifierExpression This = new IdentifierExpression("this", IdentifierType.This);
-        public static IdentifierExpression ThisProxy = new IdentifierExpression("", IdentifierType.ThisProxy);
+        public IdentifierExpression Global = new IdentifierExpression("global", IdentifierType.Global);
+        public IdentifierExpression This = new IdentifierExpression("this", IdentifierType.This);
+        public IdentifierExpression ThisProxy = new IdentifierExpression("", IdentifierType.ThisProxy);
 
         public BlockStatement Process(DecompileContext context, BlockStatement statement)
         {
             var entry = context.EntryBlock;
+            if (context.Object.ContextType == TjsContextType.TopLevel)
+            {
+                This.HideInstance = true;
+                ThisProxy.HideInstance = true;
+            }
+            else
+            {
+                This.HideInstance = false;
+                ThisProxy.HideInstance = false;
+            }
             var exps = new Dictionary<int, Expression>()
             {
                 {-1, This},
@@ -530,7 +540,7 @@ namespace Furikiri.Echo.Pass
                         var slot = ins.GetRegisterSlot(1);
                         var id = ex[slot] as IdentifierExpression;
                         var name = ins.Data.AsString();
-                        var newId = new IdentifierExpression(name) {Parent = id};
+                        var newId = new IdentifierExpression(name) {Instance = id};
                         id.Child = newId;
                         ex[dst] = newId;
                     }
@@ -546,7 +556,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.SPDEH:
                     case OpCode.SPDS:
                     {
-                        var left = new IdentifierExpression(ins.Data.AsString()) {Parent = ex[ins.GetRegisterSlot(0)]};
+                        var left = new IdentifierExpression(ins.Data.AsString()) {Instance = ex[ins.GetRegisterSlot(0)]};
                         var right = ex[ins.GetRegisterSlot(2)];
                         BinaryExpression b = new BinaryExpression(left, right, BinaryOp.Assign);
                         //check declare

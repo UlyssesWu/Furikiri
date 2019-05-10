@@ -9,6 +9,9 @@ namespace Furikiri.AST.Expressions
 
         public Expression Condition { get; set; }
 
+        /// <summary>
+        /// Jump if true or false
+        /// </summary>
         public bool JumpIf { get; set; }
 
         public int JumpTo { get; set; }
