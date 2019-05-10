@@ -46,6 +46,9 @@ namespace Furikiri.Echo.Visitors
                 case ReturnExpression returnExpression:
                     VisitReturnExpr(returnExpression);
                     break;
+                case ThrowExpression throwExpression:
+                    VisitThrowExpr(throwExpression);
+                    break;
                 case Expression expression:
                     break;
 
@@ -69,6 +72,10 @@ namespace Furikiri.Echo.Visitors
                 default:
                     break;
             }
+        }
+
+        internal virtual void VisitThrowExpr(ThrowExpression throwExpr)
+        {
         }
 
         internal virtual void VisitContinueStmt(ContinueStatement continueStmt)
@@ -119,14 +126,6 @@ namespace Furikiri.Echo.Visitors
         {
         }
 
-        internal virtual void VisitBlockStmt(BlockStatement block)
-        {
-            foreach (var st in block.Statements)
-            {
-                Visit(st);
-            }
-        }
-
         internal virtual void VisitIdentifierExpr(IdentifierExpression id)
         {
         }
@@ -135,6 +134,14 @@ namespace Furikiri.Echo.Visitors
         {
             Visit(bin.Left);
             Visit(bin.Right);
+        }
+
+        internal virtual void VisitBlockStmt(BlockStatement block)
+        {
+            foreach (var st in block.Statements)
+            {
+                Visit(st);
+            }
         }
     }
 }

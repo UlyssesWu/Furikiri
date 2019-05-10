@@ -34,8 +34,10 @@ namespace Furikiri.Echo.Language
         {
             if (bin.IsDeclaration)
             {
-                if (bin.Left is IdentifierExpression id && id.Instance is IdentifierExpression instance && !instance.HideInstance)
+                if (bin.Left is IdentifierExpression id && id.Instance is IdentifierExpression instance &&
+                    !instance.HideInstance)
                 {
+                    //this is to prevent adding `var` before `System.var = a;`
                     //do nothing
                 }
                 else
@@ -43,7 +45,6 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteIdentifier("var");
                     _formatter.WriteSpace();
                 }
-
             }
 
             Visit(bin.Left);
@@ -81,6 +82,13 @@ namespace Furikiri.Echo.Language
             }
 
             _formatter.WriteToken(")");
+        }
+
+        internal override void VisitThrowExpr(ThrowExpression throwExpr)
+        {
+            _formatter.WriteKeyword("throw");
+            _formatter.WriteSpace();
+            Visit(throwExpr.Target);
         }
 
         internal override void VisitConstantExpr(ConstantExpression constant)
@@ -178,6 +186,7 @@ namespace Furikiri.Echo.Language
         internal override void VisitIfStmt(IfStatement ifStmt)
         {
             _formatter.WriteIdentifier("if");
+            _formatter.WriteSpace();
             _formatter.WriteToken("(");
             Visit(ifStmt.Condition);
             _formatter.WriteToken(")");
@@ -199,6 +208,7 @@ namespace Furikiri.Echo.Language
         internal override void VisitForStmt(ForStatement forStmt)
         {
             _formatter.WriteIdentifier("for");
+            _formatter.WriteSpace();
             _formatter.WriteToken("(");
 
             Visit(forStmt.Initializer);
