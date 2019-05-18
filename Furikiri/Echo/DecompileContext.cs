@@ -1,11 +1,8 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using Furikiri.AST.Expressions;
 using Furikiri.Echo.Logical;
-using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo
@@ -36,13 +33,8 @@ namespace Furikiri.Echo
         internal List<Loop> LoopSet { get; set; } = new List<Loop>();
 
         public CodeObject Object { get; set; }
-        public List<DetectHandler> Detectors { get; set; }
-        public List<Instruction> InstructionQueue { get; set; } = new List<Instruction>();
-        public List<IPattern> Patterns { get; set; } = new List<IPattern>();
         public Dictionary<int, ITjsVariant> Vars { get; set; } = new Dictionary<int, ITjsVariant>();
-
-        public Dictionary<int, IExpression> Expressions { get; set; } =
-            new Dictionary<int, IExpression>();
+        
 
         internal Dictionary<string, ITjsVariant> RegisteredMembers { get; set; } =
             new Dictionary<string, ITjsVariant>();
@@ -53,16 +45,6 @@ namespace Furikiri.Echo
         public DecompileContext(CodeObject obj)
         {
             Object = obj;
-            if (obj.ContextType == TjsContextType.TopLevel || obj.Parent == null)
-            {
-                Expressions[-1] = new ThisPattern(true) {This = obj};
-                Expressions[-2] = new ThisPattern(true, true) {This = obj};
-            }
-            else
-            {
-                Expressions[-1] = new ThisPattern(false) {This = obj};
-                Expressions[-2] = new ThisPattern(false, true) {This = obj};
-            }
         }
 
         public DecompileContext()
@@ -78,99 +60,7 @@ namespace Furikiri.Echo
 
             return TjsVarType.Null;
         }
-
-        public bool DetectPattern(List<Instruction> instructions, int offset, out IPattern pattern)
-        {
-            foreach (var detect in Detectors)
-            {
-                var result = detect(instructions, offset, this);
-                if (result != null)
-                {
-                    pattern = result;
-                    return true;
-                }
-            }
-
-            InstructionQueue.Add(instructions[offset]);
-            pattern = null;
-            return false;
-        }
-
-        /// <summary>
-        /// Pop Instruction Queue
-        /// </summary>
-        /// <param name="slots"></param>
-        /// <param name="clear"></param>
-        public void PopExpressionPatterns(List<short> slots = null, bool clear = true)
-        {
-            if (slots != null && slots.Count > 0 && Patterns.Count > 0)
-            {
-                for (int i = Patterns.Count - 1; i > 0; i--)
-                {
-                    if (Patterns[i] is IExpression exp)
-                    {
-                        if (slots.Contains(exp.Slot))
-                        {
-                            Expressions[exp.Slot] = exp;
-                            slots.Remove(exp.Slot);
-                            if (slots.Count == 0)
-                            {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (InstructionQueue != null && InstructionQueue.Count > 0)
-            {
-                var offset = 0;
-                while (offset < InstructionQueue.Count)
-                {
-                    switch (InstructionQueue[offset].OpCode)
-                    {
-                        case OpCode.GPD: //get
-                            var p = ChainGetPattern.Match(InstructionQueue, offset, this);
-                            Expressions[p.Slot] = p;
-                            offset += p.Length;
-                            break;
-                        case OpCode.CONST: //const
-                            var c = ConstPattern.Match(InstructionQueue, offset, this);
-                            Expressions[c.Slot] = c;
-                            offset += c.Length;
-                            break;
-                        case OpCode.CP: //fetch param
-                            var l = LocalPattern.Match(InstructionQueue, offset, this);
-                            Expressions[l.Slot] = l;
-                            break;
-                        default:
-                            Debug.WriteLine($"Ignore {InstructionQueue[offset]}");
-                            offset++;
-                            break;
-                    }
-                }
-
-                if (clear)
-                {
-                    InstructionQueue.Clear();
-                }
-            }
-
-            return;
-        }
-
-        public void TypeInferScan(List<Instruction> instructions, int i, int slot, bool up = false)
-        {
-            if (up)
-            {
-            }
-
-            for (int j = i; j < instructions.Count; j++)
-            {
-                var ins = instructions[j];
-            }
-        }
-
+        
         #region Decompiler Core
 
         public void ScanBlocks(List<Instruction> instructions)

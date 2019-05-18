@@ -20,6 +20,23 @@ namespace Furikiri.Echo.Language
             _formatter = new TjsTextFormatter(_writer);
         }
 
+        public void WriteLine(string line = null)
+        {
+            if (string.IsNullOrEmpty(line))
+            {
+                _writer.WriteLine();
+            }
+            else
+            {
+                _writer.WriteLine(line);
+            }
+        }
+
+        public void WriteLicense()
+        {
+            _formatter.WriteComment(Const.LicenseInfo);
+        }
+
         public void WriteBlock(BlockStatement st)
         {
             Visit(st);

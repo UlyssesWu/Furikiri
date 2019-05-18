@@ -4,10 +4,11 @@
     <TargetFrameworks>netstandard2.0;net47</TargetFrameworks>
     <Authors>Ulysses</Authors>
     <Company>Project AZUSA</Company>
-    <Description>Furikiri TJS2 Decompiler</Description>
-    <Copyright>LGPLv3</Copyright>
+    <Description>TJS2 Decompiler "Furikiri"</Description>
+    <Copyright>Copyright © UlyssesWu 2018-2019</Copyright>
     <PackageProjectUrl>https://github.com/UlyssesWu/Furikiri</PackageProjectUrl>
     <LangVersion>latest</LangVersion>
+    <PackageLicenseUrl>https://github.com/UlyssesWu/Furikiri/blob/master/LICENSE</PackageLicenseUrl>
   </PropertyGroup>
 
   <ItemGroup>

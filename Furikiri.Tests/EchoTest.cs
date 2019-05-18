@@ -1,12 +1,9 @@
-﻿using System.Collections.Generic;
-using System.IO;
+﻿using System.IO;
 using System.Linq;
-using System.Text;
 using Furikiri.AST.Statements;
 using Furikiri.Echo;
 using Furikiri.Echo.Language;
 using Furikiri.Echo.Pass;
-using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Tjs2;
@@ -61,7 +58,7 @@ namespace Furikiri.Tests
         {
             var path = "..\\..\\Res\\Initialize.tjs.comp";
             Decompiler decompiler = new Decompiler(path);
-            decompiler.Decompile();
+            var result = decompiler.Decompile();
             return;
             var KAGLoadScript = decompiler.Script.Objects.Find(c => c.Name == "KAGLoadScript");
             var argC = KAGLoadScript.FuncDeclArgCount;
@@ -76,41 +73,9 @@ namespace Furikiri.Tests
 
             var s = KAGLoadScript.SourcePosArray;
         }
-
+        
         [TestMethod]
         public void TestDecompileBlock()
-        {
-            var path = "..\\..\\Res\\Initialize.tjs.comp";
-            Module md = new Module(path);
-            var mt = md.TopLevel.ResolveMethod();
-            mt.Compact();
-
-            DecompileContext context = new DecompileContext(md.TopLevel);
-            context.ScanBlocks(mt.Instructions);
-            context.ComputeDominators();
-            context.ComputeNaturalLoops();
-
-            context.Detectors = new List<DetectHandler>()
-            {
-                RegMemberPattern.Match,
-                UnaryOpPattern.Match,
-                BinaryOpPattern.Match,
-                CallPattern.Match,
-                DeletePattern.Match,
-                GotoPattern.Match
-            };
-
-            context.FillInBlocks(mt.Instructions);
-
-            //context.IntervalAnalysisDoWhilePass();
-
-            //context.LifetimeAnalysis();
-
-            var b = context.Blocks;
-        }
-
-        [TestMethod]
-        public void TestDecompileBlock2()
         {
             var path = "..\\..\\Res\\Initialize.tjs.comp";
             Module md = new Module(path);

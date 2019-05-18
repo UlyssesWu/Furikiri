@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using Furikiri.Echo;
-using Furikiri.Echo.Patterns;
 using Furikiri.Emit;
 
 namespace Furikiri

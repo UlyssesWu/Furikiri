@@ -1,7 +1,8 @@
 ﻿using System.Collections.Generic;
-using System.Diagnostics;
-using System.Text;
-using Furikiri.Echo.Patterns;
+using System.IO;
+using Furikiri.AST.Statements;
+using Furikiri.Echo.Language;
+using Furikiri.Echo.Pass;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo
@@ -14,34 +15,22 @@ namespace Furikiri.Echo
         public Module Script { get; set; }
 
         public Dictionary<CodeObject, Method> Methods { get; set; } = new Dictionary<CodeObject, Method>();
-
-        internal List<DetectHandler> Detectors = new List<DetectHandler>();
-
+        
         public Decompiler()
         {
-            Init();
         }
 
         public Decompiler(string path)
         {
-            Init();
             Script = new Module(path);
         }
 
-        private void Init()
-        {
-            Detectors.Add(RegMemberPattern.Match);
-            Detectors.Add(UnaryOpPattern.Match);
-            Detectors.Add(BinaryOpPattern.Match);
-            Detectors.Add(CallPattern.Match);
-            Detectors.Add(DeletePattern.Match);
-        }
 
-        public void Decompile()
+        public string Decompile()
         {
             if (Script == null)
             {
-                return;
+                return "";
             }
 
             Methods[Script.TopLevel] = Script.TopLevel.ResolveMethod();
@@ -56,32 +45,42 @@ namespace Furikiri.Echo
                 Methods[obj] = obj.ResolveMethod();
             }
 
-            var context = new DecompileContext(Script.TopLevel);
-            context.Detectors = Detectors;
-            var m = Methods[Script.TopLevel];
+            var statement = DecompileObject(Script.TopLevel);
+            
+            var writer = new StringWriter();
+            var tjs = new TjsWriter(writer);
+            tjs.WriteLicense();
+            tjs.WriteLine();
+            tjs.WriteBlock(statement);
+            writer.Flush();
+            var result = writer.ToString();
+            return result;
+        }
+
+        private BlockStatement DecompileObject(CodeObject obj)
+        {
+            var context = new DecompileContext(obj);
+            var m = Methods[obj];
             m.Compact();
-
             context.ScanBlocks(m.Instructions);
-            int offset = 0;
-            while (offset < m.Instructions.Count)
-            {
-                foreach (var detect in Detectors)
-                {
-                    var result = detect(m.Instructions, offset, context);
-                    if (result != null)
-                    {
-                        context.Patterns.Add(result);
-                        offset += result.Length;
-                        break;
-                    }
-                }
+            context.ComputeDominators();
+            context.ComputeNaturalLoops();
 
-                Debug.WriteLine($"Failed to detect pattern at {m.Name}:L{offset}");
-                context.InstructionQueue.Add(m.Instructions[offset]);
-                offset++;
-            }
+            context.FillInBlocks(m.Instructions);
 
-            //var text = sb.ToString();
+            var pass1 = new RegMemberPass();
+            var entry = pass1.Process(context, new BlockStatement());
+
+            var pass2 = new ExpressionPass();
+            entry = pass2.Process(context, entry);
+
+            var pass3 = new ControlFlowPass();
+            entry = pass3.Process(context, entry);
+
+            var pass4 = new StatementCollectPass();
+            entry = pass4.Process(context, entry);
+
+            return entry;
         }
     }
 }

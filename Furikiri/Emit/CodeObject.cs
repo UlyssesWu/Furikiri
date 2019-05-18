@@ -5,7 +5,7 @@ using System.Text;
 namespace Furikiri.Emit
 {
     /// <summary>
-    /// Internal Code Object, can execute ByteCode (in Krkr, not here)
+    /// Internal Code Object, can execute ByteCode (in krkr, not here)
     /// </summary>
     public class CodeObject : ISourceAccessor
     {

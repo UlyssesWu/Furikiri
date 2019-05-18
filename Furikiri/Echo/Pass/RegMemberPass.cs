@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using Furikiri.AST.Statements;
-using Furikiri.Echo.Patterns;
+﻿using Furikiri.AST.Statements;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo.Pass

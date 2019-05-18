@@ -10,7 +10,7 @@ namespace Furikiri.AST.Expressions
     class LocalExpression : Expression
     {
         public bool IsParameter { get; private set; } = false;
-        public TjsVarType VarType { get; set; }
+        public TjsVarType DataType { get; set; }
         public override AstNodeType Type => AstNodeType.LocalExpression;
         public override IEnumerable<IAstNode> Children { get; } = null;
         public short Slot { get; set; }

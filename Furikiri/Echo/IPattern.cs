@@ -25,17 +25,7 @@ namespace Furikiri.Echo
         short Slot { get; }
         string ToString();
     }
-
-    /// <summary>
-    /// Branch
-    /// </summary>
-    internal interface IBranch : IPattern
-    {
-        BranchType BranchType { get; }
-        IExpression Condition { get; }
-        string ToString();
-    }
-
+    
     internal interface ITerminal : IPattern
     {
         /// <summary>
