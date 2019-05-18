@@ -8,6 +8,10 @@ namespace Furikiri.Echo.Visitors
     {
         public void Visit(IAstNode node)
         {
+            if (node == null)
+            {
+                return;
+            }
             switch (node)
             {
                 //Expression

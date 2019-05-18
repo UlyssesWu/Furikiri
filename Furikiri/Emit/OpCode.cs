@@ -89,13 +89,13 @@ namespace Furikiri.Emit
         CGT = 10,
         /// <summary>
         /// set flag
-        /// 设置flag，%dest非0则为true
+        /// 将%dest设置为flag
         /// <example>setf %dest</example>
         /// </summary>
         SETF = 11,
         /// <summary>
         /// set not flag
-        /// 设置flag，%dest为0则为true
+        /// 将%dest设置为flag取反
         /// <example>setnf %dest</example>
         /// </summary>
         SETNF = 12,

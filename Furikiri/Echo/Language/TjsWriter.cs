@@ -144,6 +144,11 @@ namespace Furikiri.Echo.Language
             {
                 case UnaryOp.Inc:
                 case UnaryOp.Dec:
+                    if (unary.Instance != null && !unary.HideInstance)
+                    {
+                        Visit(unary.Instance);
+                        _formatter.WriteToken(".");
+                    }
                     Visit(unary.Target);
                     _formatter.WriteToken(unary.Op.ToSymbol());
                     break;

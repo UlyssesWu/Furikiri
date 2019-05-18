@@ -26,6 +26,7 @@ namespace Furikiri.Echo.Pass
                 This.HideInstance = false;
                 ThisProxy.HideInstance = false;
             }
+
             var exps = new Dictionary<int, Expression>()
             {
                 {-1, This},
@@ -97,8 +98,19 @@ namespace Furikiri.Echo.Pass
                     }
                         break;
                     case OpCode.SETF:
-                        break;
                     case OpCode.SETNF:
+                    {
+                        var dst = ins.GetRegisterSlot(0);
+                        switch (ins.OpCode)
+                        {
+                            case OpCode.SETF:
+                                ex[dst] = flagExp;
+                                break;
+                            case OpCode.SETNF:
+                                ex[dst] = new UnaryExpression(flagExp, UnaryOp.Not);
+                                break;
+                        }
+                    }
                         break;
                     case OpCode.TT:
                     {
@@ -189,15 +201,58 @@ namespace Furikiri.Echo.Pass
                     }
                         break;
                     case OpCode.INCPD:
+                    case OpCode.DECPD:
+                    {
+                        var res = ins.GetRegisterSlot(0);
+                        var obj = ins.GetRegisterSlot(1);
+                        var name = ins.Data.AsString();
+                        var op = UnaryOp.Unknown;
+                        switch (ins.OpCode)
+                        {
+                            case OpCode.INCPI:
+                                op = UnaryOp.Inc;
+                                break;
+                            case OpCode.DECPI:
+                                op = UnaryOp.Dec;
+                                break;
+                        }
+
+                        var u = new UnaryExpression(new IdentifierExpression(name), op) { Instance = ex[obj] };
+                        if (res != 0) //copy to %res
+                        {
+                            ex[res] = u;
+                        }
+
+                        expList.Add(u);
+                    }
                         break;
                     case OpCode.INCPI:
+                    case OpCode.DECPI:
+                    {
+                        var res = ins.GetRegisterSlot(0);
+                        var obj = ins.GetRegisterSlot(1);
+                        var name = ins.GetRegisterSlot(2);
+                        var op = UnaryOp.Unknown;
+                        switch (ins.OpCode)
+                        {
+                            case OpCode.INCPI:
+                                op = UnaryOp.Inc;
+                                break;
+                            case OpCode.DECPI:
+                                op = UnaryOp.Dec;
+                                break;
+                        }
+
+                        var u = new UnaryExpression(ex[name], op) {Instance = ex[obj]};
+                        if (res != 0) //copy to %res
+                        {
+                            ex[res] = u;
+                        }
+
+                        expList.Add(u);
+                    }
                         break;
                     case OpCode.INCP:
-                        break;
-                    case OpCode.DECPD:
-                        break;
-                    case OpCode.DECPI:
-                        break;
                     case OpCode.DECP:
                         break;
                     case OpCode.LORPD:
@@ -250,6 +305,7 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.SRP:
                         break;
+                    //Binary Operation
                     case OpCode.ADD:
                     case OpCode.SUB:
                     case OpCode.MOD:
@@ -409,6 +465,7 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.CHKINV:
                         break;
+                    //Invoke
                     case OpCode.CALL:
                     {
                         var call = new InvokeExpression(((OperandData) ins.Data).Variant as TjsCodeObject);
@@ -551,12 +608,14 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.SPIE:
                         break;
+                    //Set
                     case OpCode.SPD:
                     case OpCode.SPDE:
                     case OpCode.SPDEH:
                     case OpCode.SPDS:
                     {
-                        var left = new IdentifierExpression(ins.Data.AsString()) {Instance = ex[ins.GetRegisterSlot(0)]};
+                        var left = new IdentifierExpression(ins.Data.AsString())
+                            {Instance = ex[ins.GetRegisterSlot(0)]};
                         var right = ex[ins.GetRegisterSlot(2)];
                         BinaryExpression b = new BinaryExpression(left, right, BinaryOp.Assign);
                         //check declare
@@ -586,6 +645,7 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.GETP:
                         break;
+                    //Delete
                     case OpCode.DELD:
                         DeleteExpression d = new DeleteExpression(ins.Data.AsString());
                         d.Instance = ex[ins.GetRegisterSlot(1)];

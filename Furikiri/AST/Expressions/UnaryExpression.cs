@@ -4,7 +4,7 @@ using Furikiri.Emit;
 
 namespace Furikiri.AST.Expressions
 {
-    class UnaryExpression : Expression
+    class UnaryExpression : Expression, IInstance
     {
         public override AstNodeType Type => AstNodeType.UnaryExpression;
 
@@ -24,5 +24,8 @@ namespace Furikiri.AST.Expressions
             Op = op;
             Target.Parent = this;
         }
+
+        public bool HideInstance { get; }
+        public Expression Instance { get; set; }
     }
 }
