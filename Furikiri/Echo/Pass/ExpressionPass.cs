@@ -139,8 +139,6 @@ namespace Furikiri.Echo.Pass
                         expList.Add(new GotoExpression {JumpTo = ((JumpData) ins.Data).Goto.Line});
                     }
                         break;
-                    case OpCode.INC:
-                    case OpCode.DEC:
                     case OpCode.CHS:
                     case OpCode.INT:
                     case OpCode.REAL:
@@ -148,6 +146,9 @@ namespace Furikiri.Echo.Pass
                     case OpCode.NUM:
                     case OpCode.OCTET:
                     case OpCode.LNOT:
+                    case OpCode.INC:
+                    case OpCode.DEC:
+                    case OpCode.TYPEOF:
                     {
                         var dstSlot = ins.GetRegisterSlot(0);
                         var dst = ex[dstSlot];
@@ -190,6 +191,9 @@ namespace Furikiri.Echo.Pass
                             case OpCode.LNOT:
                                 op = UnaryOp.Not;
                                 break;
+                            case OpCode.TYPEOF:
+                                op = UnaryOp.TypeOf;
+                                break;
                         }
 
                         var u = new UnaryExpression(dst, op);
@@ -202,6 +206,7 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.INCPD:
                     case OpCode.DECPD:
+                    case OpCode.TYPEOFD:
                     {
                         var res = ins.GetRegisterSlot(0);
                         var obj = ins.GetRegisterSlot(1);
@@ -215,9 +220,12 @@ namespace Furikiri.Echo.Pass
                             case OpCode.DECPI:
                                 op = UnaryOp.Dec;
                                 break;
+                            case OpCode.TYPEOFD:
+                                op = UnaryOp.TypeOf;
+                                break;
                         }
 
-                        var u = new UnaryExpression(new IdentifierExpression(name), op) { Instance = ex[obj] };
+                        var u = new UnaryExpression(new IdentifierExpression(name), op) {Instance = ex[obj]};
                         if (res != 0) //copy to %res
                         {
                             ex[res] = u;
@@ -228,8 +236,9 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.INCPI:
                     case OpCode.DECPI:
+                    case OpCode.TYPEOFI:
                     {
-                        var res = ins.GetRegisterSlot(0);
+                            var res = ins.GetRegisterSlot(0);
                         var obj = ins.GetRegisterSlot(1);
                         var name = ins.GetRegisterSlot(2);
                         var op = UnaryOp.Unknown;
@@ -241,7 +250,10 @@ namespace Furikiri.Echo.Pass
                             case OpCode.DECPI:
                                 op = UnaryOp.Dec;
                                 break;
-                        }
+                            case OpCode.TYPEOFI:
+                                op = UnaryOp.TypeOf;
+                                break;
+                            }
 
                         var u = new UnaryExpression(ex[name], op) {Instance = ex[obj]};
                         if (res != 0) //copy to %res
@@ -446,12 +458,6 @@ namespace Furikiri.Echo.Pass
                     case OpCode.MULP:
                         break;
                     case OpCode.BNOT:
-                        break;
-                    case OpCode.TYPEOF:
-                        break;
-                    case OpCode.TYPEOFD:
-                        break;
-                    case OpCode.TYPEOFI:
                         break;
                     case OpCode.EVAL:
                         break;

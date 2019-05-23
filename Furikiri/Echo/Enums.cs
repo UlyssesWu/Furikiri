@@ -45,6 +45,6 @@ namespace Furikiri.Echo
         ToByteArray,
         IsTrue,
         IsFalse,
-
+        TypeOf,
     }
 }

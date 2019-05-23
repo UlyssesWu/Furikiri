@@ -365,6 +365,8 @@ namespace Furikiri
                     return "===";
                 case BinaryOp.NotCongruent:
                     return "!==";
+                case BinaryOp.InstanceOf:
+                    return "instanceof";
                 default:
                     return "#";
             }

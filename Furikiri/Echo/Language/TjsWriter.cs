@@ -172,6 +172,11 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteToken("!");
                     Visit(unary.Target);
                     break;
+                case UnaryOp.TypeOf:
+                    _formatter.WriteToken("typeof");
+                    _formatter.WriteSpace();
+                    Visit(unary.Target);
+                    break;
                 default:
                     Visit(unary.Target);
                     break;
