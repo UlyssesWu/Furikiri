@@ -53,6 +53,9 @@ namespace Furikiri.Echo.Visitors
                 case ThrowExpression throwExpression:
                     VisitThrowExpr(throwExpression);
                     break;
+                case PropertyAccessExpression propertyAccessExpression:
+                    VisitPropertyAccessExpr(propertyAccessExpression);
+                    break;
                 case Expression expression:
                     break;
 
@@ -76,6 +79,10 @@ namespace Furikiri.Echo.Visitors
                 default:
                     break;
             }
+        }
+
+        internal virtual void VisitPropertyAccessExpr(PropertyAccessExpression prop)
+        {
         }
 
         internal virtual void VisitThrowExpr(ThrowExpression throwExpr)

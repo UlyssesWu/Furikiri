@@ -148,6 +148,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.LNOT:
                     case OpCode.INC:
                     case OpCode.DEC:
+                    case OpCode.BNOT:
                     case OpCode.TYPEOF:
                     {
                         var dstSlot = ins.GetRegisterSlot(0);
@@ -178,6 +179,9 @@ namespace Furikiri.Echo.Pass
                                 break;
                             case OpCode.NUM:
                                 op = UnaryOp.ToNumber;
+                                break;
+                            case OpCode.BNOT:
+                                op = UnaryOp.BitNot;
                                 break;
                             case OpCode.OCTET:
                                 op = UnaryOp.ToByteArray;
@@ -225,7 +229,8 @@ namespace Furikiri.Echo.Pass
                                 break;
                         }
 
-                        var u = new UnaryExpression(new IdentifierExpression(name), op) {Instance = ex[obj]};
+                        //var u = new UnaryExpression(new IdentifierExpression(name), op) {Instance = ex[obj]};
+                        var u = new UnaryExpression(new IdentifierExpression(name) {Instance = ex[obj]}, op);
                         if (res != 0) //copy to %res
                         {
                             ex[res] = u;
@@ -238,7 +243,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.DECPI:
                     case OpCode.TYPEOFI:
                     {
-                            var res = ins.GetRegisterSlot(0);
+                        var res = ins.GetRegisterSlot(0);
                         var obj = ins.GetRegisterSlot(1);
                         var name = ins.GetRegisterSlot(2);
                         var op = UnaryOp.Unknown;
@@ -253,9 +258,9 @@ namespace Furikiri.Echo.Pass
                             case OpCode.TYPEOFI:
                                 op = UnaryOp.TypeOf;
                                 break;
-                            }
+                        }
 
-                        var u = new UnaryExpression(ex[name], op) {Instance = ex[obj]};
+                        var u = new UnaryExpression(new PropertyAccessExpression(ex[name], ex[obj]), op);
                         if (res != 0) //copy to %res
                         {
                             ex[res] = u;
@@ -267,53 +272,19 @@ namespace Furikiri.Echo.Pass
                     case OpCode.INCP:
                     case OpCode.DECP:
                         break;
-                    case OpCode.LORPD:
-                        break;
-                    case OpCode.LORPI:
-                        break;
                     case OpCode.LORP:
-                        break;
-                    case OpCode.LANDPD:
-                        break;
-                    case OpCode.LANDPI:
                         break;
                     case OpCode.LANDP:
                         break;
-                    case OpCode.BORPD:
-                        break;
-                    case OpCode.BORPI:
-                        break;
                     case OpCode.BORP:
-                        break;
-                    case OpCode.BXOR:
-                        break;
-                    case OpCode.BXORPD:
-                        break;
-                    case OpCode.BXORPI:
                         break;
                     case OpCode.BXORP:
                         break;
-                    case OpCode.BANDPD:
-                        break;
-                    case OpCode.BANDPI:
-                        break;
                     case OpCode.BANDP:
-                        break;
-                    case OpCode.SARPD:
-                        break;
-                    case OpCode.SARPI:
                         break;
                     case OpCode.SARP:
                         break;
-                    case OpCode.SALPD:
-                        break;
-                    case OpCode.SALPI:
-                        break;
                     case OpCode.SALP:
-                        break;
-                    case OpCode.SRPD:
-                        break;
-                    case OpCode.SRPI:
                         break;
                     case OpCode.SRP:
                         break;
@@ -326,6 +297,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.MUL:
                     case OpCode.BAND:
                     case OpCode.BOR:
+                    case OpCode.BXOR:
                     case OpCode.LAND:
                     case OpCode.LOR:
                     case OpCode.SAR:
@@ -384,6 +356,9 @@ namespace Furikiri.Echo.Pass
                             case OpCode.BOR:
                                 op = BinaryOp.BitOr;
                                 break;
+                            case OpCode.BXOR:
+                                op = BinaryOp.BitXor;
+                                break;
                             case OpCode.LAND:
                                 op = BinaryOp.LogicAnd;
                                 break;
@@ -422,42 +397,168 @@ namespace Furikiri.Echo.Pass
                     }
                         break;
                     case OpCode.ADDPD:
+                    case OpCode.SUBPD:
+                    case OpCode.MODPD:
+                    case OpCode.DIVPD:
+                    case OpCode.IDIVPD:
+                    case OpCode.MULPD:
+                    case OpCode.BANDPD:
+                    case OpCode.BORPD:
+                    case OpCode.BXORPD:
+                    case OpCode.LANDPD:
+                    case OpCode.LORPD:
+                    case OpCode.SARPD:
+                    case OpCode.SALPD:
+                    case OpCode.SRPD:
+                    {
+                        var res = ins.GetRegisterSlot(0);
+                        var obj = ins.GetRegisterSlot(1);
+                        var name = ins.Data.AsString();
+                        var op = BinaryOp.Unknown;
+
+                        var src = ex[ins.GetRegisterSlot(3)];
+                        switch (ins.OpCode)
+                        {
+                            case OpCode.ADDPD:
+                                op = BinaryOp.Add;
+                                break;
+                            case OpCode.SUBPD:
+                                op = BinaryOp.Sub;
+                                break;
+                            case OpCode.MODPD:
+                                op = BinaryOp.Mod;
+                                break;
+                            case OpCode.DIVPD:
+                                op = BinaryOp.Div;
+                                break;
+                            case OpCode.IDIVPD:
+                                op = BinaryOp.Idiv;
+                                break;
+                            case OpCode.MULPD:
+                                op = BinaryOp.Mul;
+                                break;
+                            case OpCode.BANDPD:
+                                op = BinaryOp.BitAnd;
+                                break;
+                            case OpCode.BORPD:
+                                op = BinaryOp.BitOr;
+                                break;
+                            case OpCode.BXORPD:
+                                op = BinaryOp.BitXor;
+                                break;
+                            case OpCode.LANDPD:
+                                op = BinaryOp.LogicAnd;
+                                break;
+                            case OpCode.LORPD:
+                                op = BinaryOp.LogicOr;
+                                break;
+                            case OpCode.SARPD:
+                                op = BinaryOp.NumberShiftRight;
+                                break;
+                            case OpCode.SALPD:
+                                op = BinaryOp.NumberShiftLeft;
+                                break;
+                            case OpCode.SRPD:
+                                op = BinaryOp.BitShiftRight;
+                                break;
+                        }
+
+                        BinaryExpression b = new BinaryExpression(new IdentifierExpression(name) {Instance = ex[obj]},
+                            src, op);
+
+                        if (res != 0)
+                        {
+                            ex[res] = b;
+                        }
+                    }
                         break;
                     case OpCode.ADDPI:
+                    case OpCode.SUBPI:
+                    case OpCode.MODPI:
+                    case OpCode.DIVPI:
+                    case OpCode.IDIVPI:
+                    case OpCode.MULPI:
+                    case OpCode.BANDPI:
+                    case OpCode.BORPI:
+                    case OpCode.BXORPI:
+                    case OpCode.LANDPI:
+                    case OpCode.LORPI:
+                    case OpCode.SARPI:
+                    case OpCode.SALPI:
+                    case OpCode.SRPI:
+                    {
+                        var res = ins.GetRegisterSlot(0);
+                        var obj = ins.GetRegisterSlot(1);
+                        var name = ins.GetRegisterSlot(2);
+                        var op = BinaryOp.Unknown;
+
+                        var src = ex[ins.GetRegisterSlot(3)];
+                        switch (ins.OpCode)
+                        {
+                            case OpCode.ADDPI:
+                                op = BinaryOp.Add;
+                                break;
+                            case OpCode.SUBPI:
+                                op = BinaryOp.Sub;
+                                break;
+                            case OpCode.MODPI:
+                                op = BinaryOp.Mod;
+                                break;
+                            case OpCode.DIVPI:
+                                op = BinaryOp.Div;
+                                break;
+                            case OpCode.IDIVPI:
+                                op = BinaryOp.Idiv;
+                                break;
+                            case OpCode.MULPI:
+                                op = BinaryOp.Mul;
+                                break;
+                            case OpCode.BANDPI:
+                                op = BinaryOp.BitAnd;
+                                break;
+                            case OpCode.BORPI:
+                                op = BinaryOp.BitOr;
+                                break;
+                            case OpCode.BXORPI:
+                                op = BinaryOp.BitXor;
+                                break;
+                            case OpCode.LANDPI:
+                                op = BinaryOp.LogicAnd;
+                                break;
+                            case OpCode.LORPI:
+                                op = BinaryOp.LogicOr;
+                                break;
+                            case OpCode.SARPI:
+                                op = BinaryOp.NumberShiftRight;
+                                break;
+                            case OpCode.SALPI:
+                                op = BinaryOp.NumberShiftLeft;
+                                break;
+                            case OpCode.SRPI:
+                                op = BinaryOp.BitShiftRight;
+                                break;
+                        }
+
+                        BinaryExpression b =
+                            new BinaryExpression(new PropertyAccessExpression(ex[name], ex[obj]), src, op);
+
+                        if (res != 0)
+                        {
+                            ex[res] = b;
+                        }
+                    }
                         break;
                     case OpCode.ADDP:
                         break;
-                    case OpCode.SUBPD:
-                        break;
-                    case OpCode.SUBPI:
-                        break;
                     case OpCode.SUBP:
-                        break;
-                    case OpCode.MODPD:
-                        break;
-                    case OpCode.MODPI:
                         break;
                     case OpCode.MODP:
                         break;
-                    case OpCode.DIVPD:
-                        break;
-                    case OpCode.DIVPI:
-                        break;
                     case OpCode.DIVP:
-                        break;
-                    case OpCode.IDIVPD:
-                        break;
-                    case OpCode.IDIVPI:
                         break;
                     case OpCode.IDIVP:
                         break;
-                    case OpCode.MULPD:
-                        break;
-                    case OpCode.MULPI:
-                        break;
                     case OpCode.MULP:
-                        break;
-                    case OpCode.BNOT:
                         break;
                     case OpCode.EVAL:
                         break;

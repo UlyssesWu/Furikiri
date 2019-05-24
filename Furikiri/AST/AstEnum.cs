@@ -29,6 +29,7 @@
         GotoExpression,
         ConditionExpression,
         DeleteExpression,
+        PropertyAccessExpression,
     }
 
 }
