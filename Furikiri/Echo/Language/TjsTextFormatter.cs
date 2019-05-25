@@ -53,16 +53,6 @@ namespace Furikiri.Echo.Language
             Writer.Write(literal);
         }
 
-        public void WriteDefinition(string value)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void WriteReference(string value)
-        {
-            throw new NotImplementedException();
-        }
-
         public void WriteIdentifier(string value)
         {
             Writer.Write(value);

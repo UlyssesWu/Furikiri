@@ -3,6 +3,7 @@ using System.IO;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
 using Furikiri.Echo.Visitors;
+using Furikiri.Emit;
 
 namespace Furikiri.Echo.Language
 {
@@ -18,6 +19,64 @@ namespace Furikiri.Echo.Language
         {
             _writer = new IndentedTextWriter(writer);
             _formatter = new TjsTextFormatter(_writer);
+        }
+
+        private void WriteSignature(Method method)
+        {
+            if (method.Object.ContextType == TjsContextType.TopLevel)
+            {
+                return;
+            }
+            //_formatter.WriteKeyword(method.Object.ContextType.ContextTypeName());
+            _formatter.WriteKeyword("function");
+            _formatter.WriteSpace();
+            if (method.Object.ContextType == TjsContextType.Function)
+            {
+                _formatter.WriteIdentifier(method.Name);
+            }
+
+            _formatter.WriteToken("(");
+            //TODO: parameters
+            _formatter.WriteToken(")");
+            _formatter.WriteLine();
+        }
+
+        /// <summary>
+        /// Write Function
+        /// </summary>
+        /// <param name="method"></param>
+        /// <param name="block"></param>
+        public void WriteFunction(Method method, BlockStatement block)
+        {
+            WriteSignature(method);
+            WriteMethodBody(method, block, method.Object.ContextType != TjsContextType.TopLevel);
+        }
+
+        /// <summary>
+        /// Write Method Body
+        /// <para>Method can be function, property getter/setter etc.</para>
+        /// </summary>
+        /// <param name="method"></param>
+        /// <param name="block"></param>
+        private void WriteMethodBody(Method method, BlockStatement block, bool braces = true)
+        {
+            if (braces)
+            {
+                _formatter.WriteToken("{");
+                _formatter.WriteLine();
+                _formatter.Indent();
+            }
+
+
+            WriteBlock(block);
+
+            if (braces)
+            {
+                _formatter.Outdent();
+                _formatter.WriteLine();
+                _formatter.WriteToken("}");
+            }
+
         }
 
         public void WriteLine(string line = null)
@@ -179,11 +238,12 @@ namespace Furikiri.Echo.Language
                     Visit(unary.Target);
                     break;
                 case UnaryOp.IsFalse:
-                    _formatter.WriteToken("!");
+                    _formatter.WriteToken(unary.Op.ToSymbol());
                     Visit(unary.Target);
                     break;
                 case UnaryOp.TypeOf:
-                    _formatter.WriteToken("typeof");
+                case UnaryOp.Invalidate:
+                    _formatter.WriteToken(unary.Op.ToSymbol());
                     _formatter.WriteSpace();
                     Visit(unary.Target);
                     break;
@@ -214,8 +274,13 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitReturnExpr(ReturnExpression ret)
         {
-            //TODO: return value
             _formatter.WriteKeyword("return");
+            if (ret.Return != null)
+            {
+                _formatter.WriteSpace();
+                Visit(ret.Return);
+            }
+
             _formatter.WriteToken(";");
             _formatter.WriteLine();
         }

@@ -4,6 +4,8 @@ Furikiri (FreeKiri / [フリキリ](https://ja.wikipedia.org/wiki/%E3%83%95%E3%8
 
 Furikiri is currently in development and NOT ready for use. Pull request is welcomed.
 
+The following softwares/projects are parts of Furikiri.
+
 ## Girigiri
 *ギリギリ(girigiri)愛♫~ キリキリ(kirikiri)舞い♫~*
 

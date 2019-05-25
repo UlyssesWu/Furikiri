@@ -404,12 +404,15 @@ namespace Furikiri
                 case UnaryOp.ToByteArray:
                     return "(octet)"; //FIXME: fix this
                 case UnaryOp.IsTrue:
-                    break;
+                    return "";
                 case UnaryOp.IsFalse:
-                    break;
+                    return "!";
+                case UnaryOp.Invalidate:
+                    return "invalidate";
                 default:
                     break;
             }
+
             return "";
         }
 
@@ -490,6 +493,16 @@ namespace Furikiri
             if (list.Count > index)
             {
                 return list[index];
+            }
+
+            return default;
+        }
+
+        public static V TryGet<K, V>(this Dictionary<K, V> dic, K key)
+        {
+            if (key != null && dic.ContainsKey(key))
+            {
+                return dic[key];
             }
 
             return default;

@@ -7,8 +7,11 @@ namespace Furikiri.AST.Expressions
         public override AstNodeType Type => AstNodeType.ReturnExpression;
         public override IEnumerable<IAstNode> Children { get; }
 
-        public ReturnExpression()
+        public Expression Return { get; set; }
+
+        public ReturnExpression(Expression ret = null)
         {
+            Return = ret;
         }
     }
 }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace Furikiri.Emit
@@ -35,6 +36,29 @@ namespace Furikiri.Emit
 
         public CodeObject TopLevel { get; set; }
         public List<CodeObject> Objects { get; set; }
+        public Dictionary<CodeObject, Method> Methods { get; set; } = new Dictionary<CodeObject, Method>();
+        public Dictionary<string, Property> Properties { get; set; } = new Dictionary<string, Property>();
+
+        public void Resolve()
+        {
+            Methods = new Dictionary<CodeObject, Method>();
+            Properties = new Dictionary<string, Property>();
+
+            //Method
+            foreach (var method in Objects.Where(obj =>
+                obj.ContextType == TjsContextType.TopLevel || obj.ContextType == TjsContextType.PropertyGetter ||
+                obj.ContextType == TjsContextType.PropertySetter || obj.ContextType == TjsContextType.Function ||
+                obj.ContextType == TjsContextType.ExprFunction))
+            {
+                Methods[method] = method.ResolveMethod();
+            }
+
+            //Property
+            foreach (var prop in Objects.Where(obj => obj.ContextType == TjsContextType.Property))
+            {
+                Properties[prop.Name] = prop.ResolveProperty(Methods.TryGet(prop.Getter), Methods.TryGet(prop.Setter));
+            }
+        }
 
         public Module(string path)
         {

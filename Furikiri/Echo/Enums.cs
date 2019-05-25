@@ -48,5 +48,7 @@ namespace Furikiri.Echo
         IsTrue,
         IsFalse,
         TypeOf,
+        Invalidate,
+        PropertyObject,
     }
 }

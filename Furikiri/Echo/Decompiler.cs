@@ -14,8 +14,6 @@ namespace Furikiri.Echo
     {
         public Module Script { get; set; }
 
-        public Dictionary<CodeObject, Method> Methods { get; set; } = new Dictionary<CodeObject, Method>();
-        
         public Decompiler()
         {
         }
@@ -33,25 +31,46 @@ namespace Furikiri.Echo
                 return "";
             }
 
-            Methods[Script.TopLevel] = Script.TopLevel.ResolveMethod();
+            Script.Resolve();
 
-            foreach (var obj in Script.Objects)
+            Dictionary<Method, BlockStatement> methods = new Dictionary<Method, BlockStatement>();
+
+            methods.Add(Script.Methods[Script.TopLevel], DecompileObject(Script.TopLevel));
+            foreach (var method in Script.Methods)
             {
-                if (obj == Script.TopLevel)
+                if (method.Key == Script.TopLevel)
                 {
                     continue;
                 }
 
-                Methods[obj] = obj.ResolveMethod();
+                switch (method.Key.ContextType)
+                {
+                    case TjsContextType.PropertyGetter:
+                    case TjsContextType.PropertySetter:
+                        break;
+                    case TjsContextType.Function:
+                    case TjsContextType.ExprFunction:
+                    case TjsContextType.TopLevel:
+                        //if (method.Value.Name == "TestLoop")
+                        //{
+                        //    continue;
+                        //}
+                        var block = DecompileObject(method.Key);
+                        methods.Add(method.Value, block);
+                        break;
+                }
             }
 
-            var statement = DecompileObject(Script.TopLevel);
-            
             var writer = new StringWriter();
             var tjs = new TjsWriter(writer);
             tjs.WriteLicense();
-            tjs.WriteLine();
-            tjs.WriteBlock(statement);
+
+            foreach (var m in methods)
+            {
+                tjs.WriteLine();
+                tjs.WriteFunction(m.Key, m.Value);
+            }
+
             writer.Flush();
             var result = writer.ToString();
             return result;
@@ -60,7 +79,7 @@ namespace Furikiri.Echo
         private BlockStatement DecompileObject(CodeObject obj)
         {
             var context = new DecompileContext(obj);
-            var m = Methods[obj];
+            var m = Script.Methods[obj];
             m.Compact();
             context.ScanBlocks(m.Instructions);
             context.ComputeDominators();

@@ -77,12 +77,7 @@ namespace Furikiri.Emit
             val.This = ths;
             Properties[name] = (val, flag);
         }
-
-        public Method ResolveMethod()
-        {
-            return new Method(this);
-        }
-
+        
         public string GetDisassembleSignatureString() =>
             $"({ContextType.ContextTypeName()}) {Name} 0x{GetHashCode():X8}";
     }

@@ -1,14 +1,27 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace Furikiri.Emit
+﻿namespace Furikiri.Emit
 {
-    internal class Property
+    public class Property
     {
-        public CodeObject Parent { get; set; }
-        public string Name { get; set; }
-        public CodeObject Getter { get; set; }
-        public CodeObject Setter { get; set; }
+        public CodeObject Parent
+        {
+            get => Object.Parent;
+            set => Object.Parent = value;
+        }
+
+        public CodeObject Object { get; set; }
+
+        public string Name
+        {
+            get => Object.Name;
+            set => Object.Name = value;
+        }
+
+        public Method Getter { get; set; }
+        public Method Setter { get; set; }
+
+        public Property(CodeObject obj)
+        {
+            Object = obj;
+        }
     }
 }

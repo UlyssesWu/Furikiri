@@ -713,7 +713,7 @@ namespace Furikiri.Emit
         /// <summary>
         /// set property indirect
         /// set属性（间接）
-        /// 将%obj.%name设置为%src的值，如果%obj.*name不存在则新建
+        /// 将%obj.%name设置为%src的值，如果%obj.%name不存在则新建
         /// <example>spie %obj.%name, %src</example>
         /// </summary>
         SPIE = 109,
