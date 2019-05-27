@@ -14,7 +14,9 @@ namespace Furikiri.Echo.Pass
         {
             _context = context;
             _context.LoopSetSort();
-            
+
+            IntervalAnalysisDoWhilePass();
+
             foreach (var b in _context.Blocks)
             {
                 if (StructureIfElse(b, out var st))
@@ -24,8 +26,6 @@ namespace Furikiri.Echo.Pass
                     st.Else?.Blocks?.ForEach(bl => bl.Hidden = true);
                 }
             }
-
-            IntervalAnalysisDoWhilePass();
 
 
             return statement;

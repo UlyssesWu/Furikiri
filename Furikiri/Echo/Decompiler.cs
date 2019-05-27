@@ -14,7 +14,7 @@ namespace Furikiri.Echo
     {
         public Module Script { get; set; }
 
-        public Decompiler()
+        internal Decompiler()
         {
         }
 
@@ -81,12 +81,8 @@ namespace Furikiri.Echo
             var context = new DecompileContext(obj);
             var m = Script.Methods[obj];
             m.Compact();
-            context.ScanBlocks(m.Instructions);
-            context.ComputeDominators();
-            context.ComputeNaturalLoops();
-
-            context.FillInBlocks(m.Instructions);
-
+            context.BuildCFG(m.Instructions);
+            
             var pass1 = new RegMemberPass();
             var entry = pass1.Process(context, new BlockStatement());
 

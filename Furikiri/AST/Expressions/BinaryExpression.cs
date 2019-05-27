@@ -11,6 +11,8 @@ namespace Furikiri.AST.Expressions
     {
         public override AstNodeType Type => AstNodeType.BinaryExpression;
 
+        private string DebugString => $"{Left}, {Right}, {Op.ToSymbol()}";
+
         public override IEnumerable<IAstNode> Children
         {
             get
@@ -56,6 +58,11 @@ namespace Furikiri.AST.Expressions
                         return false;
                 }
             }
+        }
+
+        public override string ToString()
+        {
+            return DebugString;
         }
     }
 }

@@ -61,9 +61,20 @@ namespace Furikiri.Echo
             return TjsVarType.Null;
         }
         
-        #region Decompiler Core
+        #region CFG
 
-        public void ScanBlocks(List<Instruction> instructions)
+        public void BuildCFG(List<Instruction> instructions)
+        {
+            ScanBlocks(instructions);
+            ComputeDominators();
+            ComputeNaturalLoops();
+
+            FillInBlocks(instructions);
+
+            LifetimeAnalysis();
+        }
+
+        internal void ScanBlocks(List<Instruction> instructions)
         {
             ExitBlock = new Block(instructions.Count) {End = instructions.Count};
 
@@ -366,132 +377,7 @@ namespace Furikiri.Echo
                 TravelLoop(set, child);
             }
         }
-
-        //internal void IntervalAnalysisDoWhilePass()
-        //{
-        //    LoopSetSort();
-        //    foreach (var loop in LoopSet)
-        //    {
-        //        var dw = new DoWhilePattern();
-        //        dw.Condition = loop.FindCondition();
-        //        dw.Content = loop.Blocks;
-        //        dw.Break = FindBreak(loop);
-        //        dw.Continue = null;
-
-        //        var cont = loop.Blocks.LastOrDefault();
-
-        //        if (cont != null)
-        //        {
-        //            if (cont.Statements.LastOrDefault() is IfPattern i)
-        //            {
-        //                if (i.To == loop.Header)
-        //                {
-        //                    dw.Continue = cont;
-        //                }
-        //            }
-        //        }
-
-        //        loop.Header.Statements.Clear();
-        //        loop.Header.Statements.Add(dw);
-        //        StructureBreakContinue(dw, dw.Continue, dw.Break);
-        //    }
-        //}
-
-        //internal void StructureBreakContinue(IBranch stmt, Block continueBlock, Block breakBlock)
-        //{
-        //    switch (stmt)
-        //    {
-        //        case IfPattern ifStmt:
-        //            if (ifStmt.Else != null && ifStmt.Else.Count > 0)
-        //            {
-        //                foreach (var el in ifStmt.Else)
-        //                {
-        //                    foreach (var elStmt in el.Statements)
-        //                    {
-        //                        if (elStmt is IBranch b)
-        //                        {
-        //                            StructureBreakContinue(b, continueBlock, breakBlock);
-        //                        }
-        //                    }
-        //                }
-        //            }
-
-        //            if (ifStmt.Content != null && ifStmt.Content.Count > 0)
-        //            {
-        //                foreach (var el in ifStmt.Content)
-        //                {
-        //                    foreach (var elStmt in el.Statements)
-        //                    {
-        //                        if (elStmt is IBranch b)
-        //                        {
-        //                            StructureBreakContinue(b, continueBlock, breakBlock);
-        //                        }
-        //                    }
-        //                }
-        //            }
-
-        //            break;
-        //    }
-        //}
-
-        //internal bool StructureIfElse(Block block)
-        //{
-        //    if (block.To.Count != 2)
-        //    {
-        //        return false;
-        //    }
-
-        //    var trueB = block.To[0];
-        //    var falseB = block.To[1];
-        //    bool hasElse = true;
-        //    if (trueB.To.Count != 1)
-        //    {
-        //        return false;
-        //    }
-
-        //    if (trueB.To[0] == falseB)
-        //    {
-        //        hasElse = false;
-        //    }
-        //    else
-        //    {
-        //        if (falseB.To.Count != 1)
-        //        {
-        //            return false;
-        //        }
-
-        //        if (falseB.To[0] != trueB.To[0])
-        //        {
-        //            return false;
-        //        }
-
-        //        hasElse = true;
-        //    }
-
-
-        //    IfPattern i = new IfPattern();
-        //    //i.Condition
-        //    i.Content.Add(trueB);
-
-        //    RemoveLastGoto(trueB, trueB.To[0]);
-        //    if (hasElse)
-        //    {
-        //        i.Else.Add(falseB);
-        //        RemoveLastGoto(falseB, falseB.To[0]);
-        //    }
-
-        //    return true;
-        //}
-
-        //private void RemoveLastGoto(Block from, Block to)
-        //{
-        //    var gt = from.Statements.LastOrDefault(p => p is InstructionPattern i && i.IsJump);
-        //    if (gt != null)
-        //    {
-        //        from.Statements.Remove(gt);
-        //    }
-        //}
-
+        
         //private void FillInstructionIntoBlock(Block block, List<Instruction> instructions)
         //{
         //    block.Statements.Clear();
@@ -542,80 +428,77 @@ namespace Furikiri.Echo
             }
         }
 
-        //internal void LifetimeAnalysis()
-        //{
-        //    //Pass 1
-        //    foreach (var block in Blocks)
-        //    {
-        //        block.Use = new HashSet<int>();
-        //        block.Def = new HashSet<int>();
-        //        block.Input = new HashSet<int>();
-        //        block.Output = new HashSet<int>();
-        //        for (int i = block.Statements.Count - 1; i >= 0; i--)
-        //        {
-        //            if (!(block.Statements[i] is ITerminal ins))
-        //            {
-        //                continue;
-        //            }
+        internal void LifetimeAnalysis()
+        {
+            //Pass 1
+            foreach (var block in Blocks)
+            {
+                block.Use = new HashSet<int>();
+                block.Def = new HashSet<int>();
+                block.Input = new HashSet<int>();
+                block.Output = new HashSet<int>();
+                block.InstructionDatas = new List<InstructionData>(block.Instructions.Count);
+                for (int i = block.Instructions.Count - 1; i >= 0; i--)
+                {
+                    var ins = block.Instructions[i];
+                    var insData = new InstructionData(ins);
+                    block.InstructionDatas.Add(insData);
+                    insData.ComputeUseDef();
 
-        //            ins.ComputeUseDefs();
+                    insData.LiveOut = insData.Read;
+                    insData.Dead.AddRange(insData.Write.Except(insData.LiveOut));
+                    block.Use.AddRange(insData.LiveOut);
+                    block.Use.AddRange(block.Use.Except(insData.Dead));
+                    block.Def.AddRange(insData.Dead);
+                    block.Def.AddRange(block.Def.Except(insData.LiveOut));
+                }
 
-        //            ins.LiveOut = ins.Read;
-        //            ins.Dead.AddRange(ins.Write.Except(ins.LiveOut));
-        //            block.Use.AddRange(ins.LiveOut);
-        //            block.Use.AddRange(block.Use.Except(ins.Dead));
-        //            block.Def.AddRange(ins.Dead);
-        //            block.Def.AddRange(block.Def.Except(ins.LiveOut));
-        //        }
-        //    }
+                block.InstructionDatas.Reverse();
+            }
 
-        //    //Pass 2
-        //    bool changed = true;
-        //    while (changed)
-        //    {
-        //        changed = false;
-        //        foreach (var block in Blocks)
-        //        {
-        //            var output = new HashSet<int>(block.Def);
-        //            foreach (var succ in block.To)
-        //            {
-        //                output.AddRange(succ.Input);
-        //            }
+            //Pass 2
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                foreach (var block in Blocks)
+                {
+                    var output = new HashSet<int>(block.Def);
+                    foreach (var succ in block.To)
+                    {
+                        output.AddRange(succ.Input);
+                    }
 
-        //            var input = new HashSet<int>(block.Use);
-        //            input.AddRange(output.Except(block.Def));
-        //            if (!input.SetEquals(block.Input) || !output.SetEquals(block.Output))
-        //            {
-        //                changed = true;
-        //                block.Input = input;
-        //                block.Output = output;
-        //            }
-        //        }
-        //    }
+                    var input = new HashSet<int>(block.Use);
+                    input.AddRange(output.Except(block.Def));
+                    if (!input.SetEquals(block.Input) || !output.SetEquals(block.Output))
+                    {
+                        changed = true;
+                        block.Input = input;
+                        block.Output = output;
+                    }
+                }
+            }
 
-        //    //Pass 3
-        //    foreach (var block in Blocks)
-        //    {
-        //        var live = new HashSet<int>();
-        //        foreach (var succ in block.To)
-        //        {
-        //            live.AddRange(succ.Input);
-        //        }
+            //Pass 3
+            foreach (var block in Blocks)
+            {
+                var live = new HashSet<int>();
+                foreach (var succ in block.To)
+                {
+                    live.AddRange(succ.Input);
+                }
 
-        //        for (int i = block.Statements.Count - 1; i >= 0; i--)
-        //        {
-        //            if (!(block.Statements[i] is ITerminal ins))
-        //            {
-        //                continue;
-        //            }
-
-        //            var newLive = new HashSet<int>(ins.LiveOut);
-        //            newLive.AddRange(live.Except(ins.Dead));
-        //            ins.LiveOut = live;
-        //            live = newLive;
-        //        }
-        //    }
-        //}
+                for (int i = block.InstructionDatas.Count - 1; i >= 0; i--)
+                {
+                    var insData = block.InstructionDatas[i];
+                    var newLive = new HashSet<int>(insData.LiveOut);
+                    newLive.AddRange(live.Except(insData.Dead));
+                    insData.LiveOut = live;
+                    live = newLive;
+                }
+            }
+        }
 
         //public void PropagateExpressions()
         //{
