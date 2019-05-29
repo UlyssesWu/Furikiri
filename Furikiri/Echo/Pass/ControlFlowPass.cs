@@ -316,7 +316,8 @@ namespace Furikiri.Echo.Pass
 
         private void RemoveLastGoto(Block from, Block to)
         {
-            var gt = from.Statements.LastOrDefault(st => st is ConditionExpression || st is GotoExpression);
+            //TODO: avoid remove essential break/continue;
+            var gt = from.Statements.LastOrDefault(st => st is ConditionExpression || st is GotoExpression || st is ContinueStatement || st is BreakStatement);
             if (gt != null)
             {
                 from.Statements.Remove(gt);

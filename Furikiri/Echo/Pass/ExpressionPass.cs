@@ -37,7 +37,7 @@ namespace Furikiri.Echo.Pass
             var argCount = context.Object.FuncDeclArgCount;
             for (short i = 0; i < argCount; i++)
             {
-                short slot = (short)(-i - 3);
+                short slot = (short) (-i - 3);
                 exps.Add(slot, new LocalExpression(context.Object, slot));
             }
 
@@ -143,7 +143,8 @@ namespace Furikiri.Echo.Pass
                     case OpCode.JNF:
                     {
                         bool jmpFlag = ins.OpCode == OpCode.JF;
-                        expList.Add(new ConditionExpression(flag, jmpFlag) {JumpTo = ((JumpData) ins.Data).Goto.Line, ElseTo = ins.Line + 1});
+                        expList.Add(new ConditionExpression(flag, jmpFlag)
+                            {JumpTo = ((JumpData) ins.Data).Goto.Line, ElseTo = ins.Line + 1});
                     }
                         break;
                     case OpCode.JMP:
@@ -226,13 +227,16 @@ namespace Furikiri.Echo.Pass
                         var obj = ins.GetRegisterSlot(1);
                         var name = ins.Data.AsString();
                         var op = UnaryOp.Unknown;
+                        var push = false;
                         switch (ins.OpCode)
                         {
                             case OpCode.INCPI:
                                 op = UnaryOp.Inc;
+                                push = true;
                                 break;
                             case OpCode.DECPI:
                                 op = UnaryOp.Dec;
+                                push = true;
                                 break;
                             case OpCode.TYPEOFD:
                                 op = UnaryOp.TypeOf;
@@ -246,7 +250,10 @@ namespace Furikiri.Echo.Pass
                             ex[res] = u;
                         }
 
-                        expList.Add(u);
+                        if (push)
+                        {
+                            expList.Add(u);
+                        }
                     }
                         break;
                     case OpCode.INCPI:
@@ -256,14 +263,17 @@ namespace Furikiri.Echo.Pass
                         var res = ins.GetRegisterSlot(0);
                         var obj = ins.GetRegisterSlot(1);
                         var name = ins.GetRegisterSlot(2);
+                        var push = false;
                         var op = UnaryOp.Unknown;
                         switch (ins.OpCode)
                         {
                             case OpCode.INCPI:
                                 op = UnaryOp.Inc;
+                                push = true;
                                 break;
                             case OpCode.DECPI:
                                 op = UnaryOp.Dec;
+                                push = true;
                                 break;
                             case OpCode.TYPEOFI:
                                 op = UnaryOp.TypeOf;
@@ -276,7 +286,10 @@ namespace Furikiri.Echo.Pass
                             ex[res] = u;
                         }
 
-                        expList.Add(u);
+                        if (push)
+                        {
+                            expList.Add(u);
+                        }
                     }
                         break;
                     case OpCode.INCP:
@@ -911,7 +924,6 @@ namespace Furikiri.Echo.Pass
             {
                 if (insData.LiveOut.Contains(reg))
                 {
-                    
                 }
             }
         }

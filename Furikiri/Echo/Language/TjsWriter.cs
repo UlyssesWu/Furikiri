@@ -73,7 +73,7 @@ namespace Furikiri.Echo.Language
             if (braces)
             {
                 _formatter.Outdent();
-                _formatter.WriteLine();
+                //_formatter.WriteLine();
                 _formatter.WriteToken("}");
             }
 
@@ -268,8 +268,6 @@ namespace Furikiri.Echo.Language
         internal override void VisitContinueStmt(ContinueStatement continueStmt)
         {
             _formatter.WriteKeyword("continue");
-            _formatter.WriteToken(";");
-            _formatter.WriteLine();
         }
 
         internal override void VisitReturnExpr(ReturnExpression ret)
@@ -280,9 +278,6 @@ namespace Furikiri.Echo.Language
                 _formatter.WriteSpace();
                 Visit(ret.Return);
             }
-
-            _formatter.WriteToken(";");
-            _formatter.WriteLine();
         }
 
         internal override void VisitIfStmt(IfStatement ifStmt)

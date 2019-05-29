@@ -409,6 +409,8 @@ namespace Furikiri
                     return "!";
                 case UnaryOp.Invalidate:
                     return "invalidate";
+                case UnaryOp.TypeOf:
+                    return "typeof";
                 default:
                     break;
             }

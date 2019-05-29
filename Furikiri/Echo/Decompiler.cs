@@ -65,6 +65,7 @@ namespace Furikiri.Echo
             {
                 tjs.WriteLine();
                 tjs.WriteFunction(m.Key, m.Value);
+                tjs.WriteLine();
             }
 
             writer.Flush();
