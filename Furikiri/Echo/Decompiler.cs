@@ -51,10 +51,6 @@ namespace Furikiri.Echo
                     case TjsContextType.Function:
                     case TjsContextType.ExprFunction:
                     case TjsContextType.TopLevel:
-                        //if (method.Value.Name == "TestLoop")
-                        //{
-                        //    continue;
-                        //}
                         var block = DecompileObject(method.Key);
                         methods.Add(method.Value, block);
                         break;

@@ -498,6 +498,16 @@ namespace Furikiri.Echo
                     live = newLive;
                 }
             }
+
+            //Pass 4: Set Live In
+            foreach (var block in Blocks)
+            {
+                for (int i = 1; i < block.InstructionDatas.Count; i++)
+                {
+                    var insData = block.InstructionDatas[i];
+                    insData.LiveIn = block.InstructionDatas[i - 1].LiveOut;
+                }
+            }
         }
 
         //public void PropagateExpressions()

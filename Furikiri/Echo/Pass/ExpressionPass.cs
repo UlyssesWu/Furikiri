@@ -57,9 +57,12 @@ namespace Furikiri.Echo.Pass
             var ex = new Dictionary<short, Expression>(exps);
             var expList = new List<IAstNode>();
             block.Statements = expList;
+            InstructionData insData = null;
             for (var i = 0; i < block.Instructions.Count; i++)
             {
                 var ins = block.Instructions[i];
+                insData = block.InstructionDatas[i];
+
                 switch (ins.OpCode)
                 {
                     case OpCode.NOP:
@@ -140,7 +143,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.JNF:
                     {
                         bool jmpFlag = ins.OpCode == OpCode.JF;
-                        expList.Add(new ConditionExpression(flag, jmpFlag) {JumpTo = ((JumpData) ins.Data).Goto.Line});
+                        expList.Add(new ConditionExpression(flag, jmpFlag) {JumpTo = ((JumpData) ins.Data).Goto.Line, ElseTo = ins.Line + 1});
                     }
                         break;
                     case OpCode.JMP:
@@ -327,7 +330,7 @@ namespace Furikiri.Echo.Pass
                             ex[dstSlot] = l; //assignment -> statements, local -> expressions
 
                             BinaryExpression b = new BinaryExpression(dst, src, BinaryOp.Assign) {IsDeclaration = true};
-                            ex[dstSlot] = b;
+                            //ex[dstSlot] = b;
                             expList.Add(b);
                         }
                         else if (dstSlot != 0)
@@ -902,6 +905,14 @@ namespace Furikiri.Echo.Pass
             foreach (var succ in block.To)
             {
                 BlockProcess(context, succ, ex, flag); //TODO: deep copy flag?
+            }
+
+            void SetRegister(short reg)
+            {
+                if (insData.LiveOut.Contains(reg))
+                {
+                    
+                }
             }
         }
     }

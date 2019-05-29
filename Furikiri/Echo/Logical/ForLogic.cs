@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
-using Furikiri.AST;
 using Furikiri.AST.Expressions;
+using Furikiri.AST.Statements;
 
 namespace Furikiri.Echo.Logical
 {
@@ -9,6 +9,13 @@ namespace Furikiri.Echo.Logical
         public Expression Initializer { get; set; }
         public Expression Condition { get; set; }
         public Expression Increment { get; set; }
-        public List<IAstNode> Statements { get; set; } = new List<IAstNode>();
+        public List<Block> Body { get; set; }
+        
+        public Statement ToStatement()
+        {
+            var body = new BlockStatement(Body, true);
+            ForStatement f = new ForStatement(Initializer, Condition, Increment){Body = body};
+            return f;
+        }
     }
 }

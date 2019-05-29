@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Furikiri.AST.Statements;
+using Furikiri.Echo.Logical;
 
 namespace Furikiri.Echo
 {
@@ -18,7 +19,11 @@ namespace Furikiri.Echo
 
         public List<Block> Blocks { get; set; } = new List<Block>();
 
-        public Statement LoopStatement { get; set; }
+        public ILogical LoopLogic { get; set; }
+
+        public List<Block> Body { get; set; } = new List<Block>();
+        public Block Break { get; set; } 
+        public Block Continue { get; set; }
 
         public bool Contains(Block b)
         {

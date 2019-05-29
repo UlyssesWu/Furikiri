@@ -18,7 +18,7 @@ namespace Furikiri.Echo.Pass
                 var loop = context.LoopSet.FirstOrDefault(l => l.Header == block);
                 if (loop != null)
                 {
-                    newStmts.Add(loop.LoopStatement);
+                    newStmts.Add(loop.LoopLogic.ToStatement());
                 }
                 else
                 {

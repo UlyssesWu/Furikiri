@@ -46,9 +46,13 @@ namespace Furikiri.AST.Statements
             Blocks = new List<Block> {block};
         }
 
-        public BlockStatement(List<Block> blockses)
+        public BlockStatement(List<Block> blockses, bool resolve = false)
         {
             Blocks = new List<Block>(blockses);
+            if (resolve)
+            {
+                ResolveFromBlocks();
+            }
         }
 
         public void AddStatement(Statement st)

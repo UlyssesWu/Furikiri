@@ -14,7 +14,15 @@ namespace Furikiri.AST.Expressions
         /// </summary>
         public bool JumpIf { get; set; }
 
+        /// <summary>
+        /// If jump, goto where
+        /// </summary>
         public int JumpTo { get; set; }
+
+        /// <summary>
+        /// If not jump, goto where
+        /// </summary>
+        public int ElseTo { get; set; } 
 
         public ConditionExpression(Expression condition, bool jumpIf = true)
         {

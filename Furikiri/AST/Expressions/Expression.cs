@@ -9,6 +9,6 @@ namespace Furikiri.AST.Expressions
         public abstract IEnumerable<IAstNode> Children { get; }
         public IAstNode Parent { get; set; }
 
-        protected List<Instruction> Instructions { get; } = new List<Instruction>();
+        internal int Dest { get; set; }
     }
 }

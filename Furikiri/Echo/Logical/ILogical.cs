@@ -1,10 +1,9 @@
-﻿using System.Collections.Generic;
-using Furikiri.AST;
+﻿using Furikiri.AST.Statements;
 
 namespace Furikiri.Echo.Logical
 {
     interface ILogical
     {
-        List<IAstNode> Statements { get; }
+        Statement ToStatement();
     }
 }

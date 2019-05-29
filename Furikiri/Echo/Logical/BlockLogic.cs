@@ -1,10 +1,12 @@
-﻿using System.Collections.Generic;
-using Furikiri.AST;
+﻿using Furikiri.AST.Statements;
 
 namespace Furikiri.Echo.Logical
 {
     class BlockLogic : ILogical
     {
-        public List<IAstNode> Statements { get; set; } = new List<IAstNode>();
+        public Statement ToStatement()
+        {
+            throw new System.NotImplementedException();
+        }
     }
 }

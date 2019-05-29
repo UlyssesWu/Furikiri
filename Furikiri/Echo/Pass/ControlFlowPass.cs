@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
+using Furikiri.Echo.Logical;
 
 namespace Furikiri.Echo.Pass
 {
@@ -91,12 +92,11 @@ namespace Furikiri.Echo.Pass
             {
                 var conditionBlock = loop.Blocks.Last();
                 conditionBlock.Hidden = true;
-                var dw = new DoWhileStatement();
-                dw.Condition =
-                    (Expression) conditionBlock.Statements.LastOrDefault(s => s is BinaryExpression b && b.IsCompare);
-                dw.Body = new BlockStatement(loop.Blocks);
-                dw.Body.Blocks.Remove(conditionBlock);
-                dw.Break = new BlockStatement(FindBreak(loop));
+                var dw = new WhileLogic();
+                dw.Condition = (Expression) conditionBlock.Statements.LastOrDefault(s => s is BinaryExpression b && b.IsCompare);
+                dw.Body = new List<Block>(loop.Blocks);
+                dw.Body.Remove(conditionBlock);
+                dw.Break = FindBreak(loop);
                 dw.Continue = null;
 
                 var cont = loop.Blocks.LastOrDefault();
@@ -107,7 +107,7 @@ namespace Furikiri.Echo.Pass
                     {
                         if (i.JumpTo == loop.Header.Start)
                         {
-                            dw.Continue = new BlockStatement(cont);
+                            dw.Continue = cont;
                         }
                     }
 
@@ -115,25 +115,31 @@ namespace Furikiri.Echo.Pass
                     {
                         if (g.JumpTo == loop.Header.Start)
                         {
-                            dw.Continue = new BlockStatement(cont);
+                            dw.Continue = cont;
                         }
                     }
                 }
 
-                Statement st = dw;
+                ILogical logic = dw;
                 if (DoWhileToFor(loop, dw, out var f))
                 {
-                    st = f;
+                    logic = f;
+                }
+                else
+                {
+                    foreach (var bodyBlock in dw.Body)
+                    {
+                        StructureBreakContinue(bodyBlock, dw.Continue, dw.Break);
+                    }
                 }
 
-                loop.LoopStatement = st;
+                loop.LoopLogic = logic;
                 //loop.Header.Statements.Clear();
                 //loop.Header.Statements.Add(st);
-                StructureBreakContinue(st, dw.Continue?.Blocks[0], dw.Break.Blocks[0]);
             }
         }
 
-        internal bool DoWhileToFor(Loop loop, DoWhileStatement dw, out ForStatement f)
+        internal bool DoWhileToFor(Loop loop, WhileLogic dw, out ForLogic f)
         {
             f = null;
             var idx = _context.Blocks.IndexOf(loop.Blocks.First());
@@ -146,14 +152,17 @@ namespace Furikiri.Echo.Pass
             var lastAssign =
                 (BinaryExpression) prev.Statements.LastOrDefault(
                     n => n is BinaryExpression b && b.Op == BinaryOp.Assign);
-            if (lastAssign == null || !(lastAssign.Left is LocalExpression l))
+            //if (lastAssign == null || !(lastAssign.Left is LocalExpression l))
+            if (lastAssign == null)
             {
                 return false;
             }
 
+            var l = lastAssign.Left;
+
             Expression step = null;
             //the increment statement can be unary or binary
-            UnaryExpression step1 = (UnaryExpression) dw.Continue.Blocks.Last().Statements
+            UnaryExpression step1 = (UnaryExpression) dw.Continue.Statements
                 .LastOrDefault(n => (n is UnaryExpression));
             if (step1 != null && (step1.Op == UnaryOp.Inc || step1.Op == UnaryOp.Dec) && step1.Target == l)
             {
@@ -161,7 +170,7 @@ namespace Furikiri.Echo.Pass
             }
             else
             {
-                var step2 = (BinaryExpression) dw.Continue.Blocks.Last().Statements
+                var step2 = (BinaryExpression) dw.Continue.Statements
                     .LastOrDefault(n => (n is BinaryExpression));
                 if (step2 != null)
                 {
@@ -173,18 +182,12 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
-            f = new ForStatement(lastAssign, dw.Condition, step);
+            f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body};
             prev.Statements.Remove(lastAssign);
-
-            f.Body = dw.Body;
-            if (!f.Body.Resolved)
+            
+            foreach (var bodyBlock in f.Body)
             {
-                f.Body.ResolveFromBlocks();
-            }
-
-            foreach (var bodyBlock in f.Body.Blocks)
-            {
-                StructureBreakContinue(bodyBlock, dw.Continue.Blocks[0], dw.Break.Blocks[0]);
+                StructureBreakContinue(bodyBlock, dw.Continue, dw.Break);
             }
 
             return true;
