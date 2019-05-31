@@ -13,7 +13,7 @@ namespace Furikiri.AST.Expressions
             get => string.IsNullOrEmpty(MethodName) ? MethodExpression.ToString() : MethodName;
             set => MethodName = value;
         }
-
+        
         public bool IsCtor { get; set; }
 
         public string MethodName { get; set; }
@@ -59,5 +59,12 @@ namespace Furikiri.AST.Expressions
                 return false;
             }
         }
+
+        public override string ToString()
+        {
+            return DebugString;
+        }
+
+        private string DebugString => $"call {Method} ({(string.Join(",", Parameters))})";
     }
 }

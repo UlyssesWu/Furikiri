@@ -20,11 +20,10 @@ namespace Furikiri.Echo.Pass
 
             foreach (var b in _context.Blocks)
             {
-                if (StructureIfElse(b, out var st))
+                if (StructureIfElse(b, out var logic))
                 {
-                    b.Statements.Replace(st.Condition, st);
-                    st.Then.Blocks.ForEach(bl => bl.Hidden = true);
-                    st.Else?.Blocks?.ForEach(bl => bl.Hidden = true);
+                    b.Statements.Replace(logic.Condition, logic.ToStatement());
+                    logic.HideBlocks();
                 }
             }
 
@@ -93,7 +92,8 @@ namespace Furikiri.Echo.Pass
                 var conditionBlock = loop.Blocks.Last();
                 conditionBlock.Hidden = true;
                 var dw = new WhileLogic();
-                dw.Condition = (Expression) conditionBlock.Statements.LastOrDefault(s => s is BinaryExpression b && b.IsCompare);
+                dw.Condition =
+                    (Expression) conditionBlock.Statements.LastOrDefault(s => s is BinaryExpression b && b.IsCompare);
                 dw.Body = new List<Block>(loop.Blocks);
                 dw.Body.Remove(conditionBlock);
                 dw.Break = FindBreak(loop);
@@ -184,7 +184,7 @@ namespace Furikiri.Echo.Pass
 
             f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body};
             prev.Statements.Remove(lastAssign);
-            
+
             foreach (var bodyBlock in f.Body)
             {
                 StructureBreakContinue(bodyBlock, dw.Continue, dw.Break);
@@ -213,54 +213,134 @@ namespace Furikiri.Echo.Pass
         }
 
 
-        internal void StructureBreakContinue(Statement stmt, Block continueBlock, Block breakBlock)
+        //internal void StructureBreakContinue(Statement stmt, Block continueBlock, Block breakBlock)
+        //{
+        //    switch (stmt)
+        //    {
+        //        case IfStatement ifStmt:
+        //            if (ifStmt.Else != null && ifStmt.Else != null)
+        //            {
+        //                foreach (var el in ifStmt.Else.Statements)
+        //                {
+        //                    if (el is Statement st)
+        //                    {
+        //                        StructureBreakContinue(st, continueBlock, breakBlock);
+        //                    }
+        //                }
+        //            }
+
+        //            if (ifStmt.Then != null && ifStmt.Then.Statements.Count > 0)
+        //            {
+        //                foreach (var el in ifStmt.Then.Statements)
+        //                {
+        //                    if (el is Statement st)
+        //                    {
+        //                        StructureBreakContinue(st, continueBlock, breakBlock);
+        //                    }
+        //                }
+        //            }
+
+        //            break;
+        //    }
+        //}
+
+        //internal bool StructureIfElse(Block block, out IfStatement st)
+        //{
+        //    st = null;
+        //    if (block.To.Count != 2)
+        //    {
+        //        return false;
+        //    }
+
+        //    var cond = (ConditionExpression) block.Statements.LastOrDefault(stmt => stmt is ConditionExpression);
+
+        //    BlockStatement then = null;
+        //    BlockStatement el = null;
+        //    var loop = _context.LoopSet.FirstOrDefault(l => l.Contains(block));
+
+        //    var thenBlock = block.To[0];
+        //    var elseBlock = block.To[1];
+        //    bool hasElse = false;
+        //    if (thenBlock.To.Count != 1)
+        //    {
+        //        return false;
+        //    }
+
+        //    if (thenBlock.To[0] == elseBlock)
+        //    {
+        //        hasElse = false;
+        //    }
+        //    else
+        //    {
+        //        if (loop != null)
+        //        {
+        //            if (elseBlock.Start >= loop.Exit)
+        //            {
+        //                el = new BlockStatement();
+        //                el.AddStatement(new BreakStatement());
+        //                el.Resolved = true;
+        //            }
+        //        }
+        //        else
+        //        {
+        //            if (elseBlock.To.Count != 1)
+        //            {
+        //                return false;
+        //            }
+
+        //            if (elseBlock.To[0] != thenBlock.To[0])
+        //            {
+        //                return false;
+        //            }
+
+        //            hasElse = true;
+        //        }
+        //    }
+
+        //    if (hasElse)
+        //    {
+        //        if (StructureIfElse(elseBlock, out IfStatement innerIf))
+        //        {
+        //            el = innerIf;
+        //        }
+        //        else
+        //        {
+        //            el = new BlockStatement(elseBlock);
+        //            RemoveLastGoto(elseBlock, elseBlock.To[0]);
+        //            el.ResolveFromBlocks();
+        //        }
+        //    }
+
+        //    then = new BlockStatement(thenBlock);
+        //    RemoveLastGoto(thenBlock, thenBlock.To[0]);
+        //    then.ResolveFromBlocks();
+
+        //    IfStatement i = new IfStatement(cond, then, el);
+
+        //    st = i;
+        //    return true;
+        //}
+
+        internal bool StructureIfElse(Block block, out IfLogic outIf)
         {
-            switch (stmt)
-            {
-                case IfStatement ifStmt:
-                    if (ifStmt.Else != null && ifStmt.Else != null)
-                    {
-                        foreach (var el in ifStmt.Else.Statements)
-                        {
-                            if (el is Statement st)
-                            {
-                                StructureBreakContinue(st, continueBlock, breakBlock);
-                            }
-                        }
-                    }
-
-                    if (ifStmt.Then != null && ifStmt.Then.Statements.Count > 0)
-                    {
-                        foreach (var el in ifStmt.Then.Statements)
-                        {
-                            if (el is Statement st)
-                            {
-                                StructureBreakContinue(st, continueBlock, breakBlock);
-                            }
-                        }
-                    }
-
-                    break;
-            }
-        }
-
-        internal bool StructureIfElse(Block block, out IfStatement st)
-        {
-            st = null;
+            outIf = null;
             if (block.To.Count != 2)
             {
                 return false;
             }
 
             var cond = (ConditionExpression) block.Statements.LastOrDefault(stmt => stmt is ConditionExpression);
+            if (cond == null)
+            {
+                return false;
+            }
 
-            BlockStatement then = null;
-            BlockStatement el = null;
             var loop = _context.LoopSet.FirstOrDefault(l => l.Contains(block));
 
             var thenBlock = block.To[0];
             var elseBlock = block.To[1];
-            bool hasElse = false;
+            var logic = new IfLogic {ConditionBlock = block, Condition = cond};
+
             if (thenBlock.To.Count != 1)
             {
                 return false;
@@ -268,7 +348,7 @@ namespace Furikiri.Echo.Pass
 
             if (thenBlock.To[0] == elseBlock)
             {
-                hasElse = false;
+                //hasElse = false;
             }
             else
             {
@@ -276,48 +356,55 @@ namespace Furikiri.Echo.Pass
                 {
                     if (elseBlock.Start >= loop.Exit)
                     {
-                        el = new BlockStatement();
-                        el.AddStatement(new BreakStatement());
-                        el.Resolved = true;
+                        logic.ElseType = LogicalBlockType.Statement;
+                        logic.ElseStatement = new BreakStatement();
                     }
                 }
                 else
                 {
-                    if (elseBlock.To.Count != 1)
+                    if (elseBlock.To.Count == 2) //can be inner if
+                    {
+                        if (StructureIfElse(elseBlock, out IfLogic innerIf))
+                        {
+                            logic.ElseType = LogicalBlockType.Logical;
+                            logic.ElseLogic = innerIf;
+                        }
+                        else
+                        {
+                            return false;
+                        }
+                    }
+                    else if (elseBlock.To.Count == 1)
+                    {
+                        if (elseBlock.To[0] != thenBlock.To[0])
+                        {
+                            return false;
+                        }
+
+                        //hasElse = true;
+                        logic.ElseType = LogicalBlockType.BlockList;
+                        logic.Else = new List<Block> {elseBlock};
+                        RemoveLastGoto(elseBlock, elseBlock.To[0]);
+                    }
+                    else
                     {
                         return false;
                     }
-
-                    if (elseBlock.To[0] != thenBlock.To[0])
-                    {
-                        return false;
-                    }
-
-                    hasElse = true;
                 }
             }
 
-            if (hasElse)
-            {
-                el = new BlockStatement(elseBlock);
-                RemoveLastGoto(elseBlock, elseBlock.To[0]);
-                el.ResolveFromBlocks();
-            }
-
-            then = new BlockStatement(thenBlock);
+            logic.Then = new List<Block> {thenBlock};
             RemoveLastGoto(thenBlock, thenBlock.To[0]);
-            then.ResolveFromBlocks();
 
-            IfStatement i = new IfStatement(cond, then, el);
-
-            st = i;
+            outIf = logic;
             return true;
         }
 
         private void RemoveLastGoto(Block from, Block to)
         {
             //TODO: avoid remove essential break/continue;
-            var gt = from.Statements.LastOrDefault(st => st is ConditionExpression || st is GotoExpression || st is ContinueStatement || st is BreakStatement);
+            var gt = from.Statements.LastOrDefault(st =>
+                st is ConditionExpression || st is GotoExpression || st is ContinueStatement || st is BreakStatement);
             if (gt != null)
             {
                 from.Statements.Remove(gt);

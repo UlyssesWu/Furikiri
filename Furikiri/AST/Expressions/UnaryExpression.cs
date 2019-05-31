@@ -24,5 +24,12 @@ namespace Furikiri.AST.Expressions
             Op = op;
             Target.Parent = this;
         }
+
+        public override string ToString()
+        {
+            return DebugString;
+        }
+
+        private string DebugString => $"{Op.ToSymbol()} {Target}";
     }
 }

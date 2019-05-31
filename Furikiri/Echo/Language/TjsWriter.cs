@@ -292,7 +292,7 @@ namespace Furikiri.Echo.Language
             _formatter.WriteStartBlock();
             Visit(ifStmt.Then);
             _formatter.WriteEndBlock();
-            if (ifStmt.Else != null && ifStmt.Else.Statements.Count > 0)
+            if (ifStmt.Else != null)
             {
                 _formatter.WriteIdentifier("else");
                 _formatter.WriteLine();
@@ -301,6 +301,7 @@ namespace Furikiri.Echo.Language
                 _formatter.WriteEndBlock();
             }
         }
+
 
         internal override void VisitForStmt(ForStatement forStmt)
         {
