@@ -282,7 +282,7 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitIfStmt(IfStatement ifStmt)
         {
-            _formatter.WriteIdentifier("if");
+            _formatter.WriteKeyword("if");
             _formatter.WriteSpace();
             _formatter.WriteToken("(");
             Visit(ifStmt.Condition);
@@ -294,18 +294,17 @@ namespace Furikiri.Echo.Language
             _formatter.WriteEndBlock();
             if (ifStmt.Else != null)
             {
-                _formatter.WriteIdentifier("else");
+                _formatter.WriteKeyword("else");
                 _formatter.WriteLine();
                 _formatter.WriteStartBlock();
                 Visit(ifStmt.Else);
                 _formatter.WriteEndBlock();
             }
         }
-
-
+        
         internal override void VisitForStmt(ForStatement forStmt)
         {
-            _formatter.WriteIdentifier("for");
+            _formatter.WriteKeyword("for");
             _formatter.WriteSpace();
             _formatter.WriteToken("(");
 
@@ -324,6 +323,50 @@ namespace Furikiri.Echo.Language
             _formatter.WriteLine();
             _formatter.WriteStartBlock();
             Visit(forStmt.Body);
+            _formatter.WriteEndBlock();
+        }
+
+        internal override void VisitDoWhileStmt(DoWhileStatement doWhile)
+        {
+            _formatter.WriteKeyword("do");
+            _formatter.WriteLine();
+            _formatter.WriteStartBlock();
+            Visit(doWhile.Body);
+            _formatter.WriteEndBlock();
+            _formatter.WriteKeyword("while");
+            _formatter.WriteSpace();
+            _formatter.WriteToken("(");
+            if (doWhile.Condition != null)
+            {
+                Visit(doWhile.Condition);
+            }
+            else
+            {
+                _formatter.WriteKeyword("true");
+            }
+            _formatter.WriteToken(")");
+            _formatter.WriteToken(";");
+            _formatter.WriteLine();
+        }
+
+        internal override void VisitWhileStmt(WhileStatement whileStmt)
+        {
+            _formatter.WriteKeyword("while");
+            _formatter.WriteSpace();
+            _formatter.WriteToken("(");
+            if (whileStmt.Condition != null)
+            {
+                Visit(whileStmt.Condition);
+            }
+            else
+            {
+                _formatter.WriteKeyword("true");
+            }
+            _formatter.WriteToken(")");
+            _formatter.WriteLine();
+
+            _formatter.WriteStartBlock();
+            Visit(whileStmt.Body);
             _formatter.WriteEndBlock();
         }
     }

@@ -10,7 +10,7 @@ namespace Furikiri.AST.Statements
         public override AstNodeType Type => AstNodeType.IfStatement;
         public override IEnumerable<IAstNode> Children { get; }
 
-        public BlockStatement Then { get; set; }
+        public Statement Then { get; set; }
         public Statement Else { get; set; }
         public Expression Condition { get; set; }
 

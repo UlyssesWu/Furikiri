@@ -16,17 +16,17 @@ namespace Furikiri.Echo.Logical
         public Statement ElseStatement { get; set; }
         public ILogical ElseLogic { get; set; }
         
-        public void HideBlocks(bool hideConditionBlock = false)
+        private void HideBlocks(bool hideConditionBlock = false)
         {
             if (hideConditionBlock)
             {
                 ConditionBlock.Hidden = true;
             }
-            Then?.ForEach(b => b.Hidden = true);
+            Then?.SafeHide();
             switch (ElseType)
             {
                 case LogicalBlockType.BlockList:
-                    Else?.ForEach(b => b.Hidden = true);
+                    Else?.SafeHide();
                     break;
                 case LogicalBlockType.Logical:
                     if (ElseLogic is IfLogic ifLogic)
@@ -83,6 +83,7 @@ namespace Furikiri.Echo.Logical
             }
 
             IfStatement i = new IfStatement(Condition, new BlockStatement(Then, true), el);
+            HideBlocks();
             return i;
         }
     }

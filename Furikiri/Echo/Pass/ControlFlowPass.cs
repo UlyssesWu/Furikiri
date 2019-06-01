@@ -22,8 +22,25 @@ namespace Furikiri.Echo.Pass
             {
                 if (StructureIfElse(b, out var logic))
                 {
-                    b.Statements.Replace(logic.Condition, logic.ToStatement());
-                    logic.HideBlocks();
+                    if (logic.ElseType == LogicalBlockType.Statement && logic.ElseStatement is BreakStatement)
+                    {
+                        //can be while!
+                        var loop = context.LoopSet.FirstOrDefault(l => l.Header == b);
+                        if (loop != null && loop.LoopLogic is DoWhileLogic dw)
+                        {
+                            dw.IsWhile = true;
+                            dw.Condition = logic.Condition;
+                            dw.Body = logic.Then;
+                        }
+                        else
+                        {
+                            b.Statements.Replace(logic.Condition, logic.ToStatement());
+                        }
+                    }
+                    else
+                    {
+                        b.Statements.Replace(logic.Condition, logic.ToStatement());
+                    }
                 }
             }
 
@@ -90,10 +107,27 @@ namespace Furikiri.Echo.Pass
             foreach (var loop in _context.LoopSet)
             {
                 var conditionBlock = loop.Blocks.Last();
-                //conditionBlock.Hidden = true;
+
                 var dw = new DoWhileLogic();
-                dw.Condition =
-                    (Expression) conditionBlock.Statements.LastOrDefault(s => s is BinaryExpression b && b.IsCompare);
+                var lastExpr = conditionBlock.Statements.LastOrDefault();
+                if (lastExpr is ConditionExpression condition) //Compare inside condition
+                {
+                    if (condition.Condition is BinaryExpression b && b.IsCompare)
+                    {
+                        dw.Condition = b;
+                    }
+                }
+                else if (lastExpr is BinaryExpression b && b.IsCompare)
+                {
+                    dw.Condition = b;
+                }
+                else
+                {
+                    dw.Condition =
+                        (Expression) conditionBlock.Statements.LastOrDefault(s =>
+                            s is BinaryExpression b2 && b2.IsCompare);
+                }
+
                 dw.Body = new List<Block>(loop.Blocks);
                 dw.Body.Remove(conditionBlock);
                 dw.Break = FindBreak(loop);
@@ -134,8 +168,6 @@ namespace Furikiri.Echo.Pass
                 }
 
                 loop.LoopLogic = logic;
-                //loop.Header.Statements.Clear();
-                //loop.Header.Statements.Add(st);
             }
         }
 
@@ -341,7 +373,7 @@ namespace Furikiri.Echo.Pass
             var elseBlock = block.To[1];
             var logic = new IfLogic {ConditionBlock = block, Condition = cond};
 
-            if (thenBlock.To.Count != 1)
+            if (thenBlock.To.Count != 1) //TODO: can be 2 - inner If
             {
                 return false;
             }

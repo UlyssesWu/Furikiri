@@ -17,17 +17,24 @@ namespace Furikiri.Echo.Logical
             IsWhile = isWhile;
         }
 
+        private void HideBlocks()
+        {
+            Body.SafeHide();
+        }
+
         public Statement ToStatement()
         {
             var body = new BlockStatement(Body, true);
             if (IsWhile)
             {
                 WhileStatement dw = new WhileStatement(Condition, body);
+                HideBlocks();
                 return dw;
             }
             else
             {
                 DoWhileStatement dw = new DoWhileStatement(Condition, body);
+                HideBlocks();
                 return dw;
             }
         }

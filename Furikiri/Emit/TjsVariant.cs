@@ -152,7 +152,7 @@ namespace Furikiri.Emit
 
         public TjsVarType Type => TjsVarType.Int;
         public object Value => IntValue;
-        public string DebugString => $"(int){IntValue}";
+        public string DebugString => $"({InternalType.ToString().ToLowerInvariant()}){IntValue}";
         public int IntValue { get; set; }
 
         /// <summary>
@@ -172,7 +172,7 @@ namespace Furikiri.Emit
         public TjsInt(byte val)
         {
             InternalType = TjsInternalType.Byte;
-            IntValue = val;
+            IntValue = (sbyte)val;
         }
 
         /// <summary>

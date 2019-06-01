@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using Furikiri.AST.Statements;
 using Furikiri.Echo;
 using Furikiri.Emit;
 
@@ -525,6 +526,19 @@ namespace Furikiri
         public static void Replace<T>(this List<T> l, T from, T to)
         {
             l[l.IndexOf(from)] = to;
+        }
+
+        internal static void SafeHide(this List<Block> blocks)
+        {
+            foreach (var block in blocks)
+            {
+                if (block.Statements.Count == 1 && block.Statements[0] is Statement)
+                {
+                    continue;
+                }
+
+                block.Hidden = true;
+            }
         }
     }
 }

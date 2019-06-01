@@ -67,6 +67,10 @@ namespace Furikiri.Echo.Visitors
                     VisitIfStmt(ifStatement);
                     break;
                 case DoWhileStatement doWhileStatement:
+                    VisitDoWhileStmt(doWhileStatement);
+                    break;
+                case WhileStatement whileStatement:
+                    VisitWhileStmt(whileStatement);
                     break;
                 case BreakStatement breakStatement:
                     VisitBreakStmt(breakStatement);
@@ -79,6 +83,14 @@ namespace Furikiri.Echo.Visitors
                 default:
                     break;
             }
+        }
+
+        internal virtual void VisitWhileStmt(WhileStatement whileStmt)
+        {
+        }
+
+        internal virtual void VisitDoWhileStmt(DoWhileStatement doWhile)
+        {
         }
 
         internal virtual void VisitPropertyAccessExpr(PropertyAccessExpression prop)
