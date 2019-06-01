@@ -26,7 +26,10 @@ namespace Furikiri.Echo
         LogicAnd,
         LogicOr,
         BitShiftRight,
-        BitShiftLeft, //no such op code
+        /// <summary>
+        /// No such op code
+        /// </summary>
+        BitShiftLeft,
         NumberShiftRight,
         NumberShiftLeft,
         InstanceOf,

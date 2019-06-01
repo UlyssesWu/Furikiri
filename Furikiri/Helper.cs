@@ -365,6 +365,10 @@ namespace Furikiri
                     return "===";
                 case BinaryOp.NotCongruent:
                     return "!==";
+                case BinaryOp.LessThan:
+                    return "<";
+                case BinaryOp.GreaterThan:
+                    return ">";
                 case BinaryOp.InstanceOf:
                     return "instanceof";
                 case BinaryOp.BitXor:
@@ -373,6 +377,14 @@ namespace Furikiri
                     return "&";
                 case BinaryOp.BitOr:
                     return "|";
+                case BinaryOp.NumberShiftLeft:
+                    return "<<";
+                case BinaryOp.NumberShiftRight:
+                    return ">>";
+                case BinaryOp.BitShiftRight:
+                    return ">>>";
+                case BinaryOp.BitShiftLeft:
+                    return "<<<";
 
                 default:
                     return "#";

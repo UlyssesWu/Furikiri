@@ -90,8 +90,8 @@ namespace Furikiri.Echo.Pass
             foreach (var loop in _context.LoopSet)
             {
                 var conditionBlock = loop.Blocks.Last();
-                conditionBlock.Hidden = true;
-                var dw = new WhileLogic();
+                //conditionBlock.Hidden = true;
+                var dw = new DoWhileLogic();
                 dw.Condition =
                     (Expression) conditionBlock.Statements.LastOrDefault(s => s is BinaryExpression b && b.IsCompare);
                 dw.Body = new List<Block>(loop.Blocks);
@@ -139,7 +139,7 @@ namespace Furikiri.Echo.Pass
             }
         }
 
-        internal bool DoWhileToFor(Loop loop, WhileLogic dw, out ForLogic f)
+        internal bool DoWhileToFor(Loop loop, DoWhileLogic dw, out ForLogic f)
         {
             f = null;
             var idx = _context.Blocks.IndexOf(loop.Blocks.First());

@@ -4,24 +4,30 @@ using Furikiri.AST.Statements;
 
 namespace Furikiri.Echo.Logical
 {
-    class WhileLogic : ILogical
+    class DoWhileLogic : ILogical
     {
         public Block Continue { get; set; }
         public Expression Condition { get; set; }
         public Block Break { get; set; }
         public List<Block> Body { get; set; }
-        public bool IsDoWhile { get; set; } = true;
+        public bool IsWhile { get; set; }
+
+        public DoWhileLogic(bool isWhile = false)
+        {
+            IsWhile = isWhile;
+        }
+
         public Statement ToStatement()
         {
             var body = new BlockStatement(Body, true);
-            if (IsDoWhile)
+            if (IsWhile)
             {
-                DoWhileStatement dw = new DoWhileStatement(Condition, body);
+                WhileStatement dw = new WhileStatement(Condition, body);
                 return dw;
             }
             else
             {
-                WhileStatement dw = new WhileStatement(Condition, body);
+                DoWhileStatement dw = new DoWhileStatement(Condition, body);
                 return dw;
             }
         }
