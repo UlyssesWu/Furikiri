@@ -14,7 +14,7 @@ namespace Furikiri.AST.Statements
         public Statement Else { get; set; }
         public Expression Condition { get; set; }
 
-        public IfStatement(Expression cond, BlockStatement then, Statement el)
+        public IfStatement(Expression cond, Statement then, Statement el)
         {
             Condition = cond;
             Then = then;

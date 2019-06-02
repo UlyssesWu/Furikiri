@@ -22,7 +22,7 @@ namespace Furikiri.Echo.Pass
             {
                 if (StructureIfElse(b, out var logic))
                 {
-                    if (logic.ElseType == LogicalBlockType.Statement && logic.ElseStatement is BreakStatement)
+                    if (logic.Else.IsBreak)
                     {
                         //can be while!
                         var loop = context.LoopSet.FirstOrDefault(l => l.Header == b);
@@ -30,7 +30,7 @@ namespace Furikiri.Echo.Pass
                         {
                             dw.IsWhile = true;
                             dw.Condition = logic.Condition;
-                            dw.Body = logic.Then;
+                            dw.Body = logic.Then.Blocks;
                         }
                         else
                         {
@@ -373,7 +373,12 @@ namespace Furikiri.Echo.Pass
             var elseBlock = block.To[1];
             var logic = new IfLogic {ConditionBlock = block, Condition = cond};
 
-            if (thenBlock.To.Count != 1) //TODO: can be 2 - inner If
+            if (thenBlock.To.Count == 2) //TODO: can be 2 - inner If
+            {
+                return false;
+            }
+
+            if (thenBlock.To.Count != 1)
             {
                 return false;
             }
@@ -388,8 +393,8 @@ namespace Furikiri.Echo.Pass
                 {
                     if (elseBlock.Start >= loop.Exit)
                     {
-                        logic.ElseType = LogicalBlockType.Statement;
-                        logic.ElseStatement = new BreakStatement();
+                        logic.Else.Type = LogicalBlockType.Statement;
+                        logic.Else.Statement = new BreakStatement();
                     }
                 }
                 else
@@ -398,8 +403,8 @@ namespace Furikiri.Echo.Pass
                     {
                         if (StructureIfElse(elseBlock, out IfLogic innerIf))
                         {
-                            logic.ElseType = LogicalBlockType.Logical;
-                            logic.ElseLogic = innerIf;
+                            logic.Else.Type = LogicalBlockType.Logical;
+                            logic.Else.Logic = innerIf;
                         }
                         else
                         {
@@ -414,8 +419,8 @@ namespace Furikiri.Echo.Pass
                         }
 
                         //hasElse = true;
-                        logic.ElseType = LogicalBlockType.BlockList;
-                        logic.Else = new List<Block> {elseBlock};
+                        logic.Else.Type = LogicalBlockType.BlockList;
+                        logic.Else.Blocks = new List<Block> {elseBlock};
                         RemoveLastGoto(elseBlock, elseBlock.To[0]);
                     }
                     else
@@ -425,7 +430,7 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
-            logic.Then = new List<Block> {thenBlock};
+            logic.Then.Blocks = new List<Block> {thenBlock};
             RemoveLastGoto(thenBlock, thenBlock.To[0]);
 
             outIf = logic;
