@@ -10,7 +10,6 @@ namespace Furikiri.Echo.Pass
     {
         public BlockStatement Process(DecompileContext context, BlockStatement statement)
         {
-            //TODO:
             Dictionary<Block, List<IAstNode>> blockStmts = new Dictionary<Block, List<IAstNode>>();
             foreach (var block in context.Blocks)
             {

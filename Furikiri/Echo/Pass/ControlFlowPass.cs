@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
 using Furikiri.Echo.Logical;
@@ -369,13 +370,36 @@ namespace Furikiri.Echo.Pass
 
             var loop = _context.LoopSet.FirstOrDefault(l => l.Contains(block));
 
-            var thenBlock = block.To[0];
-            var elseBlock = block.To[1];
+            Block thenBlock = block.To[0];
+            Block elseBlock = block.To[1];
+            Block toBlock = block.To.FirstOrDefault(b => b.Start == cond.JumpTo);
+            Block elBlock = block.To.FirstOrDefault(b => b.Start == cond.ElseTo);
+
+            if (toBlock != null && elBlock != null)
+            {
+                if (cond.JumpIf)
+                {
+                    thenBlock = toBlock;
+                    elseBlock = elBlock;
+                }
+                else
+                {
+                    thenBlock = elBlock;
+                    elseBlock = toBlock;
+                }
+            }
+
             var logic = new IfLogic {ConditionBlock = block, Condition = cond};
 
             if (thenBlock.To.Count == 2) //TODO: can be 2 - inner If
             {
-                return false;
+                //if (thenBlock.Statements.IsCondition())
+                //{
+                //}
+                //else
+                {
+                    return false;
+                }
             }
 
             if (thenBlock.To.Count != 1)

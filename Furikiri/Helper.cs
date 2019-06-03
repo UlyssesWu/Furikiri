@@ -10,16 +10,6 @@ namespace Furikiri
     {
         private const int NAMESPACE_DEFAULT_HASH_BITS = 3;
 
-        internal static string Term(this bool t)
-        {
-            if (t)
-            {
-                return ";";
-            }
-
-            return "";
-        }
-
         public static string ToRealString(this char[] chars)
         {
             return new string(chars);
@@ -207,13 +197,13 @@ namespace Furikiri
             switch (register)
             {
                 case RegisterParameter registerParameter:
-                    return (short) registerParameter.Slot;
+                    return registerParameter.Slot;
                 case RegisterRef registerRef:
-                    return (short) registerRef.Slot;
+                    return registerRef.Slot;
                 case RegisterShort registerShort:
                     return registerShort.Value;
                 case RegisterValue registerValue:
-                    return (short) registerValue.Slot;
+                    return registerValue.Slot;
             }
 
             return 0;

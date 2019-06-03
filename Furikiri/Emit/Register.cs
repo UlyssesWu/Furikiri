@@ -36,10 +36,10 @@ namespace Furikiri.Emit
     class RegisterValue : IRegister
     {
         public int Size => 1;
-        public int Slot { get; set; }
+        public short Slot { get; set; }
         public bool Indirect => false;
         public object Value { get; set; }
-        public RegisterValue(int slot)
+        public RegisterValue(short slot)
         {
             Slot = slot;
         }

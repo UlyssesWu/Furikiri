@@ -11,9 +11,4 @@ namespace Furikiri.AST.Expressions
 
         internal int Dest { get; set; }
     }
-
-    public static class ExpressionExtensions
-    {
-        //TODO: Invert
-    }
 }
