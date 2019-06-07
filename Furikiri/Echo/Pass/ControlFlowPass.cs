@@ -91,31 +91,25 @@ namespace Furikiri.Echo.Pass
 
             foreach (var loop in _context.LoopSet)
             {
-                var conditionBlock = loop.Blocks.Last();
-
+                var lastBlock = loop.Blocks.Last();
                 var dw = new DoWhileLogic();
-                var lastExpr = conditionBlock.Statements.LastOrDefault();
-                if (lastExpr is ConditionExpression condition) //Compare inside condition
+                dw.Break = FindBreak(loop);
+
+                Block conditionBlock = null;
+                if (lastBlock.Statements.GetCondition() is ConditionExpression lastCondi && lastCondi.TrueBranch == loop.Header.Start)
                 {
-                    if (condition.Condition is BinaryExpression b && b.IsCompare)
-                    {
-                        dw.Condition = b;
-                    }
+                    dw.Condition = lastCondi;
+                    conditionBlock = lastBlock;
                 }
-                else if (lastExpr is BinaryExpression b && b.IsCompare)
+                else if (lastBlock.Statements.Count == 1 && lastBlock.Statements[0] is GotoExpression && loop.Header.Statements.GetCondition() is ConditionExpression condi && condi.FalseBranch == dw.Break.Start)
                 {
-                    dw.Condition = b;
-                }
-                else
-                {
-                    dw.Condition =
-                        (Expression) conditionBlock.Statements.LastOrDefault(s =>
-                            s is BinaryExpression b2 && b2.IsCompare);
+                    dw.IsWhile = true;
+                    dw.Condition = condi;
+                    conditionBlock = loop.Header;
                 }
 
                 dw.Body = new List<Block>(loop.Blocks);
                 dw.Body.Remove(conditionBlock);
-                dw.Break = FindBreak(loop);
                 dw.Continue = null;
 
                 var cont = loop.Blocks.LastOrDefault();
@@ -198,6 +192,8 @@ namespace Furikiri.Echo.Pass
                     return false;
                 }
             }
+
+            dw.Continue.Hidden = true;
 
             f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body};
             prev.Statements.Remove(lastAssign);
@@ -377,7 +373,7 @@ namespace Furikiri.Echo.Pass
             var trueBlock = _context.BlockTable[condition.TrueBranch];
             var falseBlock = _context.BlockTable[condition.FalseBranch];
             Expression exp = null;
-            var dominator = FindIfDominator(logic.ConditionBlock);
+            var dominator = FindIfPostDominator(logic.ConditionBlock);
             MergeIfCondition(condition, dominator, trueBlock,  ref exp);
             if (exp != null)
             {
@@ -392,30 +388,30 @@ namespace Furikiri.Echo.Pass
             }
         }
 
-        private Block FindIfDominator(Block conditionBlock)
+        private Block FindIfPostDominator(Block conditionBlock)
         {
-            BitArray d = new BitArray(conditionBlock.Dominator);
-            FindIfDominator(conditionBlock);
+            BitArray d = new BitArray(conditionBlock.PostDominator);
+            FindPostDominator(conditionBlock);
 
-            return _context.Blocks.Find(b => b.Id == d.FirstIndexOf(true));
+            return _context.Blocks.Find(b => b.Id == d.FirstIndexOf(true, conditionBlock.Id));
 
-            void FindIfDominator(Block condition)
+            void FindPostDominator(Block condition)
             {
                 if (!condition.Statements.IsCondition())
                 {
                     return;
                 }
 
-                if (condition.Id == d.FirstIndexOf(true))
+                if (condition.Id == d.FirstIndexOf(true, conditionBlock.Id))
                 {
                     return;
                 }
 
-                d.And(condition.Dominator);
+                d.And(condition.PostDominator);
 
                 foreach (var block in condition.To)
                 {
-                    FindIfDominator(block);
+                    FindPostDominator(block);
                 }
             }
         }
@@ -504,6 +500,13 @@ namespace Furikiri.Echo.Pass
             }
 
             var loop = _context.LoopSet.FirstOrDefault(l => l.Contains(block));
+            if (loop?.LoopLogic is IConditional conditionLogic)
+            {
+                if (conditionLogic.Condition == cond)
+                {
+                    return false;
+                }
+            }
 
             Block thenBlock = block.To.FirstOrDefault(b => b.Start == cond.TrueBranch);
             Block elseBlock = block.To.FirstOrDefault(b => b.Start == cond.FalseBranch);

@@ -19,12 +19,15 @@ namespace Furikiri.Echo
         public int Start { get; set; }
         public int End { get; set; }
         public int Length => End - Start + 1;
+        /// <summary>
+        /// Dominator: must visit BEFORE reach this block
+        /// </summary>
         public BitArray Dominator { get; set; }
 
         public bool Hidden { get; set; } = false;
 
         /// <summary>
-        /// Post-Dominator
+        /// Post-Dominator: must visit beginning from this block
         /// </summary>
         /// REF: https://en.wikipedia.org/wiki/Dominator_(graph_theory)#Postdominance
         public BitArray PostDominator { get; set; }

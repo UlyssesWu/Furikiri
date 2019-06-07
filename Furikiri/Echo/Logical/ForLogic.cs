@@ -4,7 +4,7 @@ using Furikiri.AST.Statements;
 
 namespace Furikiri.Echo.Logical
 {
-    class ForLogic : ILogical
+    class ForLogic : ILogical, IConditional
     {
         public Expression Initializer { get; set; }
         public Expression Condition { get; set; }

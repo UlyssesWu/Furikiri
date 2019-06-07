@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Furikiri.AST.Statements;
 using Furikiri.Echo.Language;
 using Furikiri.Echo.Pass;
@@ -23,6 +24,39 @@ namespace Furikiri.Echo
             Script = new Module(path);
         }
 
+
+        internal string Decompile(string objName)
+        {
+            if (Script == null)
+            {
+                return "";
+            }
+
+            Script.Resolve();
+
+            Dictionary<Method, BlockStatement> methods = new Dictionary<Method, BlockStatement>();
+
+            //methods.Add(Script.Methods[Script.TopLevel], DecompileObject(Script.TopLevel));
+
+            var method = Script.Methods.FirstOrDefault(m => m.Key.Name == objName);
+            var block = DecompileObject(method.Key);
+            methods.Add(method.Value, block);
+            
+            var writer = new StringWriter();
+            var tjs = new TjsWriter(writer);
+            tjs.WriteLicense();
+
+            foreach (var m in methods)
+            {
+                tjs.WriteLine();
+                tjs.WriteFunction(m.Key, m.Value);
+                tjs.WriteLine();
+            }
+
+            writer.Flush();
+            var result = writer.ToString();
+            return result;
+        }
 
         public string Decompile()
         {
