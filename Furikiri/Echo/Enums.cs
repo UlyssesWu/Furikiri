@@ -33,6 +33,8 @@ namespace Furikiri.Echo
         NumberShiftRight,
         NumberShiftLeft,
         InstanceOf,
+        GreaterOrEqual,
+        LessOrEqual,
     }
 
     public enum UnaryOp

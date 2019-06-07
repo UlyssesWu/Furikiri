@@ -13,7 +13,7 @@ namespace Furikiri.Echo
     [DebuggerDisplay("{Start}-{End} ({Length})")]
     class Block
     {
-        public int Id { get; set; }
+        public int Id { get; internal set; }
         public List<Block> From { get; set; } = new List<Block>();
         public List<Block> To { get; set; } = new List<Block>();
         public int Start { get; set; }

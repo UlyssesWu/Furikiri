@@ -22,7 +22,10 @@ namespace Furikiri.AST.Expressions
         /// <summary>
         /// If not jump, goto where
         /// </summary>
-        public int ElseTo { get; set; } 
+        public int ElseTo { get; set; }
+
+        public int TrueBranch => JumpIf ? JumpTo : ElseTo;
+        public int FalseBranch => JumpIf ? ElseTo : JumpTo;
 
         public ConditionExpression(Expression condition, bool jumpIf = true)
         {

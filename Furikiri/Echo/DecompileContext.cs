@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using Furikiri.AST.Expressions;
 using Furikiri.Echo.Logical;
@@ -30,6 +31,10 @@ namespace Furikiri.Echo
         internal Block ExitBlock { get; set; } = new Block(-1);
 
         internal List<Block> Blocks { get; set; } = new List<Block>();
+        /// <summary>
+        /// Based on Start, not on Id
+        /// </summary>
+        internal Dictionary<int, Block> BlockTable { get; private set; }
         internal List<Loop> LoopSet { get; set; } = new List<Loop>();
 
         public CodeObject Object { get; set; }
@@ -51,6 +56,15 @@ namespace Furikiri.Echo
         {
         }
 
+        public void UpdateBlockTable()
+        {
+            BlockTable = new Dictionary<int, Block>(Blocks.Count);
+            foreach (var block in Blocks)
+            {
+                BlockTable[block.Start] = block;
+            }
+        }
+
         public TjsVarType GetSlotType(int slot)
         {
             if (Vars.ContainsKey(slot))
@@ -66,6 +80,8 @@ namespace Furikiri.Echo
         public void BuildCFG(List<Instruction> instructions)
         {
             ScanBlocks(instructions);
+            UpdateBlockTable();
+
             ComputeDominators();
             ComputeNaturalLoops();
 

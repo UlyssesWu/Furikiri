@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Furikiri.AST.Expressions;
 using Furikiri.Echo;
 
@@ -11,18 +12,81 @@ namespace Furikiri.AST
             return statements.Count == 1 && statements[0] is ConditionExpression;
         }
 
-        public static UnaryExpression Invert(this Expression exp)
+        public static ConditionExpression GetCondition(this List<IAstNode> statements)
         {
+            if (statements.Count == 1 && statements[0] is ConditionExpression condition)
+            {
+                return condition;
+            }
+
+            return null;
+        }
+
+        public static Expression Invert(this Expression exp)
+        {
+            if (exp is UnaryExpression unary)
+            {
+                if (unary.Op == UnaryOp.Not)
+                {
+                    return unary.Target;
+                }
+            }
+
+            if (exp is BinaryExpression binary)
+            {
+                switch (binary.Op)
+                {
+                    case BinaryOp.Equal:
+                        binary.Op = BinaryOp.NotEqual;
+                        break;
+                    case BinaryOp.NotEqual:
+                        binary.Op = BinaryOp.Equal;
+                        break;
+                    case BinaryOp.Congruent:
+                        binary.Op = BinaryOp.NotCongruent;
+                        break;
+                    case BinaryOp.NotCongruent:
+                        binary.Op = BinaryOp.Congruent;
+                        break;
+                    case BinaryOp.LessThan:
+                        binary.Op = BinaryOp.GreaterThan;
+                        break;
+                    case BinaryOp.GreaterThan:
+                        binary.Op = BinaryOp.LessThan;
+                        break;
+                }
+
+                return binary;
+            }
+
             return new UnaryExpression(exp, UnaryOp.Not);
         }
 
         public static BinaryExpression Or(this Expression left, Expression right)
         {
+            while (right is ConditionExpression condition)
+            {
+                right = condition.Condition;
+            }
+            while (left is ConditionExpression condition)
+            {
+                left = condition.Condition;
+            }
+
             return new BinaryExpression(left, right, BinaryOp.LogicOr);
         }
 
         public static BinaryExpression And(this Expression left, Expression right)
         {
+            while (right is ConditionExpression condition)
+            {
+                right = condition.Condition;
+            }
+            while (left is ConditionExpression condition)
+            {
+                left = condition.Condition;
+            }
+
             return new BinaryExpression(left, right, BinaryOp.LogicAnd);
         }
     }

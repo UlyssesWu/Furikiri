@@ -49,22 +49,6 @@ namespace Furikiri.Echo.Pass
             return statement;
         }
 
-        //public void StatementPass(BlockStatement entry, Block block)
-        //{
-        //    foreach (var node in block.Statements)
-        //    {
-        //        switch (node)
-        //        {
-        //            case GotoExpression _:
-        //            case ConditionExpression _:
-        //                break;
-        //            case Expression expr:
-        //                entry.AddStatement(new ExpressionStatement(expr));
-        //                break;
-        //        }
-        //    }
-        //}
-
         public Expression FindCondition(Loop l)
         {
             if (l.Blocks.Count <= 0)
@@ -354,6 +338,157 @@ namespace Furikiri.Echo.Pass
         //    return true;
         //}
 
+        private bool GetThenElseBlock(ConditionExpression condition, List<Block> blocks, out Block then,
+            out Block @else)
+        {
+            if (blocks.Count < 2)
+            {
+                then = null;
+                @else = null;
+                return false;
+            }
+
+            Block toBlock = blocks.FirstOrDefault(b => b.Start == condition.JumpTo);
+            Block elBlock = blocks.FirstOrDefault(b => b.Start == condition.ElseTo);
+            if (toBlock != null && elBlock != null)
+            {
+                if (condition.JumpIf)
+                {
+                    then = toBlock;
+                    @else = elBlock;
+                }
+                else
+                {
+                    then = elBlock;
+                    @else = toBlock;
+                }
+
+                return true;
+            }
+
+            then = blocks[0];
+            @else = blocks[1];
+            return false;
+        }
+
+        private void MergeIfCondition(IfLogic logic, ConditionExpression condition)
+        {
+            //recursive to final condition and go back
+            var trueBlock = _context.BlockTable[condition.TrueBranch];
+            var falseBlock = _context.BlockTable[condition.FalseBranch];
+            Expression exp = null;
+            var dominator = FindIfDominator(logic.ConditionBlock);
+            MergeIfCondition(condition, dominator, trueBlock,  ref exp);
+            if (exp != null)
+            {
+                if (logic.Condition is ConditionExpression condi)
+                {
+                    condi.Condition = exp;
+                }
+                else
+                {
+                    logic.Condition = exp;
+                }
+            }
+        }
+
+        private Block FindIfDominator(Block conditionBlock)
+        {
+            BitArray d = new BitArray(conditionBlock.Dominator);
+            FindIfDominator(conditionBlock);
+
+            return _context.Blocks.Find(b => b.Id == d.FirstIndexOf(true));
+
+            void FindIfDominator(Block condition)
+            {
+                if (!condition.Statements.IsCondition())
+                {
+                    return;
+                }
+
+                if (condition.Id == d.FirstIndexOf(true))
+                {
+                    return;
+                }
+
+                d.And(condition.Dominator);
+
+                foreach (var block in condition.To)
+                {
+                    FindIfDominator(block);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="condition">current condition</param>
+        /// <param name="dominator">if dominator</param>
+        /// <param name="merge">merged if condition expression</param>
+        /// <param name="then">assumed if true block</param>
+        /// <returns></returns>
+        private bool MergeIfCondition(ConditionExpression condition, Block dominator, Block then, ref Expression merge)
+        {
+            var trueBlock = _context.BlockTable[condition.TrueBranch];
+            var falseBlock = _context.BlockTable[condition.FalseBranch];
+            var trueIsContent = IsBranchContent(trueBlock);
+            var falseIsContent = IsBranchContent(falseBlock);
+
+            if (trueBlock != then && falseBlock != dominator) //it's else if, can not merge
+            {
+                return false;
+            }
+
+            if (trueBlock == then && falseBlock == dominator) //final condition
+            {
+                merge = condition;
+                return true;
+            }
+
+            if (!falseIsContent && then == trueBlock)
+            {
+                var falseCondition = falseBlock.Statements.GetCondition();
+                if (MergeIfCondition(falseCondition, dominator, then, ref merge))
+                {
+                    falseBlock.Hidden = true;
+                    merge = condition.Condition.Or(merge);
+                    return true;
+                }
+            }
+
+            if (!trueIsContent && dominator == falseBlock)
+            {
+                var trueCondition = trueBlock.Statements.GetCondition();
+                if (MergeIfCondition(trueCondition, dominator, then, ref merge))
+                {
+                    trueBlock.Hidden = true;
+                    merge = condition.Condition.And(merge);
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        private bool IsBranchContent(Block block)
+        {
+            return block.To.Count < 2 ||
+                   (block.From.Count > 1 && block.From.All(b => b.Statements.IsCondition())) ||  //it's hard to merge sth. like A & (B || C)
+                   block.From.Any(b => !b.Statements.IsCondition());
+        }
+
+        private void RemoveLastGoto(Block from, Block to)
+        {
+            //TODO: avoid remove essential break/continue;
+            var gt = from.Statements.LastOrDefault(st =>
+                st is ConditionExpression || st is GotoExpression || st is ContinueStatement || st is BreakStatement);
+            if (gt != null)
+            {
+                from.Statements.Remove(gt);
+            }
+        }
+
         internal bool StructureIfElse(Block block, out IfLogic outIf)
         {
             outIf = null;
@@ -362,7 +497,7 @@ namespace Furikiri.Echo.Pass
                 return false;
             }
 
-            var cond = (ConditionExpression) block.Statements.LastOrDefault(stmt => stmt is ConditionExpression);
+            var cond = (ConditionExpression)block.Statements.LastOrDefault(stmt => stmt is ConditionExpression);
             if (cond == null)
             {
                 return false;
@@ -370,42 +505,35 @@ namespace Furikiri.Echo.Pass
 
             var loop = _context.LoopSet.FirstOrDefault(l => l.Contains(block));
 
-            Block thenBlock = block.To[0];
-            Block elseBlock = block.To[1];
-            Block toBlock = block.To.FirstOrDefault(b => b.Start == cond.JumpTo);
-            Block elBlock = block.To.FirstOrDefault(b => b.Start == cond.ElseTo);
-
-            if (toBlock != null && elBlock != null)
+            Block thenBlock = block.To.FirstOrDefault(b => b.Start == cond.TrueBranch);
+            Block elseBlock = block.To.FirstOrDefault(b => b.Start == cond.FalseBranch);
+            if (thenBlock == null || elseBlock == null)
             {
-                if (cond.JumpIf)
-                {
-                    thenBlock = toBlock;
-                    elseBlock = elBlock;
-                }
-                else
-                {
-                    thenBlock = elBlock;
-                    elseBlock = toBlock;
-                }
+                thenBlock = block.To[0];
+                elseBlock = block.To[1];
             }
 
-            var logic = new IfLogic {ConditionBlock = block, Condition = cond};
+            var logic = new IfLogic { ConditionBlock = block, Condition = cond };
+            logic.Then.Blocks = new List<Block> {thenBlock};
+            logic.Else.Blocks = new List<Block> {elseBlock};
 
-            if (thenBlock.To.Count == 2) //TODO: can be 2 - inner If
+            //if (thenBlock.To.Count == 2) //TODO: can be 2 - inner If
+            if (!IsBranchContent(thenBlock)) //|| !IsBranchContent(elseBlock)
             {
+                MergeIfCondition(logic, cond);
                 //if (thenBlock.Statements.IsCondition())
                 //{
                 //}
                 //else
-                {
-                    return false;
-                }
+                //{
+                //    return false;
+                //}
             }
 
-            if (thenBlock.To.Count != 1)
-            {
-                return false;
-            }
+            //if (thenBlock.To.Count != 1)
+            //{
+            //    return false;
+            //}
 
             if (thenBlock.To[0] == elseBlock)
             {
@@ -444,7 +572,7 @@ namespace Furikiri.Echo.Pass
 
                         //hasElse = true;
                         logic.Else.Type = LogicalBlockType.BlockList;
-                        logic.Else.Blocks = new List<Block> {elseBlock};
+                        logic.Else.Blocks = new List<Block> { elseBlock };
                         RemoveLastGoto(elseBlock, elseBlock.To[0]);
                     }
                     else
@@ -454,22 +582,11 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
-            logic.Then.Blocks = new List<Block> {thenBlock};
+            logic.Then.Blocks = new List<Block> { thenBlock };
             RemoveLastGoto(thenBlock, thenBlock.To[0]);
 
             outIf = logic;
             return true;
-        }
-
-        private void RemoveLastGoto(Block from, Block to)
-        {
-            //TODO: avoid remove essential break/continue;
-            var gt = from.Statements.LastOrDefault(st =>
-                st is ConditionExpression || st is GotoExpression || st is ContinueStatement || st is BreakStatement);
-            if (gt != null)
-            {
-                from.Statements.Remove(gt);
-            }
         }
     }
 }
