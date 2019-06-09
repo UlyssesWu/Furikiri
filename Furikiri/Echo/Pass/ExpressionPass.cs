@@ -920,11 +920,16 @@ namespace Furikiri.Echo.Pass
                 BlockProcess(context, succ, ex, flag); //TODO: deep copy flag?
             }
 
-            void SetRegister(short reg)
+            void UpdateRegister(short dst, Expression exp)
             {
-                if (insData.LiveOut.Contains(reg))
+                exp.Dest = dst;
+                if (insData.LiveOut.Contains(dst))
                 {
-                    //TODO: Data flow
+                    ex[dst] = exp;
+                }
+                else
+                {
+                    expList.Add(exp);
                 }
             }
         }

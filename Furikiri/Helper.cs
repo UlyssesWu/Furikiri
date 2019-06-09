@@ -376,7 +376,10 @@ namespace Furikiri
                     return ">>>";
                 case BinaryOp.BitShiftLeft:
                     return "<<<";
-
+                case BinaryOp.LogicAnd:
+                    return "&&";
+                case BinaryOp.LogicOr:
+                    return "||";
                 default:
                     return "#";
             }

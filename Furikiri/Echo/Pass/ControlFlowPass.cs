@@ -374,7 +374,7 @@ namespace Furikiri.Echo.Pass
             var falseBlock = _context.BlockTable[condition.FalseBranch];
             Expression exp = null;
             var dominator = FindIfPostDominator(logic.ConditionBlock);
-            MergeIfCondition(condition, dominator, trueBlock,  ref exp);
+            MergeIfCondition(condition, logic.ConditionBlock, dominator, trueBlock, ref exp, ref falseBlock);
             if (exp != null)
             {
                 if (logic.Condition is ConditionExpression condi)
@@ -385,6 +385,8 @@ namespace Furikiri.Echo.Pass
                 {
                     logic.Condition = exp;
                 }
+                logic.Then.Blocks = new List<Block>{ trueBlock };
+                logic.Else.Blocks = new List<Block>{ falseBlock};
             }
         }
 
@@ -393,7 +395,7 @@ namespace Furikiri.Echo.Pass
             BitArray d = new BitArray(conditionBlock.PostDominator);
             FindPostDominator(conditionBlock);
 
-            return _context.Blocks.Find(b => b.Id == d.FirstIndexOf(true, conditionBlock.Id));
+            return _context.Blocks.Find(b => b.Id == d.FirstIndexOf(true, conditionBlock.Id + 1));
 
             void FindPostDominator(Block condition)
             {
@@ -402,7 +404,7 @@ namespace Furikiri.Echo.Pass
                     return;
                 }
 
-                if (condition.Id == d.FirstIndexOf(true, conditionBlock.Id))
+                if (condition.Id == d.FirstIndexOf(true, conditionBlock.Id + 1))
                 {
                     return;
                 }
@@ -420,11 +422,13 @@ namespace Furikiri.Echo.Pass
         /// 
         /// </summary>
         /// <param name="condition">current condition</param>
+        /// <param name="conditionBlock">current condition block</param>
         /// <param name="dominator">if dominator</param>
         /// <param name="merge">merged if condition expression</param>
         /// <param name="then">assumed if true block</param>
+        /// <param name="else">actual else block</param>
         /// <returns></returns>
-        private bool MergeIfCondition(ConditionExpression condition, Block dominator, Block then, ref Expression merge)
+        private bool MergeIfCondition(ConditionExpression condition, Block conditionBlock, Block dominator, Block then, ref Expression merge, ref Block @else)
         {
             var trueBlock = _context.BlockTable[condition.TrueBranch];
             var falseBlock = _context.BlockTable[condition.FalseBranch];
@@ -433,11 +437,13 @@ namespace Furikiri.Echo.Pass
 
             if (trueBlock != then && falseBlock != dominator) //it's else if, can not merge
             {
+                @else = conditionBlock;
                 return false;
             }
 
             if (trueBlock == then && falseBlock == dominator) //final condition
             {
+                @else = dominator;
                 merge = condition;
                 return true;
             }
@@ -445,7 +451,7 @@ namespace Furikiri.Echo.Pass
             if (!falseIsContent && then == trueBlock)
             {
                 var falseCondition = falseBlock.Statements.GetCondition();
-                if (MergeIfCondition(falseCondition, dominator, then, ref merge))
+                if (MergeIfCondition(falseCondition, falseBlock, dominator, then, ref merge, ref @else))
                 {
                     falseBlock.Hidden = true;
                     merge = condition.Condition.Or(merge);
@@ -456,14 +462,15 @@ namespace Furikiri.Echo.Pass
             if (!trueIsContent && dominator == falseBlock)
             {
                 var trueCondition = trueBlock.Statements.GetCondition();
-                if (MergeIfCondition(trueCondition, dominator, then, ref merge))
+                if (MergeIfCondition(trueCondition, trueBlock, dominator, then, ref merge, ref @else))
                 {
                     trueBlock.Hidden = true;
                     merge = condition.Condition.And(merge);
                     return true;
                 }
             }
-            
+
+            @else = falseBlock;
             return false;
         }
 
@@ -520,8 +527,17 @@ namespace Furikiri.Echo.Pass
             logic.Then.Blocks = new List<Block> {thenBlock};
             logic.Else.Blocks = new List<Block> {elseBlock};
 
+            bool elseIsBreak = false;
+            if (loop != null)
+            {
+                if (elseBlock.Start >= loop.Exit)
+                {
+                    elseIsBreak = true;
+                }
+            }
+
             //if (thenBlock.To.Count == 2) //TODO: can be 2 - inner If
-            if (!IsBranchContent(thenBlock)) //|| !IsBranchContent(elseBlock)
+            if (!IsBranchContent(thenBlock) || (!IsBranchContent(elseBlock) && !elseIsBreak)) //|| !IsBranchContent(elseBlock)
             {
                 MergeIfCondition(logic, cond);
                 //if (thenBlock.Statements.IsCondition())
@@ -538,19 +554,25 @@ namespace Furikiri.Echo.Pass
             //    return false;
             //}
 
+            if (logic.Then.Blocks.Count > 0)
+            {
+                thenBlock = logic.Then.Blocks[0];
+            }
+            if (logic.Else.Blocks.Count > 0)
+            {
+                elseBlock = logic.Else.Blocks[0];
+            }
+
             if (thenBlock.To[0] == elseBlock)
             {
                 //hasElse = false;
             }
             else
             {
-                if (loop != null)
+                if (elseIsBreak)
                 {
-                    if (elseBlock.Start >= loop.Exit)
-                    {
-                        logic.Else.Type = LogicalBlockType.Statement;
-                        logic.Else.Statement = new BreakStatement();
-                    }
+                    logic.Else.Type = LogicalBlockType.Statement;
+                    logic.Else.Statement = new BreakStatement();
                 }
                 else
                 {

@@ -102,10 +102,6 @@ namespace Furikiri.Echo
                 case TYPEOF:
                 case TYPEOFD:
                 case TYPEOFI:
-                case CALL:
-                case CALLD:
-                case CALLI:
-                case NEW:
                 case GPD:
                 case GPI:
                 case GPDS:
@@ -113,6 +109,20 @@ namespace Furikiri.Echo
                 case GETP:
                 case GLOBAL:
                     Write.Add(ins.GetRegisterSlot(0));
+                    break;
+                case CALL:
+                case CALLD:
+                case CALLI:
+                case NEW:
+                    Write.Add(ins.GetRegisterSlot(0));
+                    //if (ins.GetRegisterSlot(0) == 0)
+                    //{
+                    //    var r1 = ins.GetRegisterSlot(1);
+                    //    if (r1 > 0)
+                    //    {
+                    //        Write.Add(r1); //`call* %0, %1` means %1 will be called in a single line. 
+                    //    }
+                    //}
                     break;
                 case CCL:
                     Write.AddRange(Enumerable.Range(ins.GetRegisterSlot(0), ins.GetRegisterSlot(1)));

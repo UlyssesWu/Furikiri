@@ -58,7 +58,8 @@ namespace Furikiri.Tests
         {
             var path = "..\\..\\Res\\Initialize.tjs.comp";
             Decompiler decompiler = new Decompiler(path);
-            var result = decompiler.Decompile();
+            //var result = decompiler.Decompile();
+            var result = decompiler.Decompile("global");
             //var result = decompiler.Decompile("TestLoop");
             return;
             var KAGLoadScript = decompiler.Script.Objects.Find(c => c.Name == "KAGLoadScript");
