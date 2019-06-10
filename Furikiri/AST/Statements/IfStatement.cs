@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 using Furikiri.AST.Expressions;
 
 namespace Furikiri.AST.Statements
@@ -13,6 +11,7 @@ namespace Furikiri.AST.Statements
         public Statement Then { get; set; }
         public Statement Else { get; set; }
         public Expression Condition { get; set; }
+        public bool IsElseIf { get; set; } = false;
 
         public IfStatement(Expression cond, Statement then, Statement el)
         {

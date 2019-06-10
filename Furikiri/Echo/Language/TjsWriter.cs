@@ -294,11 +294,20 @@ namespace Furikiri.Echo.Language
             _formatter.WriteEndBlock();
             if (ifStmt.Else != null)
             {
+
                 _formatter.WriteKeyword("else");
-                _formatter.WriteLine();
-                _formatter.WriteStartBlock();
-                Visit(ifStmt.Else);
-                _formatter.WriteEndBlock();
+                _formatter.WriteSpace();
+                if (ifStmt.Else is IfStatement elseIf && elseIf.IsElseIf)
+                {
+                    VisitIfStmt(elseIf);
+                }
+                else
+                {
+                    _formatter.WriteLine();
+                    _formatter.WriteStartBlock();
+                    Visit(ifStmt.Else);
+                    _formatter.WriteEndBlock();
+                }
             }
         }
         

@@ -373,8 +373,7 @@ namespace Furikiri.Echo.Pass
             var trueBlock = _context.BlockTable[condition.TrueBranch];
             var falseBlock = _context.BlockTable[condition.FalseBranch];
             Expression exp = null;
-            var dominator = FindIfPostDominator(logic.ConditionBlock);
-            MergeIfCondition(condition, logic.ConditionBlock, dominator, trueBlock, ref exp, ref falseBlock);
+            MergeIfCondition(condition, logic.ConditionBlock, logic.PostDominator, trueBlock, ref exp, ref falseBlock);
             if (exp != null)
             {
                 if (logic.Condition is ConditionExpression condi)
@@ -522,8 +521,8 @@ namespace Furikiri.Echo.Pass
                 thenBlock = block.To[0];
                 elseBlock = block.To[1];
             }
-
-            var logic = new IfLogic { ConditionBlock = block, Condition = cond };
+            
+            var logic = new IfLogic { ConditionBlock = block, Condition = cond, PostDominator = FindIfPostDominator(block) };
             logic.Then.Blocks = new List<Block> {thenBlock};
             logic.Else.Blocks = new List<Block> {elseBlock};
 
@@ -558,6 +557,11 @@ namespace Furikiri.Echo.Pass
             {
                 thenBlock = logic.Then.Blocks[0];
             }
+            else
+            {
+                logic.Then.Blocks = new List<Block> { thenBlock };
+            }
+
             if (logic.Else.Blocks.Count > 0)
             {
                 elseBlock = logic.Else.Blocks[0];
@@ -565,7 +569,7 @@ namespace Furikiri.Echo.Pass
 
             if (thenBlock.To[0] == elseBlock)
             {
-                //hasElse = false;
+                logic.Else.Type = LogicalBlockType.None;
             }
             else
             {
@@ -582,6 +586,7 @@ namespace Furikiri.Echo.Pass
                         {
                             logic.Else.Type = LogicalBlockType.Logical;
                             logic.Else.Logic = innerIf;
+                            innerIf.ParentIf = logic;
                         }
                         else
                         {
@@ -607,7 +612,6 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
-            logic.Then.Blocks = new List<Block> { thenBlock };
             RemoveLastGoto(thenBlock, thenBlock.To[0]);
 
             outIf = logic;

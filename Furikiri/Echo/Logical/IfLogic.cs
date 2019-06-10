@@ -10,13 +10,16 @@ namespace Furikiri.Echo.Logical
         public Block ConditionBlock { get; set; }
         public LogicalBlock Then { get; set; } = new LogicalBlock();
         public LogicalBlock Else { get; set; } = new LogicalBlock();
-        
+        public IfLogic ParentIf { get; set; }
+        public Block PostDominator { get; set; }
+
         internal void HideBlocks(bool hideConditionBlock = false)
         {
             if (hideConditionBlock)
             {
                 ConditionBlock.Hidden = true;
             }
+
             Then?.HideBlocks();
             Else?.HideBlocks();
         }
@@ -30,6 +33,11 @@ namespace Furikiri.Echo.Logical
             }
 
             IfStatement i = new IfStatement(Condition, Then.ToStatement(), Else.ToStatement());
+            if (ParentIf != null && ParentIf.PostDominator == PostDominator)
+            {
+                i.IsElseIf = true;
+            }
+
             HideBlocks();
             return i;
         }
