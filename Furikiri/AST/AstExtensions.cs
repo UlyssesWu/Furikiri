@@ -24,6 +24,13 @@ namespace Furikiri.AST
 
         public static Expression Invert(this Expression exp)
         {
+            if (exp is ConditionExpression condition)
+            {
+                condition.JumpIf = !condition.JumpIf;
+                condition.Condition = condition.Condition.Invert();
+                return condition;
+            }
+
             if (exp is UnaryExpression unary)
             {
                 if (unary.Op == UnaryOp.Not)
