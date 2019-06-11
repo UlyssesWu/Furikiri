@@ -1,5 +1,6 @@
 ﻿using System.CodeDom.Compiler;
 using System.IO;
+using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
 using Furikiri.Echo.Visitors;
@@ -123,11 +124,20 @@ namespace Furikiri.Echo.Language
                 }
             }
 
+            bool needBrackets = bin.NeedBrackets();
+            if (needBrackets)
+            {
+                _formatter.WriteToken("(");
+            }
             Visit(bin.Left);
             _formatter.WriteSpace();
             _formatter.WriteToken(bin.Op.ToSymbol());
             _formatter.WriteSpace();
             Visit(bin.Right);
+            if (needBrackets)
+            {
+                _formatter.WriteToken(")");
+            }
         }
 
         internal override void VisitInvokeExpr(InvokeExpression invoke)

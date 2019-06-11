@@ -96,5 +96,28 @@ namespace Furikiri.AST
 
             return new BinaryExpression(left, right, BinaryOp.LogicAnd);
         }
+
+        public static bool NeedBrackets(this BinaryExpression bin)
+        {
+            if (bin.Parent is BinaryExpression bParent)
+            {
+                var binLevel = bin.Op.GetPrecedence();
+                var parentLevel = bParent.Op.GetPrecedence();
+                if (parentLevel < binLevel || parentLevel == binLevel && bParent.Op != bin.Op && bParent.Right == bin)
+                {
+                    return true;
+                }
+            }
+
+            else if (bin.Parent is UnaryExpression uParent)
+            {
+                if (uParent.Op.GetPrecedence() < bin.Op.GetPrecedence())
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }
