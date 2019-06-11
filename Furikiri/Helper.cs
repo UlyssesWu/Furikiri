@@ -385,6 +385,72 @@ namespace Furikiri
             }
         }
 
+        internal static int GetPrecedence(this UnaryOp op)
+        {
+            switch (op)
+            {
+                case UnaryOp.TypeOf:
+                case UnaryOp.Invalidate:
+                case UnaryOp.ToByteArray:
+                case UnaryOp.ToInt:
+                case UnaryOp.ToNumber:
+                case UnaryOp.ToReal:
+                case UnaryOp.ToString:
+                case UnaryOp.PropertyObject:
+                    return 1;
+                default:
+                    return 2;
+            }
+        }
+
+        internal static int GetPrecedence(this BinaryOp op)
+        {
+            //TODO: haven't find doc about this, currently using other language's impl
+            switch (op)
+            {
+                case BinaryOp.InstanceOf:
+                    return 1;
+                //2 is unary
+                case BinaryOp.Mul:
+                case BinaryOp.Div:
+                    return 3;
+                case BinaryOp.Add:
+                case BinaryOp.Sub:
+                case BinaryOp.Idiv:
+                    return 4;
+                case BinaryOp.NumberShiftLeft:
+                case BinaryOp.NumberShiftRight:
+                case BinaryOp.BitShiftRight:
+                case BinaryOp.BitShiftLeft:
+                    return 5;
+                case BinaryOp.LessThan:
+                case BinaryOp.GreaterThan:
+                case BinaryOp.GreaterOrEqual:
+                case BinaryOp.LessOrEqual:
+                    return 6;
+                case BinaryOp.Equal:
+                case BinaryOp.NotEqual:
+                case BinaryOp.Congruent:
+                case BinaryOp.NotCongruent:
+                    return 7;
+                case BinaryOp.BitAnd:
+                    return 8;
+                case BinaryOp.BitXor:
+                    return 9;
+                case BinaryOp.BitOr:
+                    return 10;
+                case BinaryOp.LogicAnd:
+                    return 11;
+                case BinaryOp.LogicOr:
+                    return 12;
+                //13 is ?:
+                case BinaryOp.Assign:
+                    return 14;
+                default:
+                    return 0;
+            }
+        }
+
         internal static string ToSymbol(this UnaryOp op)
         {
             switch (op)

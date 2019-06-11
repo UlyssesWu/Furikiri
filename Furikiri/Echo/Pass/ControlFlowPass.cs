@@ -21,6 +21,10 @@ namespace Furikiri.Echo.Pass
 
             foreach (var b in _context.Blocks)
             {
+                if (b.Hidden)
+                {
+                    continue;
+                }
                 if (StructureIfElse(b, out var logic))
                 {
                     if (logic.Else.IsBreak)
@@ -432,9 +436,9 @@ namespace Furikiri.Echo.Pass
             if (condition.TrueBranch == dominator.Start)
             {
                 condition = (ConditionExpression)condition.Invert();
-                then = _context.BlockTable[condition.TrueBranch];
             }
 
+            then = _context.BlockTable[condition.TrueBranch]; //TODO: check me later
             var trueBlock = _context.BlockTable[condition.TrueBranch];
             var falseBlock = _context.BlockTable[condition.FalseBranch];
             var trueIsContent = IsBranchContent(trueBlock);
@@ -521,10 +525,6 @@ namespace Furikiri.Echo.Pass
             }
 
             var postDominator = FindIfPostDominator(block);
-            //if (cond.TrueBranch == postDominator.Start)
-            //{
-            //    cond = (ConditionExpression)cond.Invert();
-            //}
 
             Block thenBlock = block.To.FirstOrDefault(b => b.Start == cond.TrueBranch);
             Block elseBlock = block.To.FirstOrDefault(b => b.Start == cond.FalseBranch);
@@ -535,8 +535,7 @@ namespace Furikiri.Echo.Pass
             }
             
             var logic = new IfLogic { ConditionBlock = block, Condition = cond, PostDominator = postDominator };
-
-
+            
             logic.Then.Blocks = new List<Block> {thenBlock};
             logic.Else.Blocks = new List<Block> {elseBlock};
 

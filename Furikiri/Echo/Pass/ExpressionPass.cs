@@ -12,6 +12,7 @@ namespace Furikiri.Echo.Pass
         public IdentifierExpression Global = new IdentifierExpression("global", IdentifierType.Global);
         public IdentifierExpression This = new IdentifierExpression("this", IdentifierType.This);
         public IdentifierExpression ThisProxy = new IdentifierExpression("", IdentifierType.ThisProxy);
+        public ConstantExpression Void = new ConstantExpression(TjsVoid.Void);
 
         public BlockStatement Process(DecompileContext context, BlockStatement statement)
         {
@@ -60,6 +61,7 @@ namespace Furikiri.Echo.Pass
             InstructionData insData = null;
             for (var i = 0; i < block.Instructions.Count; i++)
             {
+                ex[0] = Void;
                 var ins = block.Instructions[i];
                 insData = block.InstructionDatas[i];
 
