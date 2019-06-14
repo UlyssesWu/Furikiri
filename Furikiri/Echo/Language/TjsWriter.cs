@@ -1,4 +1,5 @@
 ﻿using System.CodeDom.Compiler;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Furikiri.AST;
@@ -16,6 +17,7 @@ namespace Furikiri.Echo.Language
     {
         private IFormatter _formatter;
         private IndentedTextWriter _writer;
+        public Dictionary<Method, BlockStatement> MethodRefs = new Dictionary<Method, BlockStatement>();
 
         public TjsWriter(StringWriter writer)
         {
@@ -29,6 +31,7 @@ namespace Furikiri.Echo.Language
             {
                 return;
             }
+
             //_formatter.WriteKeyword(method.Object.ContextType.ContextTypeName());
             _formatter.WriteKeyword("function");
             _formatter.WriteSpace();
@@ -39,7 +42,8 @@ namespace Furikiri.Echo.Language
 
             _formatter.WriteToken("(");
             //parameters
-            var paramList = method.Vars.Where(kv => kv.Value.IsParameter).OrderByDescending(kv => kv.Key).Select(kv => kv.Value).ToList();
+            var paramList = method.Vars.Where(kv => kv.Value.IsParameter).OrderByDescending(kv => kv.Key)
+                .Select(kv => kv.Value).ToList();
             if (paramList.Count > 0)
             {
                 for (int i = 0; i < paramList.Count - 1; i++)
@@ -48,8 +52,10 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteToken(",");
                     _formatter.WriteSpace();
                 }
+
                 _formatter.WriteIdentifier(paramList[paramList.Count - 1].ToString());
             }
+
             _formatter.WriteToken(")");
             _formatter.WriteLine();
         }
@@ -89,7 +95,6 @@ namespace Furikiri.Echo.Language
                 //_formatter.WriteLine();
                 _formatter.WriteToken("}");
             }
-
         }
 
         public void WriteLine(string line = null)
@@ -141,6 +146,7 @@ namespace Furikiri.Echo.Language
             {
                 _formatter.WriteToken("(");
             }
+
             Visit(bin.Left);
             _formatter.WriteSpace();
             _formatter.WriteToken(bin.Op.ToSymbol());
@@ -187,8 +193,10 @@ namespace Furikiri.Echo.Language
             if (!prop.HideInstance)
             {
                 Visit(prop.Instance);
-                _formatter.WriteToken(".");
+                //_formatter.WriteToken(".");
+                _formatter.WriteToken("[");
                 Visit(prop.Property);
+                _formatter.WriteToken("]");
             }
         }
 
@@ -201,6 +209,16 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitConstantExpr(ConstantExpression constant)
         {
+            if (constant.DataType == TjsVarType.Object && MethodRefs != null && constant.Variant is TjsCodeObject obj)
+            {
+                var method = MethodRefs.FirstOrDefault(m => m.Key.Object == obj.Object);
+                if (method.Key != null && method.Key.IsLambda)
+                {
+                    WriteFunction(method.Key, method.Value);
+                    return;
+                }
+            }
+
             _formatter.WriteLiteral(constant.ToString());
         }
 
@@ -316,7 +334,6 @@ namespace Furikiri.Echo.Language
             _formatter.WriteEndBlock();
             if (ifStmt.Else != null)
             {
-
                 _formatter.WriteKeyword("else");
                 _formatter.WriteSpace();
                 if (ifStmt.Else is IfStatement elseIf && elseIf.IsElseIf)
@@ -332,7 +349,7 @@ namespace Furikiri.Echo.Language
                 }
             }
         }
-        
+
         internal override void VisitForStmt(ForStatement forStmt)
         {
             _formatter.WriteKeyword("for");
@@ -375,6 +392,7 @@ namespace Furikiri.Echo.Language
             {
                 _formatter.WriteKeyword("true");
             }
+
             _formatter.WriteToken(")");
             _formatter.WriteToken(";");
             _formatter.WriteLine();
@@ -393,6 +411,7 @@ namespace Furikiri.Echo.Language
             {
                 _formatter.WriteKeyword("true");
             }
+
             _formatter.WriteToken(")");
             _formatter.WriteLine();
 

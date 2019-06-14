@@ -10,16 +10,16 @@ namespace Furikiri.Echo
 {
     internal class DecompileContext
     {
-        public Dictionary<TjsVarType, int> ParamCounts = new Dictionary<TjsVarType, int>()
-        {
-            {TjsVarType.Int, 0},
-            {TjsVarType.Real, 0},
-            {TjsVarType.String, 0},
-            {TjsVarType.Octet, 0},
-            {TjsVarType.Object, 0},
-            {TjsVarType.Void, 0},
-            {TjsVarType.Null, 0},
-        };
+        //public Dictionary<TjsVarType, int> ParamCounts = new Dictionary<TjsVarType, int>()
+        //{
+        //    {TjsVarType.Int, 0},
+        //    {TjsVarType.Real, 0},
+        //    {TjsVarType.String, 0},
+        //    {TjsVarType.Octet, 0},
+        //    {TjsVarType.Object, 0},
+        //    {TjsVarType.Void, 0},
+        //    {TjsVarType.Null, 0},
+        //};
 
         internal List<ILogical> Logicals { get; set; } = new List<ILogical>();
 
@@ -39,7 +39,6 @@ namespace Furikiri.Echo
 
         public CodeObject Object { get; set; }
         public Dictionary<short, Variable> Vars { get; set; } = new Dictionary<short, Variable>();
-        
 
         internal Dictionary<string, ITjsVariant> RegisteredMembers { get; set; } =
             new Dictionary<string, ITjsVariant>();

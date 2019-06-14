@@ -43,11 +43,16 @@ namespace Furikiri.Echo
             methods.Add(method.Value, block);
             
             var writer = new StringWriter();
-            var tjs = new TjsWriter(writer);
+            var tjs = new TjsWriter(writer) {MethodRefs = methods};
             tjs.WriteLicense();
 
             foreach (var m in methods)
             {
+                if (m.Key.IsLambda)
+                {
+                    continue;
+                }
+
                 tjs.WriteLine();
                 tjs.WriteFunction(m.Key, m.Value);
                 tjs.WriteLine();
@@ -92,11 +97,16 @@ namespace Furikiri.Echo
             }
 
             var writer = new StringWriter();
-            var tjs = new TjsWriter(writer);
+            var tjs = new TjsWriter(writer){MethodRefs = methods};
             tjs.WriteLicense();
 
             foreach (var m in methods)
             {
+                if (m.Key.IsLambda)
+                {
+                    continue;
+                }
+
                 tjs.WriteLine();
                 tjs.WriteFunction(m.Key, m.Value);
                 tjs.WriteLine();
@@ -127,6 +137,7 @@ namespace Furikiri.Echo
             entry = pass4.Process(context, entry);
 
             m.Vars = context.Vars;
+            
             return entry;
         }
     }

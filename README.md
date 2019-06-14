@@ -2,7 +2,7 @@
 
 Furikiri (FreeKiri / [フリキリ](https://ja.wikipedia.org/wiki/%E3%83%95%E3%83%AA%E3%82%AF%E3%83%AA#OVA) / 福里吉里) is a managed TJS2 disassembler/decompiler.
 
-Furikiri is currently in development and NOT ready for use. Pull request is welcomed.
+Furikiri is currently in development. The disassembler works well but the decompiler is NOT ready for use. Pull request is welcomed.
 
 The following softwares/projects are parts of Furikiri.
 

@@ -12,6 +12,8 @@ namespace Furikiri.Emit
         public List<Instruction> Instructions { get; set; } = new List<Instruction>();
         public Dictionary<short, Variable> Vars { get; set; }
 
+        public bool IsLambda => Object != null && Object.ContextType == TjsContextType.ExprFunction;
+
         public Method(short[] code)
         {
             ParseByteCode(code);
