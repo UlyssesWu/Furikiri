@@ -126,6 +126,7 @@ namespace Furikiri.Echo
             var pass4 = new StatementCollectPass();
             entry = pass4.Process(context, entry);
 
+            m.Vars = context.Vars;
             return entry;
         }
     }

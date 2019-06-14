@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
@@ -29,7 +30,7 @@ namespace Furikiri.Echo.Pass
             }
 
             //Add global
-            var exps = new Dictionary<short, Expression>()
+            var exps = new Dictionary<short, Expression>
             {
                 {-1, This},
                 {-2, ThisProxy},
@@ -39,10 +40,22 @@ namespace Furikiri.Echo.Pass
             for (short i = 0; i < argCount; i++)
             {
                 short slot = (short) (-i - 3);
-                exps.Add(slot, new LocalExpression(context.Object, slot));
+                var v = new Variable(slot) {IsParameter = true};
+                context.Vars.Add(slot, v);
+                exps.Add(slot, new LocalExpression(v));
             }
 
             BlockProcess(context, entry, exps);
+
+            //foreach (var variable in exps.Where(exp => exp.Value.Type == AstNodeType.LocalExpression).Select(exp =>
+            //{
+            //    var l = (LocalExpression)exp.Value;
+            //    return new Variable(exp.Key) {VarType = l.DataType, IsParameter = l.IsParameter, Name = l.ToString()};
+            //}))
+            //{
+            //    context.Vars.Add(variable.Slot, variable);
+            //}
+
             return statement;
         }
 

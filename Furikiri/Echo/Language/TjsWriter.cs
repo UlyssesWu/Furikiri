@@ -1,5 +1,6 @@
 ﻿using System.CodeDom.Compiler;
 using System.IO;
+using System.Linq;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
@@ -37,7 +38,18 @@ namespace Furikiri.Echo.Language
             }
 
             _formatter.WriteToken("(");
-            //TODO: parameters
+            //parameters
+            var paramList = method.Vars.Where(kv => kv.Value.IsParameter).OrderByDescending(kv => kv.Key).Select(kv => kv.Value).ToList();
+            if (paramList.Count > 0)
+            {
+                for (int i = 0; i < paramList.Count - 1; i++)
+                {
+                    _formatter.WriteIdentifier(paramList[i].ToString());
+                    _formatter.WriteToken(",");
+                    _formatter.WriteSpace();
+                }
+                _formatter.WriteIdentifier(paramList[paramList.Count - 1].ToString());
+            }
             _formatter.WriteToken(")");
             _formatter.WriteLine();
         }

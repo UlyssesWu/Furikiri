@@ -9,48 +9,27 @@ namespace Furikiri.AST.Expressions
     /// </summary>
     class LocalExpression : Expression
     {
-        public bool IsParameter { get; private set; } = false;
+        public Variable VariableDef { get; set; }
         public TjsVarType DataType { get; set; }
         public override AstNodeType Type => AstNodeType.LocalExpression;
         public override IEnumerable<IAstNode> Children { get; } = null;
-        public short Slot { get; set; }
-        public string Name { get; set; }
-        public string DefaultName => Name ?? $"{(IsParameter ? "p" : "v")}{Math.Abs(Slot) + 2}";
-
-        public LocalExpression(bool isParam, short slot)
+        public short Slot => VariableDef.Slot;
+        public string Name => VariableDef.DefaultName;
+        public bool IsParameter => VariableDef.IsParameter;
+        
+        public LocalExpression(Variable v)
         {
-            IsParameter = isParam;
-            Slot = slot;
+            VariableDef = v;
         }
 
         public LocalExpression(CodeObject obj, short slot)
         {
-            IsParameter = CheckIsParameter(obj, slot);
-            Slot = slot;
+            VariableDef = new Variable(slot, obj);
         }
-
-        public static bool CheckIsParameter(CodeObject obj, short slot)
-        {
-            var argCount = obj.FuncDeclArgCount;
-            var varCount = obj.MaxVariableCount;
-            if (slot >= -2)
-            {
-                return false;
-            }
-
-            if (slot >= -2 - argCount)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-
+        
         public override string ToString()
         {
-            return DefaultName;
+            return VariableDef.ToString();
         }
     }
 }

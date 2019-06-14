@@ -38,7 +38,7 @@ namespace Furikiri.Echo
         internal List<Loop> LoopSet { get; set; } = new List<Loop>();
 
         public CodeObject Object { get; set; }
-        public Dictionary<int, ITjsVariant> Vars { get; set; } = new Dictionary<int, ITjsVariant>();
+        public Dictionary<short, Variable> Vars { get; set; } = new Dictionary<short, Variable>();
         
 
         internal Dictionary<string, ITjsVariant> RegisteredMembers { get; set; } =
@@ -65,11 +65,11 @@ namespace Furikiri.Echo
             }
         }
 
-        public TjsVarType GetSlotType(int slot)
+        public TjsVarType GetSlotType(short slot)
         {
             if (Vars.ContainsKey(slot))
             {
-                return Vars[slot].Type;
+                return Vars[slot].VarType;
             }
 
             return TjsVarType.Null;

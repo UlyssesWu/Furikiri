@@ -10,6 +10,7 @@ namespace Furikiri.Emit
         public string Name => Object.Name;
         public CodeObject Object { get; set; }
         public List<Instruction> Instructions { get; set; } = new List<Instruction>();
+        public Dictionary<short, Variable> Vars { get; set; }
 
         public Method(short[] code)
         {
@@ -26,31 +27,32 @@ namespace Furikiri.Emit
         public void Compact()
         {
             Resolve();
-            //HashSet<OpCode> toBeRemoved = new HashSet<OpCode>();
+
             Instructions.RemoveAll(instruction =>
                 instruction.OpCode == OpCode.NOP || instruction.OpCode == OpCode.DEBUGGER);
 
-            List<Instruction> toBeRemoved = new List<Instruction>();
-            for (int i = 0; i < Instructions.Count; i++)
-            {
-                if (i + 1 < Instructions.Count)
-                {
-                    if (
-                        (Instructions[i].OpCode == OpCode.INC && Instructions[i + 1].OpCode == OpCode.DEC ||
-                         Instructions[i].OpCode == OpCode.DEC && Instructions[i + 1].OpCode == OpCode.INC)
-                        && Instructions[i].GetRegisterSlot(0) == Instructions[i + 1].GetRegisterSlot(0))
-                    {
-                        toBeRemoved.Add(Instructions[i]);
-                        toBeRemoved.Add(Instructions[i + 1]);
-                        i++;
-                    }
-                }
-            }
+            //a simple demo
+            //List<Instruction> toBeRemoved = new List<Instruction>();
+            //for (int i = 0; i < Instructions.Count; i++)
+            //{
+            //    if (i + 1 < Instructions.Count)
+            //    {
+            //        if (
+            //            (Instructions[i].OpCode == OpCode.INC && Instructions[i + 1].OpCode == OpCode.DEC ||
+            //             Instructions[i].OpCode == OpCode.DEC && Instructions[i + 1].OpCode == OpCode.INC)
+            //            && Instructions[i].GetRegisterSlot(0) == Instructions[i + 1].GetRegisterSlot(0))
+            //        {
+            //            toBeRemoved.Add(Instructions[i]);
+            //            toBeRemoved.Add(Instructions[i + 1]);
+            //            i++;
+            //        }
+            //    }
+            //}
 
-            foreach (var ins in toBeRemoved)
-            {
-                Instructions.Remove(ins);
-            }
+            //foreach (var ins in toBeRemoved)
+            //{
+            //    Instructions.Remove(ins);
+            //}
 
             Merge();
         }
