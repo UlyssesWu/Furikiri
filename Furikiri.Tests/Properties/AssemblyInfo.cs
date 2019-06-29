@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("Furikiri.Tests")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Project AZUSA")]
+[assembly: AssemblyCompany("Independent Galgrammer")]
 [assembly: AssemblyProduct("Furikiri.Tests")]
 [assembly: AssemblyCopyright("Copyright © Ulysses 2018")]
 [assembly: AssemblyTrademark("")]

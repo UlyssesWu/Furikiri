@@ -57,6 +57,11 @@ namespace Furikiri.AST.Expressions
 
                         return $"{id.FullName}.{Name}";
                     }
+
+                    if (Instance is LocalExpression local)
+                    {
+                        return $"{local}.{Name}";
+                    }
                 }
 
                 return Name;

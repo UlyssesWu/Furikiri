@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net47</TargetFrameworks>
     <Authors>Ulysses</Authors>
-    <Company>Project AZUSA</Company>
+    <Company>Independent Galgrammer</Company>
     <Description>TJS2 Decompiler "Furikiri"</Description>
     <Copyright>Copyright © UlyssesWu 2018-2019</Copyright>
     <PackageProjectUrl>https://github.com/UlyssesWu/Furikiri</PackageProjectUrl>

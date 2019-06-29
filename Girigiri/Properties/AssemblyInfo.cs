@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("Girigiri")]
 [assembly: AssemblyDescription("Furikiri TJS2 Decompiler")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Project AZUSA")]
+[assembly: AssemblyCompany("Independent Galgrammer")]
 [assembly: AssemblyProduct("Furikiri")]
 [assembly: AssemblyCopyright("Copyright © Ulysses 2018-2019")]
 [assembly: AssemblyTrademark("wdwxy12345@gmail.com")]

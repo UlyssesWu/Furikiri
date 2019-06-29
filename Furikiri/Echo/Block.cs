@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using Furikiri.AST;
-using Furikiri.AST.Expressions;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo

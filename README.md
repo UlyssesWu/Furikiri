@@ -24,6 +24,6 @@ Related projects:
 
 ---
 
-by Ulysses (wdwxy12345@gmail.com) from [Project AZUSA](https://github.com/Project-AZUSA) 
+by Ulysses (wdwxy12345@gmail.com) from [Independent Galgrammer](https://github.com/galgrammer) 
 
 Furikiri is licensed under **LGPLv3**.
