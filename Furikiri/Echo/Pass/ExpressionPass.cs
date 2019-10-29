@@ -688,7 +688,8 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.CALLD:
                     {
-                        var call = new InvokeExpression(ins.Data.AsString());
+                        var callMethodName = ins.Data.AsString();
+                        var call = new InvokeExpression(callMethodName);
                         var dst = ins.GetRegisterSlot(0);
                         var callerSlot = ins.GetRegisterSlot(1);
                         call.Instance = ex[callerSlot];
@@ -711,6 +712,17 @@ namespace Furikiri.Echo.Pass
                         ex[dst] = call;
                         if (dst == 0) //just execute and discard result
                         {
+                            //Handle RegExp()._compile("//g/[^A-Za-z]")
+                            if (callMethodName == Const.RegExpCompile)
+                            {
+                                if (call.Instance is InvokeExpression invoke && invoke.Method == Const.RegExp)
+                                {
+                                    call.InvokeType = InvokeType.RegExpCompile;
+                                    ex[callerSlot] = call;
+                                    break;
+                                }
+                            }
+
                             expList.Add(call);
                         }
                     }
@@ -756,8 +768,7 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.NEW:
                     {
-                        InvokeExpression call = new InvokeExpression(ex[ins.GetRegisterSlot(1)]);
-                        call.IsCtor = true;
+                        InvokeExpression call = new InvokeExpression(ex[ins.GetRegisterSlot(1)]) {InvokeType = InvokeType.Ctor};
                         var dst = ins.GetRegisterSlot(0);
                         call.Instance = null;
                         var paramCount = ins.GetRegisterSlot(2);

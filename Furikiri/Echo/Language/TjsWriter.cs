@@ -160,7 +160,13 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitInvokeExpr(InvokeExpression invoke)
         {
-            if (invoke.IsCtor)
+            if (invoke.InvokeType == InvokeType.RegExpCompile)
+            {
+                _formatter.WriteIdentifier(invoke.ToRegExp());
+                return;
+            }
+
+            if (invoke.InvokeType == InvokeType.Ctor)
             {
                 //TODO: quick ctor syntax for Dictionary, Array
                 _formatter.WriteKeyword("new");
@@ -181,7 +187,7 @@ namespace Furikiri.Echo.Language
                 Visit(para);
                 if (i < invoke.Parameters.Count - 1)
                 {
-                    _formatter.Write(",");
+                    _formatter.Write(", ");
                 }
             }
 

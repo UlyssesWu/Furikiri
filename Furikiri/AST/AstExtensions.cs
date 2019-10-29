@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 using Furikiri.AST.Expressions;
 using Furikiri.Echo;
+using Furikiri.Emit;
 
 namespace Furikiri.AST
 {
@@ -75,6 +77,7 @@ namespace Furikiri.AST
             {
                 right = condition.Condition;
             }
+
             while (left is ConditionExpression condition)
             {
                 left = condition.Condition;
@@ -89,6 +92,7 @@ namespace Furikiri.AST
             {
                 right = condition.Condition;
             }
+
             while (left is ConditionExpression condition)
             {
                 left = condition.Condition;
@@ -118,6 +122,44 @@ namespace Furikiri.AST
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// To RegExp format
+        /// <example>/start(.*?)end/gi</example>
+        /// </summary>
+        /// <param name="invoke"></param>
+        /// <returns></returns>
+        public static string ToRegExp(this InvokeExpression invoke)
+        {
+            if (invoke.InvokeType != InvokeType.RegExpCompile || invoke.Parameters.Count < 1 ||
+                !(invoke.Parameters[0] is ConstantExpression constant) || !(constant.Variant is TjsString tStr))
+            {
+                throw new ArgumentException("The Expression is not a RegExp");
+            }
+
+            var regex = tStr.StringValue;
+            if (!regex.StartsWith("//"))
+            {
+                return regex; //TODO: maybe wrong but who cares
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append('/');
+            var count = 0;
+            while (regex[2 + count] != '/')
+            {
+                count++;
+            }
+
+            sb.Append(regex.Substring(2 + count + 1)).Append('/');
+
+            if (count > 0)
+            {
+                sb.Append(regex.Substring(2, count));
+            }
+
+            return sb.ToString();
         }
     }
 }

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net47</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net472</TargetFrameworks>
     <Authors>Ulysses</Authors>
     <Company>Independent Galgrammer</Company>
     <Description>TJS2 Decompiler "Furikiri"</Description>

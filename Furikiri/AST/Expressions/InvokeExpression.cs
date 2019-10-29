@@ -3,6 +3,25 @@ using Furikiri.Emit;
 
 namespace Furikiri.AST.Expressions
 {
+    /// <summary>
+    /// Invoke Type
+    /// </summary>
+    public enum InvokeType
+    {
+        /// <summary>
+        /// Normal method call
+        /// </summary>
+        Call = 0,
+        /// <summary>
+        /// new()
+        /// </summary>
+        Ctor,
+        /// <summary>
+        /// _compile()
+        /// </summary>
+        RegExpCompile,
+    }
+
     class InvokeExpression : Expression, IInstance
     {
         public override AstNodeType Type => AstNodeType.InvokeExpression;
@@ -13,8 +32,8 @@ namespace Furikiri.AST.Expressions
             get => string.IsNullOrEmpty(MethodName) ? MethodExpression.ToString() : MethodName;
             set => MethodName = value;
         }
-        
-        public bool IsCtor { get; set; }
+
+        public InvokeType InvokeType { get; set; } = InvokeType.Call;
 
         public string MethodName { get; set; }
 
