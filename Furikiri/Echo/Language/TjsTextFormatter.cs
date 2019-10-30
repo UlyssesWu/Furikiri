@@ -1,5 +1,6 @@
 ﻿using System;
 using System.CodeDom.Compiler;
+using System.IO;
 
 namespace Furikiri.Echo.Language
 {
@@ -72,7 +73,7 @@ namespace Furikiri.Echo.Language
             Writer.Indent--;
         }
 
-        public int CurrentPosition { get; }
+        public int CurrentPosition => (Writer.InnerWriter as StringWriter)?.GetStringBuilder().Length ?? 0;
 
         public void StartWritingComment()
         {

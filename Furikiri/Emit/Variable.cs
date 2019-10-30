@@ -8,7 +8,7 @@ namespace Furikiri.Emit
         public string Name { get; set; }
         public TjsVarType VarType { get; set; }
         public bool IsParameter { get; set; }
-        public string DefaultName => $"{(IsParameter ? "p" : "v")}{Math.Abs(Slot) + 2}";
+        public string DefaultName => $"{(IsParameter ? "p" : "v")}{Math.Abs(Slot)}"; //Math.Abs(Slot) + 2
 
         public Variable(short slot)
         {
@@ -23,6 +23,15 @@ namespace Furikiri.Emit
 
         public static bool CheckIsParameter(CodeObject obj, short slot)
         {
+            /* Register Stack
+             *  1+ : intermediate slot
+             *  0  : not sure
+             * -1  : this
+             * -2  : this proxy
+             * -3- : parameter
+             * -n- : variable
+             */
+
             var argCount = obj.FuncDeclArgCount;
             var varCount = obj.MaxVariableCount;
             if (slot >= -2)

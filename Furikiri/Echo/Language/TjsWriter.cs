@@ -18,6 +18,7 @@ namespace Furikiri.Echo.Language
         private IFormatter _formatter;
         private IndentedTextWriter _writer;
         public Dictionary<Method, BlockStatement> MethodRefs = new Dictionary<Method, BlockStatement>();
+
         /// <summary>
         /// Do not write return if there is nothing to return
         /// </summary>
@@ -234,7 +235,14 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitExpressionStmt(ExpressionStatement expression)
         {
+            int pos = _formatter.CurrentPosition;
             Visit(expression.Expression);
+            if (_formatter.CurrentPosition == pos)
+            {
+                //wrote nothing, no new line
+                return;
+            }
+
             _formatter.WriteToken(";");
             _formatter.WriteLine();
         }
