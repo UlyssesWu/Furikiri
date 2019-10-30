@@ -146,12 +146,12 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.TF:
                     {
-                        flag = new UnaryExpression(ex[ins.GetRegisterSlot(0)], UnaryOp.Not);
+                        flag = ex[ins.GetRegisterSlot(0)].Invert(); //new UnaryExpression(ex[ins.GetRegisterSlot(0)], UnaryOp.Not);
                     }
                         break;
                     case OpCode.NF:
                     {
-                        flag = new UnaryExpression(flag, UnaryOp.Not);
+                        flag = flag.Invert(); //new UnaryExpression(flag, UnaryOp.Not);
                     }
                         break;
                     case OpCode.JF:

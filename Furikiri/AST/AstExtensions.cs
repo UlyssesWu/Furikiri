@@ -24,6 +24,11 @@ namespace Furikiri.AST
             return null;
         }
 
+        /// <summary>
+        /// !this
+        /// </summary>
+        /// <param name="exp"></param>
+        /// <returns></returns>
         public static Expression Invert(this Expression exp)
         {
             if (exp is ConditionExpression condition)
@@ -71,6 +76,12 @@ namespace Furikiri.AST
             return new UnaryExpression(exp, UnaryOp.Not);
         }
 
+        /// <summary>
+        /// this || expression
+        /// </summary>
+        /// <param name="left"></param>
+        /// <param name="right"></param>
+        /// <returns></returns>
         public static BinaryExpression Or(this Expression left, Expression right)
         {
             while (right is ConditionExpression condition)
@@ -86,6 +97,12 @@ namespace Furikiri.AST
             return new BinaryExpression(left, right, BinaryOp.LogicOr);
         }
 
+        /// <summary>
+        /// this && expression
+        /// </summary>
+        /// <param name="left"></param>
+        /// <param name="right"></param>
+        /// <returns></returns>
         public static BinaryExpression And(this Expression left, Expression right)
         {
             while (right is ConditionExpression condition)

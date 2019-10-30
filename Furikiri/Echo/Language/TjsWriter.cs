@@ -18,6 +18,10 @@ namespace Furikiri.Echo.Language
         private IFormatter _formatter;
         private IndentedTextWriter _writer;
         public Dictionary<Method, BlockStatement> MethodRefs = new Dictionary<Method, BlockStatement>();
+        /// <summary>
+        /// Do not write return if there is nothing to return
+        /// </summary>
+        public bool HideVoidReturn { get; set; } = true;
 
         public TjsWriter(StringWriter writer)
         {
@@ -318,6 +322,11 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitReturnExpr(ReturnExpression ret)
         {
+            if (HideVoidReturn && ret.Return == null)
+            {
+                return;
+            }
+
             _formatter.WriteKeyword("return");
             if (ret.Return != null)
             {
