@@ -2,6 +2,7 @@
 using System.Linq;
 using Furikiri.Emit;
 using static Furikiri.Emit.OpCode;
+using static Furikiri.Const;
 
 namespace Furikiri.Echo
 {
@@ -127,6 +128,22 @@ namespace Furikiri.Echo
                 case CCL:
                     Write.AddRange(Enumerable.Range(ins.GetRegisterSlot(0), ins.GetRegisterSlot(1)));
                     break;
+                case TT:
+                case TF:
+                case NF:
+                case CEQ:
+                case CDEQ:
+                case CLT:
+                case CGT:
+                    Write.Add(FlagReg); //Flag
+                    break;
+                case SETF:
+                case SETNF:
+                case JF: //why JF / JNF ? Imagine continuous JF -> JNF -> JF etc.
+                case JNF:
+                    Read.Add(FlagReg);
+                    break;
+                
             }
 
             foreach (var reg in ins.Registers)

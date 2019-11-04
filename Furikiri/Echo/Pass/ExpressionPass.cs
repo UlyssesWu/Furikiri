@@ -32,8 +32,8 @@ namespace Furikiri.Echo.Pass
             //Add global
             var exps = new Dictionary<short, Expression>
             {
-                {-1, This},
-                {-2, ThisProxy},
+                {Const.ThisReg, This},
+                {Const.ThisProxyReg, ThisProxy},
             };
             //Add params
             var argCount = context.Object.FuncDeclArgCount;

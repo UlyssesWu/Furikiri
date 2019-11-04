@@ -71,7 +71,7 @@ namespace Furikiri.Emit
                     return rs.Max(r => r.Slot);
                 }
 
-                return Const.ThisProxy;
+                return Const.ThisProxyReg;
             }
         }
 

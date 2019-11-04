@@ -525,13 +525,6 @@ namespace Furikiri.Echo
             }
         }
 
-        //public void PropagateExpressions()
-        //{
-        //    foreach (var block in Blocks)
-        //    {
-        //    }
-        //}
-
         #endregion
     }
 }

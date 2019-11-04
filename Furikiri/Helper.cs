@@ -15,6 +15,11 @@ namespace Furikiri
             return new string(chars);
         }
 
+        /// <summary>
+        /// To short
+        /// </summary>
+        /// <param name="code"></param>
+        /// <returns></returns>
         public static short ToS(this OpCode code)
         {
             return (short) code;

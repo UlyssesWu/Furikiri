@@ -7,7 +7,7 @@ using Furikiri.Emit;
 namespace Furikiri.Echo
 {
     /// <summary>
-    /// Block
+    /// Basic Block
     /// </summary>
     [DebuggerDisplay("{Start}-{End} ({Length})")]
     class Block

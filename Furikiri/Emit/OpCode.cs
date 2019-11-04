@@ -1,4 +1,5 @@
-﻿
+﻿// Furikiri
+// OpCode Translation by Ulysses
 
 // ReSharper disable InconsistentNaming
 // ReSharper disable IdentifierTypo

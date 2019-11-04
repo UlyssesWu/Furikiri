@@ -5,6 +5,8 @@ namespace Furikiri.Echo.Pass
 {
     class RegMemberPass : IPass
     {
+        //TODO: more robust RegMember detect
+
         public BlockStatement Process(DecompileContext context, BlockStatement statement)
         {
             context.RegisteredMembers.Clear();

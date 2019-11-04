@@ -4,22 +4,6 @@ using System.Text;
 
 namespace Furikiri.Emit
 {
-    public static class Const
-    {
-        /// <summary>
-        /// %0, res, usually void
-        /// </summary>
-        public const short Resource = 0;
-        /// <summary>
-        /// %-1, this
-        /// </summary>
-        public const short This = -1;
-        /// <summary>
-        /// %-2, this ?? global
-        /// </summary>
-        public const short ThisProxy = -2;
-    }
-
     [Flags]
     public enum TjsInterfaceFlag : int
     {

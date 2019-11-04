@@ -1,4 +1,6 @@
-﻿namespace Furikiri
+﻿using System;
+
+namespace Furikiri
 {
     static class Const
     {
@@ -7,5 +9,24 @@
 
         public const string RegExp = "RegExp";
         public const string RegExpCompile = "_compile";
+
+        /// <summary>
+        /// A special slot for flag since 0 is (WTF) not represent for it
+        /// <para>It shouldn't affect the TJS VM since a normal slot is a short, while this is a int</para>
+        /// </summary>
+        public const int FlagReg = Int32.MinValue;
+
+        /// <summary>
+        /// %0, res, usually void
+        /// </summary>
+        public const short ResourceReg = 0;
+        /// <summary>
+        /// %-1, this
+        /// </summary>
+        public const short ThisReg = -1;
+        /// <summary>
+        /// %-2, this ?? global
+        /// </summary>
+        public const short ThisProxyReg = -2;
     }
 }
