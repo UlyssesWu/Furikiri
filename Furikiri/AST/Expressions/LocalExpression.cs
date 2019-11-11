@@ -13,7 +13,7 @@ namespace Furikiri.AST.Expressions
         public TjsVarType DataType { get; set; }
         public override AstNodeType Type => AstNodeType.LocalExpression;
         public override IEnumerable<IAstNode> Children { get; } = null;
-        public short Slot => VariableDef.Slot;
+        public int Slot => VariableDef.Slot;
         public string Name => VariableDef.DefaultName;
         public bool IsParameter => VariableDef.IsParameter;
         

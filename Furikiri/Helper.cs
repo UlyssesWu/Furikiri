@@ -561,10 +561,11 @@ namespace Furikiri
 
         public static void AddRange<T>(this HashSet<T> hs, IEnumerable<T> set)
         {
-            foreach (var t in set)
-            {
-                hs.Add(t);
-            }
+            hs.UnionWith(set);
+            //foreach (var t in set)
+            //{
+            //    hs.Add(t);
+            //}
         }
 
         public static T TryGet<T>(this List<T> list, int index)

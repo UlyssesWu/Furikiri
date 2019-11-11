@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
@@ -30,7 +31,7 @@ namespace Furikiri.Echo.Pass
             }
 
             //Add global
-            var exps = new Dictionary<short, Expression>
+            var exps = new Dictionary<int, Expression>
             {
                 {Const.ThisReg, This},
                 {Const.ThisProxyReg, ThisProxy},
@@ -60,15 +61,43 @@ namespace Furikiri.Echo.Pass
         }
 
         public void BlockProcess(DecompileContext context, Block block,
-            Dictionary<short, Expression> exps, Expression flag = null)
+            Dictionary<int, Expression> exps)
         {
             if (block.Statements != null)
             {
                 return;
             }
 
+            if (block.From.Count > 1)
+            {
+                //get from.Output && from.Def
+                var commonInput = block.From.Select(b => b.Output).Union(block.From.Select(b => b.Def)).GetIntersection();
+                commonInput.IntersectWith(block.Input);
+                if (commonInput.Count > 0)
+                {
+                    foreach (var inSlot in commonInput)
+                    {
+                        //Generate Phi
+                        var phi = new PhiExpression(inSlot);
+                        //From must be sorted since we need first condition
+                        if (block.From[0].Statements.Last() is ConditionExpression condition)
+                        {
+                            phi.Condition = condition;
+                            var trueBlock = context.BlockTable[condition.TrueBranch];
+                            var falseBlock = context.BlockTable[condition.FalseBranch];
+                            //phi.TrueBranch = context.BlockFinalStates[trueBlock][inSlot];
+                            phi.TrueBranch = context.BlockFinalStates[block.From[0]][inSlot]; //if jump, use the state from the jump-from block 
+                            phi.FalseBranch = context.BlockFinalStates[falseBlock][inSlot];
+                        }
+
+                        exps[inSlot] = phi;
+                    }
+                }
+            }
+
             Expression retExp = null;
-            var ex = new Dictionary<short, Expression>(exps);
+            var ex = new Dictionary<int, Expression>(exps);
+            var flag = ex.ContainsKey(Const.FlagReg) ? ex[Const.FlagReg] : null;
             var expList = new List<IAstNode>();
             block.Statements = expList;
             InstructionData insData = null;
@@ -941,9 +970,14 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
+            //Save states
+            ex[Const.FlagReg] = flag;
+            context.BlockFinalStates[block] = ex;
+
+            //Process next
             foreach (var succ in block.To)
             {
-                BlockProcess(context, succ, ex, flag); //TODO: deep copy flag?
+                BlockProcess(context, succ, ex); //TODO: deep copy flag?
             }
 
             void UpdateRegister(short dst, Expression exp)

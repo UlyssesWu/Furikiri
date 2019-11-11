@@ -313,7 +313,7 @@ namespace Furikiri.Echo.Pass
         }
 
         /// <summary>
-        /// 
+        /// merge If condition
         /// </summary>
         /// <param name="condition">current condition</param>
         /// <param name="conditionBlock">current condition block</param>
@@ -424,11 +424,16 @@ namespace Furikiri.Echo.Pass
                 thenBlock = block.To[0];
                 elseBlock = block.To[1];
             }
-            
-            var logic = new IfLogic { ConditionBlock = block, Condition = cond, PostDominator = postDominator };
-            
-            logic.Then.Blocks = new List<Block> {thenBlock};
-            logic.Else.Blocks = new List<Block> {elseBlock};
+
+            var logic = new IfLogic
+            {
+                ConditionBlock = block,
+                Condition = cond,
+                PostDominator = postDominator,
+                Then = {Blocks = new List<Block> {thenBlock}},
+                Else = {Blocks = new List<Block> {elseBlock}}
+            };
+
 
             bool elseIsBreak = false;
             if (loop != null)

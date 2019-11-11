@@ -33,6 +33,7 @@ namespace Furikiri.AST
         ConditionExpression,
         DeleteExpression,
         PropertyAccessExpression,
+        PhiExpression,
     }
 
     public interface IAstNode

@@ -6,10 +6,10 @@ Furikiri is currently in development. The disassembler works well but the decomp
 
 The following softwares/projects are parts of Furikiri.
 
-## Girigiri
+## Girigiri (Furikiri.Console)
 *ギリギリ(girigiri)愛♫~ キリキリ(kirikiri)舞い♫~*
 
-Girigiri ([ギリギリ](https://youtu.be/dQLG0lwe_RM)) is the front-end of Furikiri. 
+Girigiri ([ギリギリ](https://youtu.be/dQLG0lwe_RM)) is the front-end (console) of Furikiri. 
 
 It's a managed TJS2 bytecode disassembler/decompiler which does not require kirikiri engine (e.g. KRKR 2/Z/#) to run.
 

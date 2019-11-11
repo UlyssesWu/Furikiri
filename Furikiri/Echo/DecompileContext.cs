@@ -1,9 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Linq;
 using Furikiri.AST.Expressions;
-using Furikiri.Echo.Logical;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo
@@ -21,7 +19,7 @@ namespace Furikiri.Echo
         //    {TjsVarType.Null, 0},
         //};
 
-        internal List<ILogical> Logicals { get; set; } = new List<ILogical>();
+        //internal List<ILogical> Logicals { get; set; } = new List<ILogical>();
 
         internal Block EntryBlock { get; set; }
 
@@ -31,10 +29,12 @@ namespace Furikiri.Echo
         internal Block ExitBlock { get; set; } = new Block(-1);
 
         internal List<Block> Blocks { get; set; } = new List<Block>();
+
         /// <summary>
         /// Based on Start, not on Id
         /// </summary>
         internal Dictionary<int, Block> BlockTable { get; private set; }
+
         internal List<Loop> LoopSet { get; set; } = new List<Loop>();
 
         public CodeObject Object { get; set; }
@@ -43,8 +43,11 @@ namespace Furikiri.Echo
         internal Dictionary<string, ITjsVariant> RegisteredMembers { get; set; } =
             new Dictionary<string, ITjsVariant>();
 
-        internal Dictionary<Block, List<Expression>> BlockExpressions { get; set; } =
-            new Dictionary<Block, List<Expression>>();
+        internal Dictionary<Block, Dictionary<int, Expression>> BlockFinalStates { get; set; } =
+            new Dictionary<Block, Dictionary<int, Expression>>();
+
+        //internal Dictionary<Block, List<Expression>> BlockExpressions { get; set; } =
+        //    new Dictionary<Block, List<Expression>>();
 
         public DecompileContext(CodeObject obj)
         {
@@ -73,7 +76,7 @@ namespace Furikiri.Echo
 
             return TjsVarType.Null;
         }
-        
+
         #region CFG
 
         public void BuildCFG(List<Instruction> instructions)
@@ -392,7 +395,7 @@ namespace Furikiri.Echo
                 TravelLoop(set, child);
             }
         }
-        
+
         //private void FillInstructionIntoBlock(Block block, List<Instruction> instructions)
         //{
         //    block.Statements.Clear();

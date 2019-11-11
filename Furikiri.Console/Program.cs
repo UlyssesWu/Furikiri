@@ -6,7 +6,7 @@ using Furikiri.Echo;
 using Furikiri.Emit;
 using McMaster.Extensions.CommandLineUtils;
 
-namespace Furikiri.Girigiri
+namespace Furikiri.Console
 {
     class Program
     {
@@ -14,9 +14,9 @@ namespace Furikiri.Girigiri
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Furikiri TJS2 Disassembler");
-            Console.WriteLine("by Ulysses, wdwxy12345@gmail.com");
-            Console.WriteLine();
+            System.Console.WriteLine("Furikiri TJS2 Disassembler/Decompiler \"Girigiri\"");
+            System.Console.WriteLine("by Ulysses, wdwxy12345@gmail.com");
+            System.Console.WriteLine();
 
             var app = new CommandLineApplication();
             app.OptionsComparison = StringComparison.OrdinalIgnoreCase;
@@ -26,7 +26,7 @@ namespace Furikiri.Girigiri
             app.ExtendedHelpText = PrintHelp();
 
             //options
-            var optDis = app.Option("-da|--dasm", "Disassemble byte code", CommandOptionType.NoValue);
+            var optDis = app.Option("-da|--disassemble", "Disassemble byte code", CommandOptionType.NoValue);
             var optDec = app.Option("-d|--dec", "Decompile byte code", CommandOptionType.NoValue);
             var optPrint = app.Option("-p|--print", "Print result", CommandOptionType.NoValue);
 
@@ -71,9 +71,9 @@ namespace Furikiri.Girigiri
             });
 
             app.Execute(args);
-            Console.WriteLine("All done!");
+            System.Console.WriteLine("All done!");
 #if DEBUG
-            Console.ReadLine();
+            System.Console.ReadLine();
 #endif
         }
 
@@ -83,9 +83,9 @@ namespace Furikiri.Girigiri
             var result = decompiler.Decompile();
             if (print)
             {
-                Console.WriteLine("// File: " + path);
-                Console.WriteLine(result);
-                Console.WriteLine();
+                System.Console.WriteLine("// File: " + path);
+                System.Console.WriteLine(result);
+                System.Console.WriteLine();
             }
             else
             {
@@ -101,24 +101,24 @@ namespace Furikiri.Girigiri
                 return;
             }
 
-            Console.WriteLine("// File: " + path);
+            System.Console.WriteLine("// File: " + path);
             try
             {
                 var result = _asm.Disassemble(new Module(path));
                 if (print)
                 {
-                    Console.WriteLine(result);
+                    System.Console.WriteLine(result);
                 }
                 else
                 {
                     File.WriteAllText(Path.ChangeExtension(path, ".tjsasm"), result);
                 }
 
-                Console.WriteLine("Done.");
+                System.Console.WriteLine("Done.");
             }
             catch (Exception e)
             {
-                Console.WriteLine("Failed!");
+                System.Console.WriteLine("Failed!");
             }
         }
 

@@ -5,7 +5,7 @@ namespace Furikiri.AST.Expressions
     class ConditionExpression : Expression
     {
         public override AstNodeType Type => AstNodeType.ConditionExpression;
-        public override IEnumerable<IAstNode> Children { get; }
+        public override IEnumerable<IAstNode> Children => null;
 
         public Expression Condition { get; set; }
 
