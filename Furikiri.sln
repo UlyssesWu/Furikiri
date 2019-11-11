@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IronTJS", "IronTJS\IronTJS\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Furikiri.Tests", "Furikiri.Tests\Furikiri.Tests.csproj", "{F99F9BBF-A418-46BC-8D66-35BEEF929481}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Furikiri.Console", "Furikiri.Console\Furikiri.Console.csproj", "{2BB3148B-048E-41E1-BD15-9A66C0AA94CB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Furikiri.CLI", "Furikiri.CLI\Furikiri.CLI.csproj", "{2BB3148B-048E-41E1-BD15-9A66C0AA94CB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -6,7 +6,7 @@ using Furikiri.Echo;
 using Furikiri.Emit;
 using McMaster.Extensions.CommandLineUtils;
 
-namespace Furikiri.Console
+namespace Furikiri.CLI
 {
     class Program
     {
@@ -14,9 +14,9 @@ namespace Furikiri.Console
 
         static void Main(string[] args)
         {
-            System.Console.WriteLine("Furikiri TJS2 Disassembler/Decompiler \"Girigiri\"");
-            System.Console.WriteLine("by Ulysses, wdwxy12345@gmail.com");
-            System.Console.WriteLine();
+            Console.WriteLine("Furikiri TJS2 Disassembler/Decompiler \"Girigiri\"");
+            Console.WriteLine("by Ulysses, wdwxy12345@gmail.com");
+            Console.WriteLine();
 
             var app = new CommandLineApplication();
             app.OptionsComparison = StringComparison.OrdinalIgnoreCase;
@@ -71,9 +71,9 @@ namespace Furikiri.Console
             });
 
             app.Execute(args);
-            System.Console.WriteLine("All done!");
+            Console.WriteLine("All done!");
 #if DEBUG
-            System.Console.ReadLine();
+            Console.ReadLine();
 #endif
         }
 
@@ -83,9 +83,9 @@ namespace Furikiri.Console
             var result = decompiler.Decompile();
             if (print)
             {
-                System.Console.WriteLine("// File: " + path);
-                System.Console.WriteLine(result);
-                System.Console.WriteLine();
+                Console.WriteLine("// File: " + path);
+                Console.WriteLine(result);
+                Console.WriteLine();
             }
             else
             {
@@ -101,24 +101,24 @@ namespace Furikiri.Console
                 return;
             }
 
-            System.Console.WriteLine("// File: " + path);
+            Console.WriteLine("// File: " + path);
             try
             {
                 var result = _asm.Disassemble(new Module(path));
                 if (print)
                 {
-                    System.Console.WriteLine(result);
+                    Console.WriteLine(result);
                 }
                 else
                 {
                     File.WriteAllText(Path.ChangeExtension(path, ".tjsasm"), result);
                 }
 
-                System.Console.WriteLine("Done.");
+                Console.WriteLine("Done.");
             }
             catch (Exception e)
             {
-                System.Console.WriteLine("Failed!");
+                Console.WriteLine("Failed!");
             }
         }
 
