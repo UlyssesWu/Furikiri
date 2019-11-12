@@ -6,7 +6,7 @@ Furikiri is currently in development. The disassembler works well but the decomp
 
 The following softwares/projects are parts of Furikiri.
 
-## Girigiri (Furikiri.Console)
+## Girigiri (Furikiri.CLI)
 *ギリギリ(girigiri)愛♫~ キリキリ(kirikiri)舞い♫~*
 
 Girigiri ([ギリギリ](https://youtu.be/dQLG0lwe_RM)) is the front-end (console) of Furikiri. 

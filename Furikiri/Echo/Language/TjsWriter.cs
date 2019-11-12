@@ -442,5 +442,15 @@ namespace Furikiri.Echo.Language
             Visit(whileStmt.Body);
             _formatter.WriteEndBlock();
         }
+
+        internal override void VisitPhiExpr(PhiExpression phi)
+        {
+            //FIXME: This is a fake implementation
+            Visit(phi.ThenBranch);
+            _formatter.WriteSpace();
+            _formatter.WriteToken("||");
+            _formatter.WriteSpace();
+            Visit(phi.ElseBranch);
+        }
     }
 }

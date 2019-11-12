@@ -48,8 +48,7 @@ namespace Furikiri.Echo.Pass
                     }
                 }
             }
-
-
+            
             return statement;
         }
 

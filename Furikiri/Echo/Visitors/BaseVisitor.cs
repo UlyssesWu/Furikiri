@@ -56,6 +56,9 @@ namespace Furikiri.Echo.Visitors
                 case PropertyAccessExpression propertyAccessExpression:
                     VisitPropertyAccessExpr(propertyAccessExpression);
                     break;
+                case PhiExpression phiExpression:
+                    VisitPhiExpr(phiExpression);
+                    break;
                 case Expression expression:
                     break;
 
@@ -83,6 +86,10 @@ namespace Furikiri.Echo.Visitors
                 default:
                     break;
             }
+        }
+
+        internal virtual void VisitPhiExpr(PhiExpression phi)
+        {
         }
 
         internal virtual void VisitWhileStmt(WhileStatement whileStmt)

@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
 
 namespace Furikiri.Echo.Pass
@@ -19,7 +17,13 @@ namespace Furikiri.Echo.Pass
 
         private void ExpressionPropagation(Block block)
         {
-
+            foreach (var statement in block.Statements)
+            {
+                if (statement is ExpressionStatement exp && exp.Expression is PhiExpression phi)
+                {
+                    //TODO:
+                }
+            }
         }
     }
 }

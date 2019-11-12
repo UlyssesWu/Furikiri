@@ -11,14 +11,14 @@ namespace Furikiri.AST.Expressions
     class PhiExpression : Expression
     {
         public override AstNodeType Type => AstNodeType.PhiExpression;
-        public override IEnumerable<IAstNode> Children => new[] {TrueBranch, FalseBranch};
+        public override IEnumerable<IAstNode> Children => new[] {ThenBranch, ElseBranch};
 
         public int Slot { get; set; }
 
         public ConditionExpression Condition { get; set; }
 
-        public Expression TrueBranch { get; set; }
-        public Expression FalseBranch { get; set; }
+        public Expression ThenBranch { get; set; }
+        public Expression ElseBranch { get; set; }
 
         public PhiExpression(int slot)
         {
@@ -27,7 +27,7 @@ namespace Furikiri.AST.Expressions
 
         public override string ToString()
         {
-            return $"{TrueBranch} || {FalseBranch}";
+            return $"{ThenBranch} || {ElseBranch}";
         }
     }
 }

@@ -80,14 +80,15 @@ namespace Furikiri.Echo.Pass
                         //Generate Phi
                         var phi = new PhiExpression(inSlot);
                         //From must be sorted since we need first condition
-                        if (block.From[0].Statements.Last() is ConditionExpression condition)
+                        if (block.From[0].Statements?.Last() is ConditionExpression condition)
                         {
                             phi.Condition = condition;
-                            var trueBlock = context.BlockTable[condition.TrueBranch];
-                            var falseBlock = context.BlockTable[condition.FalseBranch];
-                            //phi.TrueBranch = context.BlockFinalStates[trueBlock][inSlot];
-                            phi.TrueBranch = context.BlockFinalStates[block.From[0]][inSlot]; //if jump, use the state from the jump-from block 
-                            phi.FalseBranch = context.BlockFinalStates[falseBlock][inSlot];
+                            //var thenBlock = context.BlockTable[condition.JumpTo];
+                            var elseBlock = context.BlockTable[condition.ElseTo];
+                            //phi.ThenBranch = context.BlockFinalStates[trueBlock][inSlot];
+                            phi.ThenBranch = context.BlockFinalStates[block.From[0]][inSlot]; //if jump, use the state from the jump-from block 
+                            phi.ElseBranch = context.BlockFinalStates[elseBlock][inSlot];
+                            //Next: Merge condition: if (v1) then v1 else v2 => v1 || v2 (infer v1 is bool)
                         }
 
                         exps[inSlot] = phi;
@@ -491,9 +492,9 @@ namespace Furikiri.Echo.Pass
                             case OpCode.SR:
                                 op = BinaryOp.BitShiftRight;
                                 break;
-                            case OpCode.CP:
-                                op = BinaryOp.Assign;
-                                push = true;
+                            //case OpCode.CP: //moved!
+                            //    op = BinaryOp.Assign;
+                            //    push = true;
                                 break;
                             case OpCode.CHKINS:
                                 op = BinaryOp.InstanceOf;
