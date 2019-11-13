@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
 
@@ -22,6 +23,25 @@ namespace Furikiri.Echo.Logical
 
             Then?.HideBlocks();
             Else?.HideBlocks();
+        }
+
+        public void Invert()
+        {
+            Condition = Condition.Invert();
+            var tmp = Then;
+            Then = Else;
+            Else = tmp;
+        }
+
+        public IfLogic Simplify()
+        {
+            if (Then.Statement == null && Else.IsBreak)
+            {
+                Invert();
+                Else.Statement = null;
+            }
+
+            return this;
         }
 
         public Statement ToStatement()

@@ -39,12 +39,12 @@ namespace Furikiri.Echo.Pass
                         }
                         else
                         {
-                            b.Statements.Replace(logic.Condition, logic.ToStatement());
+                            b.Statements.Replace(logic.Condition, logic.Simplify().ToStatement());
                         }
                     }
                     else
                     {
-                        b.Statements.Replace(logic.Condition, logic.ToStatement());
+                        b.Statements.Replace(logic.Condition, logic.Simplify().ToStatement());
                     }
                 }
             }

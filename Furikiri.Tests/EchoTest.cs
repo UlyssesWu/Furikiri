@@ -58,10 +58,11 @@ namespace Furikiri.Tests
         {
             var path = "..\\..\\Res\\Initialize.tjs.comp";
             Decompiler decompiler = new Decompiler(path);
-            var result = decompiler.Decompile();
+            //var result = decompiler.Decompile();
             //var result = decompiler.Decompile("global");
             //var result = decompiler.Decompile("Test"); //there is a bug at [var b3 = b2 || b;] to be solved only by data flow analysis
             // B1 -> B2 -> B3, B1 -> B3, B3.From = B1 & B2, B3.Input = flag, B1.Output & B1.Def = flag, B2.Output & B2.Def = flag => flag = φ
+            var result = decompiler.Decompile("TestLoop");
             return;
             var KAGLoadScript = decompiler.Script.Objects.Find(c => c.Name == "KAGLoadScript");
             var argC = KAGLoadScript.FuncDeclArgCount;

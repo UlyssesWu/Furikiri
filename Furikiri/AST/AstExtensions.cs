@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Furikiri.AST.Expressions;
 using Furikiri.Echo;
@@ -16,7 +17,13 @@ namespace Furikiri.AST
 
         public static ConditionExpression GetCondition(this List<IAstNode> statements)
         {
-            if (statements.Count == 1 && statements[0] is ConditionExpression condition)
+            //old impl
+            //if (statements.Count == 1 && statements[0] is ConditionExpression condition)
+            //{
+            //    return condition;
+            //}
+
+            if (statements.LastOrDefault() is ConditionExpression condition)
             {
                 return condition;
             }
