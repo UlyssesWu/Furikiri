@@ -4,7 +4,7 @@ using Furikiri.Emit;
 
 namespace Furikiri.AST.Expressions
 {
-    class UnaryExpression : Expression
+    class UnaryExpression : Expression, IOperationExpression
     {
         public override AstNodeType Type => AstNodeType.UnaryExpression;
 
@@ -13,6 +13,8 @@ namespace Furikiri.AST.Expressions
             get { yield return Target; }
         }
 
+        public bool IsSelfAssignment { get; set; } = false;
+        
         public UnaryOp Op { get; set; }
         public TjsVarType? ResultType { get; set; }
 

@@ -7,7 +7,7 @@ namespace Furikiri.AST.Expressions
     /// <summary>
     /// Binary Expression
     /// </summary>
-    class BinaryExpression : Expression
+    class BinaryExpression : Expression, IOperationExpression
     {
         public override AstNodeType Type => AstNodeType.BinaryExpression;
 
@@ -21,6 +21,7 @@ namespace Furikiri.AST.Expressions
                 yield return Right;
             }
         }
+        public bool IsSelfAssignment { get; set; } = false;
 
         public bool IsDeclaration { get; set; }
 
@@ -64,5 +65,6 @@ namespace Furikiri.AST.Expressions
         {
             return DebugString;
         }
+
     }
 }

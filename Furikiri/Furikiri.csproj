@@ -7,7 +7,7 @@
     <Description>TJS2 Decompiler "Furikiri"</Description>
     <Copyright>Copyright © UlyssesWu 2018-2019</Copyright>
     <PackageProjectUrl>https://github.com/UlyssesWu/Furikiri</PackageProjectUrl>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>8</LangVersion>
     <PackageLicenseUrl>https://github.com/UlyssesWu/Furikiri/blob/master/LICENSE</PackageLicenseUrl>
   </PropertyGroup>
 

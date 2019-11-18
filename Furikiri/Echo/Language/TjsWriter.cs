@@ -147,6 +147,26 @@ namespace Furikiri.Echo.Language
             }
 
             bool needBrackets = bin.NeedBrackets();
+            if (bin.IsSelfAssignment)
+            {
+                needBrackets = false;
+                if (bin.Op.CanSelfAssign())
+                {
+                    Visit(bin.Left);
+                    _formatter.WriteSpace();
+                    _formatter.WriteToken(bin.Op.ToSelfAssignSymbol());
+                    _formatter.WriteSpace();
+                    Visit(bin.Right);
+                    return;
+                }
+                else
+                {
+                    Visit(bin.Left);
+                    _formatter.WriteSpace();
+                    _formatter.WriteToken("=");
+                    _formatter.WriteSpace();
+                }
+            }
             if (needBrackets)
             {
                 _formatter.WriteToken("(");
@@ -236,6 +256,11 @@ namespace Furikiri.Echo.Language
         internal override void VisitExpressionStmt(ExpressionStatement expression)
         {
             int pos = _formatter.CurrentPosition;
+            if (expression.Expression is IOperationExpression bin)
+            {
+                bin.IsSelfAssignment = true;
+            }
+
             Visit(expression.Expression);
             if (_formatter.CurrentPosition == pos)
             {
@@ -267,6 +292,14 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitUnaryExpr(UnaryExpression unary)
         {
+            if (unary.IsSelfAssignment && !unary.Op.CanSelfAssign())
+            {
+                Visit(unary.Target);
+                _formatter.WriteSpace();
+                _formatter.WriteIdentifier("=");
+                _formatter.WriteSpace();
+            }
+
             switch (unary.Op)
             {
                 case UnaryOp.Inc:

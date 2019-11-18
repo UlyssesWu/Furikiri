@@ -86,7 +86,9 @@ namespace Furikiri.Echo.Pass
                             //var thenBlock = context.BlockTable[condition.JumpTo];
                             var elseBlock = context.BlockTable[condition.ElseTo];
                             //phi.ThenBranch = context.BlockFinalStates[trueBlock][inSlot];
-                            phi.ThenBranch = context.BlockFinalStates[block.From[0]][inSlot]; //if jump, use the state from the jump-from block 
+                            phi.ThenBranch =
+                                context.BlockFinalStates[block.From[0]]
+                                    [inSlot]; //if jump, use the state from the jump-from block 
                             phi.ElseBranch = context.BlockFinalStates[elseBlock][inSlot];
                             //Next: Merge condition: if (v1) then v1 else v2 => v1 || v2 (infer v1 is bool)
                         }
@@ -213,16 +215,13 @@ namespace Furikiri.Echo.Pass
                         var dstSlot = ins.GetRegisterSlot(0);
                         var dst = ex[dstSlot];
                         var op = UnaryOp.Unknown;
-                        bool push = false;
                         switch (ins.OpCode)
                         {
                             case OpCode.INC:
                                 op = UnaryOp.Inc;
-                                push = true;
                                 break;
                             case OpCode.DEC:
                                 op = UnaryOp.Dec;
-                                push = true;
                                 break;
                             case OpCode.CHS:
                                 op = UnaryOp.InvertSign;
@@ -257,11 +256,8 @@ namespace Furikiri.Echo.Pass
                         }
 
                         var u = new UnaryExpression(dst, op);
-                        ex[dstSlot] = u;
-                        if (push)
-                        {
-                            expList.Add(u);
-                        }
+                        //ex[dstSlot] = u;
+                        expList.Add(u);
                     }
                         break;
                     case OpCode.INCPD:
@@ -272,16 +268,13 @@ namespace Furikiri.Echo.Pass
                         var obj = ins.GetRegisterSlot(1);
                         var name = ins.Data.AsString();
                         var op = UnaryOp.Unknown;
-                        var push = false;
                         switch (ins.OpCode)
                         {
                             case OpCode.INCPI:
                                 op = UnaryOp.Inc;
-                                push = true;
                                 break;
                             case OpCode.DECPI:
                                 op = UnaryOp.Dec;
-                                push = true;
                                 break;
                             case OpCode.TYPEOFD:
                                 op = UnaryOp.TypeOf;
@@ -295,10 +288,7 @@ namespace Furikiri.Echo.Pass
                             ex[res] = u;
                         }
 
-                        if (push)
-                        {
-                            expList.Add(u);
-                        }
+                        expList.Add(u);
                     }
                         break;
                     case OpCode.INCPI:
@@ -308,17 +298,14 @@ namespace Furikiri.Echo.Pass
                         var res = ins.GetRegisterSlot(0);
                         var obj = ins.GetRegisterSlot(1);
                         var name = ins.GetRegisterSlot(2);
-                        var push = false;
                         var op = UnaryOp.Unknown;
                         switch (ins.OpCode)
                         {
                             case OpCode.INCPI:
                                 op = UnaryOp.Inc;
-                                push = true;
                                 break;
                             case OpCode.DECPI:
                                 op = UnaryOp.Dec;
-                                push = true;
                                 break;
                             case OpCode.TYPEOFI:
                                 op = UnaryOp.TypeOf;
@@ -331,10 +318,7 @@ namespace Furikiri.Echo.Pass
                             ex[res] = u;
                         }
 
-                        if (push)
-                        {
-                            expList.Add(u);
-                        }
+                        expList.Add(u);
                     }
                         break;
                     case OpCode.INCP:
@@ -414,8 +398,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.SR:
                     case OpCode.CHKINS:
                     {
-                        var store = true; //Set to Expression
-                        var push = false; //Add to Statement
+                        var store = false; //Set to Expression
                         var declare = false; //Is declaration
                         var dstSlot = ins.GetRegisterSlot(0);
                         var srcSlot = ins.GetRegisterSlot(1);
@@ -492,9 +475,9 @@ namespace Furikiri.Echo.Pass
                             case OpCode.SR:
                                 op = BinaryOp.BitShiftRight;
                                 break;
-                            //case OpCode.CP: //moved!
-                            //    op = BinaryOp.Assign;
-                            //    push = true;
+                                //case OpCode.CP: //moved!
+                                //    op = BinaryOp.Assign;
+                                //    push = true;
                                 break;
                             case OpCode.CHKINS:
                                 op = BinaryOp.InstanceOf;
@@ -508,10 +491,7 @@ namespace Furikiri.Echo.Pass
                             ex[dstSlot] = b;
                         }
 
-                        if (push)
-                        {
-                            expList.Add(b);
-                        }
+                        expList.Add(b);
                     }
                         break;
                     case OpCode.ADDPD:
@@ -588,6 +568,8 @@ namespace Furikiri.Echo.Pass
                         {
                             ex[res] = b;
                         }
+
+                        expList.Add(b);
                     }
                         break;
                     case OpCode.ADDPI:
@@ -664,6 +646,8 @@ namespace Furikiri.Echo.Pass
                         {
                             ex[res] = b;
                         }
+
+                        expList.Add(b);
                     }
                         break;
                     case OpCode.ADDP:
@@ -710,10 +694,11 @@ namespace Furikiri.Echo.Pass
                         }
 
                         ex[dst] = call;
-                        if (dst == 0) //just execute and discard result
-                        {
-                            expList.Add(call);
-                        }
+                        //if (dst == 0) //just execute and discard result
+                        //{
+                        //    expList.Add(call);
+                        //}
+                        expList.Add(call);
                     }
                         break;
                     case OpCode.CALLD:
@@ -790,10 +775,11 @@ namespace Furikiri.Echo.Pass
                         }
 
                         ex[dst] = call;
-                        if (dst == 0) //just execute and discard result
-                        {
-                            expList.Add(call);
-                        }
+                        //if (dst == 0) //just execute and discard result
+                        //{
+                        //    expList.Add(call);
+                        //}
+                        expList.Add(call);
                     }
                         break;
                     case OpCode.NEW:
@@ -818,10 +804,11 @@ namespace Furikiri.Echo.Pass
                         }
 
                         ex[dst] = call;
-                        if (dst == 0) //just execute and discard result
-                        {
-                            expList.Add(call);
-                        }
+                        //if (dst == 0) //just execute and discard result
+                        //{
+                        //    expList.Add(call);
+                        //}
+                        expList.Add(call);
                     }
                         break;
                     case OpCode.GPD:
@@ -971,6 +958,8 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
+            expList.RemoveAll(node => node is Expression exp && exp.Parent != null);
+
             //Save states
             ex[Const.FlagReg] = flag;
             context.BlockFinalStates[block] = ex;
@@ -981,18 +970,18 @@ namespace Furikiri.Echo.Pass
                 BlockProcess(context, succ, ex); //TODO: deep copy flag?
             }
 
-            void UpdateRegister(short dst, Expression exp)
-            {
-                exp.Dest = dst;
-                if (insData.LiveOut.Contains(dst))
-                {
-                    ex[dst] = exp;
-                }
-                else
-                {
-                    expList.Add(exp);
-                }
-            }
+            //void UpdateRegister(short dst, Expression exp)
+            //{
+            //    exp.Dest = dst;
+            //    if (insData.LiveOut.Contains(dst))
+            //    {
+            //        ex[dst] = exp;
+            //    }
+            //    else
+            //    {
+            //        expList.Add(exp);
+            //    }
+            //}
         }
     }
 }

@@ -265,27 +265,18 @@ namespace Furikiri
         /// <returns></returns>
         public static string ContextTypeName(this TjsContextType type)
         {
-            switch (type)
+            return type switch
             {
-                case TjsContextType.TopLevel:
-                    return "top level";
-                case TjsContextType.Function:
-                    return "function";
-                case TjsContextType.ExprFunction:
-                    return "function expression";
-                case TjsContextType.Property:
-                    return "property";
-                case TjsContextType.PropertySetter:
-                    return "property setter";
-                case TjsContextType.PropertyGetter:
-                    return "property getter";
-                case TjsContextType.Class:
-                    return "class";
-                case TjsContextType.SuperClassGetter:
-                    return "super class getter proxy";
-                default:
-                    return "unknown";
-            }
+                TjsContextType.TopLevel => "top level",
+                TjsContextType.Function => "function",
+                TjsContextType.ExprFunction => "function expression",
+                TjsContextType.Property => "property",
+                TjsContextType.PropertySetter => "property setter",
+                TjsContextType.PropertyGetter => "property getter",
+                TjsContextType.Class => "class",
+                TjsContextType.SuperClassGetter => "super class getter proxy",
+                _ => "unknown"
+            };
         }
 
         internal static int ContextHashSize(this TjsContextType type)
@@ -316,78 +307,85 @@ namespace Furikiri
         internal static string GetParamName(this TjsVarType v, int i)
         {
             string s = i < 0 ? "" : i.ToString();
-            switch (v)
+            return v switch
             {
-                case TjsVarType.Null:
-                    return $"p{s}";
-                case TjsVarType.Void:
-                    return $"void{s}";
-                case TjsVarType.Object:
-                    return $"o{s}";
-                case TjsVarType.String:
-                    return $"s{s}";
-                case TjsVarType.Octet:
-                    return $"bytes{s}";
-                case TjsVarType.Int:
-                    return $"i{s}";
-                case TjsVarType.Real:
-                    return $"d{s}";
+                TjsVarType.Null => $"p{s}",
+                TjsVarType.Void => $"void{s}",
+                TjsVarType.Object => $"o{s}",
+                TjsVarType.String => $"s{s}",
+                TjsVarType.Octet => $"bytes{s}",
+                TjsVarType.Int => $"i{s}",
+                TjsVarType.Real => $"d{s}",
+                _ => $"p{s}"
+            };
+        }
+
+        internal static bool CanSelfAssign(this BinaryOp op)
+        {
+            switch (op)
+            {
+                case BinaryOp.Add:
+                case BinaryOp.Sub:
+                case BinaryOp.Mul:
+                case BinaryOp.Div:
+                    return true;
                 default:
-                    return $"p{s}";
+                    return false;
             }
+        }
+
+        internal static bool CanSelfAssign(this UnaryOp op)
+        {
+            switch (op)
+            {
+                case UnaryOp.Inc:
+                case UnaryOp.Dec:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        internal static string ToSelfAssignSymbol(this BinaryOp op)
+        {
+            return op switch
+            {
+                BinaryOp.Add => "+=",
+                BinaryOp.Sub => "-=",
+                BinaryOp.Mul => "*=",
+                BinaryOp.Div => "/=",
+                _ => op.ToSymbol(),
+            };
         }
 
         internal static string ToSymbol(this BinaryOp op)
         {
-            switch (op)
+            return op switch
             {
-                case BinaryOp.Assign:
-                    return "=";
-                case BinaryOp.Add:
-                    return "+";
-                case BinaryOp.Sub:
-                    return "-";
-                case BinaryOp.Mul:
-                    return "*";
-                case BinaryOp.Div:
-                    return "/";
-                case BinaryOp.Idiv:
-                    return "\\";
-                case BinaryOp.Equal:
-                    return "==";
-                case BinaryOp.NotEqual:
-                    return "!=";
-                case BinaryOp.Congruent:
-                    return "===";
-                case BinaryOp.NotCongruent:
-                    return "!==";
-                case BinaryOp.LessThan:
-                    return "<";
-                case BinaryOp.GreaterThan:
-                    return ">";
-                case BinaryOp.InstanceOf:
-                    return "instanceof";
-                case BinaryOp.BitXor:
-                    return "^";
-                case BinaryOp.BitAnd:
-                    return "&";
-                case BinaryOp.BitOr:
-                    return "|";
-                case BinaryOp.NumberShiftLeft:
-                    return "<<";
-                case BinaryOp.NumberShiftRight:
-                    return ">>";
-                case BinaryOp.BitShiftRight:
-                    return ">>>";
-                case BinaryOp.BitShiftLeft:
-                    return "<<<";
-                case BinaryOp.LogicAnd:
-                    return "&&";
-                case BinaryOp.LogicOr:
-                    return "||";
-                default:
-                    return "#";
-            }
+                BinaryOp.Assign => "=",
+                BinaryOp.Add => "+",
+                BinaryOp.Sub => "-",
+                BinaryOp.Mul => "*",
+                BinaryOp.Div => "/",
+                BinaryOp.Idiv => "\\",
+                BinaryOp.Equal => "==",
+                BinaryOp.NotEqual => "!=",
+                BinaryOp.Congruent => "===",
+                BinaryOp.NotCongruent => "!==",
+                BinaryOp.LessThan => "<",
+                BinaryOp.GreaterThan => ">",
+                BinaryOp.InstanceOf => "instanceof",
+                BinaryOp.BitXor => "^",
+                BinaryOp.BitAnd => "&",
+                BinaryOp.BitOr => "|",
+                BinaryOp.NumberShiftLeft => "<<",
+                BinaryOp.NumberShiftRight => ">>",
+                BinaryOp.BitShiftRight => ">>>",
+                BinaryOp.BitShiftLeft => "<<<",
+                BinaryOp.LogicAnd => "&&",
+                BinaryOp.LogicOr => "||",
+                _ => "#"
+            };
         }
 
         internal static int GetPrecedence(this UnaryOp op)
