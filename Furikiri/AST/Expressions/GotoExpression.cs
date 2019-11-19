@@ -2,12 +2,13 @@
 
 namespace Furikiri.AST.Expressions
 {
-    class GotoExpression : Expression
+    class GotoExpression : Expression, IJump
     {
         public override AstNodeType Type => AstNodeType.GotoExpression;
-        public override IEnumerable<IAstNode> Children { get; }
+        public override IEnumerable<IAstNode> Children => null;
 
         public int JumpTo { get; set; }
+
         public GotoExpression()
         {
         }

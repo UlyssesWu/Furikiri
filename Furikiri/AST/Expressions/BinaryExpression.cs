@@ -7,7 +7,7 @@ namespace Furikiri.AST.Expressions
     /// <summary>
     /// Binary Expression
     /// </summary>
-    class BinaryExpression : Expression, IOperationExpression
+    class BinaryExpression : Expression, IOperation
     {
         public override AstNodeType Type => AstNodeType.BinaryExpression;
 

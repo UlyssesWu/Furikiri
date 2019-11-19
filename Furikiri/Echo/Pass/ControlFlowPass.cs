@@ -25,6 +25,7 @@ namespace Furikiri.Echo.Pass
                 {
                     continue;
                 }
+
                 if (StructureIfElse(b, out var logic))
                 {
                     if (logic.Else.IsBreak)
@@ -48,7 +49,7 @@ namespace Furikiri.Echo.Pass
                     }
                 }
             }
-            
+
             return statement;
         }
 
@@ -99,12 +100,15 @@ namespace Furikiri.Echo.Pass
                 dw.Break = FindBreak(loop);
 
                 Block conditionBlock = null;
-                if (lastBlock.Statements.GetCondition() is ConditionExpression lastCondi && lastCondi.TrueBranch == loop.Header.Start)
+                if (lastBlock.Statements.GetCondition() is ConditionExpression lastCondi &&
+                    lastCondi.TrueBranch == loop.Header.Start)
                 {
                     dw.Condition = lastCondi;
                     conditionBlock = lastBlock;
                 }
-                else if (lastBlock.Statements.Count == 1 && lastBlock.Statements[0] is GotoExpression && loop.Header.Statements.GetCondition() is ConditionExpression condi && condi.FalseBranch == dw.Break.Start)
+                else if (lastBlock.Statements.Count == 1 && lastBlock.Statements[0] is GotoExpression &&
+                         loop.Header.Statements.GetCondition() is ConditionExpression condi &&
+                         condi.FalseBranch == dw.Break.Start)
                 {
                     dw.IsWhile = true;
                     dw.Condition = condi;
@@ -156,12 +160,14 @@ namespace Furikiri.Echo.Pass
         internal bool DoWhileToFor(Loop loop, DoWhileLogic dw, out ForLogic f)
         {
             f = null;
-            var idx = _context.Blocks.IndexOf(loop.Blocks.First());
+            var first = loop.Blocks.First();
+            var idx = _context.Blocks.IndexOf(first);
             if (idx < 1)
             {
                 return false;
             }
 
+            //Get Initializer
             var prev = _context.Blocks[idx - 1];
             var lastAssign =
                 (BinaryExpression) prev.Statements.LastOrDefault(
@@ -174,29 +180,37 @@ namespace Furikiri.Echo.Pass
 
             var l = lastAssign.Left;
 
+            //Get Increment
             Expression step = null;
             //the increment statement can be unary or binary
-            UnaryExpression step1 = (UnaryExpression) dw.Continue.Statements
-                .LastOrDefault(n => (n is UnaryExpression));
-            if (step1 != null && (step1.Op == UnaryOp.Inc || step1.Op == UnaryOp.Dec) && step1.Target == l)
+            var operationExp = dw.Continue.Statements
+                .LastOrDefault(n => (n is IOperation));
+
+            if (operationExp is UnaryExpression step1 && step1.Op.CanSelfAssign() && step1.Target == l)
             {
                 step = step1;
             }
+            else if (operationExp is BinaryExpression step2 && step2.Op.CanSelfAssign())
+            {
+                step = step2;
+            }
             else
             {
-                var step2 = (BinaryExpression) dw.Continue.Statements
-                    .LastOrDefault(n => (n is BinaryExpression));
-                if (step2 != null)
+                return false;
+            }
+            dw.Continue.Statements.Remove(step);
+
+            //Get Condition
+            if (first.Statements.LastOrDefault() is ConditionExpression condi)
+            {
+                if (condi.JumpTo == loop.Exit)
                 {
-                    step = step2;
-                }
-                else
-                {
-                    return false;
+                    dw.Condition = condi;
+                    first.Statements.Remove(condi);
                 }
             }
-
-            dw.Continue.Hidden = true;
+                        
+            dw.Continue.Statements.Remove(dw.Continue.Statements.LastOrDefault(stmt => stmt is IJump));
 
             f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body};
             prev.Statements.Remove(lastAssign);
@@ -278,8 +292,9 @@ namespace Furikiri.Echo.Pass
                 {
                     logic.Condition = exp;
                 }
-                logic.Then.Blocks = new List<Block>{ trueBlock };
-                logic.Else.Blocks = new List<Block>{ falseBlock};
+
+                logic.Then.Blocks = new List<Block> {trueBlock};
+                logic.Else.Blocks = new List<Block> {falseBlock};
             }
         }
 
@@ -321,11 +336,12 @@ namespace Furikiri.Echo.Pass
         /// <param name="then">assumed if true block</param>
         /// <param name="else">actual else block</param>
         /// <returns></returns>
-        private bool MergeIfCondition(ConditionExpression condition, Block conditionBlock, Block dominator, ref Expression merge, ref Block then, ref Block @else)
+        private bool MergeIfCondition(ConditionExpression condition, Block conditionBlock, Block dominator, ref Expression merge,
+            ref Block then, ref Block @else)
         {
             if (condition.TrueBranch == dominator.Start)
             {
-                condition = (ConditionExpression)condition.Invert();
+                condition = (ConditionExpression) condition.Invert();
             }
 
             then = _context.BlockTable[condition.TrueBranch]; //TODO: check me later
@@ -376,7 +392,8 @@ namespace Furikiri.Echo.Pass
         private bool IsBranchContent(Block block)
         {
             return block.To.Count < 2 ||
-                   (block.From.Count > 1 && block.From.All(b => b.Statements.IsCondition())) ||  //it's hard to merge sth. like A & (B || C)
+                   (block.From.Count > 1 &&
+                    block.From.All(b => b.Statements.IsCondition())) || //it's hard to merge sth. like A & (B || C)
                    block.From.Any(b => !b.Statements.IsCondition());
         }
 
@@ -399,7 +416,7 @@ namespace Furikiri.Echo.Pass
                 return false;
             }
 
-            var cond = (ConditionExpression)block.Statements.LastOrDefault(stmt => stmt is ConditionExpression);
+            var cond = (ConditionExpression) block.Statements.LastOrDefault(stmt => stmt is ConditionExpression);
             if (cond == null)
             {
                 return false;
@@ -467,7 +484,7 @@ namespace Furikiri.Echo.Pass
             }
             else
             {
-                logic.Then.Blocks = new List<Block> { thenBlock };
+                logic.Then.Blocks = new List<Block> {thenBlock};
             }
 
             if (logic.Else.Blocks.Count > 0)
@@ -510,7 +527,7 @@ namespace Furikiri.Echo.Pass
 
                         //hasElse = true;
                         logic.Else.Type = LogicalBlockType.BlockList;
-                        logic.Else.Blocks = new List<Block> { elseBlock };
+                        logic.Else.Blocks = new List<Block> {elseBlock};
                         RemoveLastGoto(elseBlock, elseBlock.To[0]);
                     }
                     else

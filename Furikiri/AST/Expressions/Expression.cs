@@ -3,7 +3,12 @@ using Furikiri.Emit;
 
 namespace Furikiri.AST.Expressions
 {
-    public interface IOperationExpression
+    public interface IJump
+    {
+        int JumpTo { get; set; }
+    }
+
+    public interface IOperation
     {
         bool IsSelfAssignment { get; set; }
     }

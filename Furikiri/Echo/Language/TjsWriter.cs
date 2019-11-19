@@ -256,7 +256,7 @@ namespace Furikiri.Echo.Language
         internal override void VisitExpressionStmt(ExpressionStatement expression)
         {
             int pos = _formatter.CurrentPosition;
-            if (expression.Expression is IOperationExpression bin)
+            if (expression.Expression is IOperation bin)
             {
                 bin.IsSelfAssignment = true;
             }
