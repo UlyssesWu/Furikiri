@@ -143,7 +143,13 @@ namespace Furikiri.Echo
                 case JNF:
                     Read.Add(FlagReg);
                     break;
-                
+                case ADD:
+                case SUB:
+                case MUL:
+                case DIV:
+                case MOD:
+                case IDIV:
+                    break;
             }
 
             foreach (var reg in ins.Registers)

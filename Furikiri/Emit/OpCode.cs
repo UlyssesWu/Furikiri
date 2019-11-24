@@ -1,5 +1,6 @@
 ﻿// Furikiri
 // OpCode Translation by Ulysses
+// Reference: http://hydrozoa.felisworks.com/doc/tjs2doc/contents/vmcodes.html
 
 // ReSharper disable InconsistentNaming
 // ReSharper disable IdentifierTypo

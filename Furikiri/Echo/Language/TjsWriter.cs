@@ -161,10 +161,13 @@ namespace Furikiri.Echo.Language
                 }
                 else
                 {
-                    Visit(bin.Left);
-                    _formatter.WriteSpace();
-                    _formatter.WriteToken("=");
-                    _formatter.WriteSpace();
+                    if (bin.Op != BinaryOp.Assign) //do not make var a = a = b;
+                    {
+                        Visit(bin.Left);
+                        _formatter.WriteSpace();
+                        _formatter.WriteToken("=");
+                        _formatter.WriteSpace();
+                    }
                 }
             }
             if (needBrackets)
@@ -359,6 +362,8 @@ namespace Furikiri.Echo.Language
         internal override void VisitContinueStmt(ContinueStatement continueStmt)
         {
             _formatter.WriteKeyword("continue");
+            _formatter.WriteToken(";");
+            _formatter.WriteLine();
         }
 
         internal override void VisitReturnExpr(ReturnExpression ret)

@@ -969,19 +969,6 @@ namespace Furikiri.Echo.Pass
             {
                 BlockProcess(context, succ, ex); //TODO: deep copy flag?
             }
-
-            //void UpdateRegister(short dst, Expression exp)
-            //{
-            //    exp.Dest = dst;
-            //    if (insData.LiveOut.Contains(dst))
-            //    {
-            //        ex[dst] = exp;
-            //    }
-            //    else
-            //    {
-            //        expList.Add(exp);
-            //    }
-            //}
         }
     }
 }

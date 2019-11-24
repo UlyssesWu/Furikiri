@@ -320,6 +320,19 @@ namespace Furikiri
             };
         }
 
+
+        internal static bool CanSelfAssign(this UnaryOp op)
+        {
+            switch (op)
+            {
+                case UnaryOp.Inc:
+                case UnaryOp.Dec:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         internal static bool CanSelfAssign(this BinaryOp op)
         {
             switch (op)
@@ -328,18 +341,8 @@ namespace Furikiri
                 case BinaryOp.Sub:
                 case BinaryOp.Mul:
                 case BinaryOp.Div:
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        internal static bool CanSelfAssign(this UnaryOp op)
-        {
-            switch (op)
-            {
-                case UnaryOp.Inc:
-                case UnaryOp.Dec:
+                case BinaryOp.Mod:
+                case BinaryOp.Idiv:
                     return true;
                 default:
                     return false;
@@ -354,6 +357,8 @@ namespace Furikiri
                 BinaryOp.Sub => "-=",
                 BinaryOp.Mul => "*=",
                 BinaryOp.Div => "/=",
+                BinaryOp.Mod => "%=",
+                BinaryOp.Idiv => "\\=",
                 _ => op.ToSymbol(),
             };
         }
@@ -368,6 +373,7 @@ namespace Furikiri
                 BinaryOp.Mul => "*",
                 BinaryOp.Div => "/",
                 BinaryOp.Idiv => "\\",
+                BinaryOp.Mod => "%",
                 BinaryOp.Equal => "==",
                 BinaryOp.NotEqual => "!=",
                 BinaryOp.Congruent => "===",
@@ -420,6 +426,7 @@ namespace Furikiri
                 case BinaryOp.Add:
                 case BinaryOp.Sub:
                 case BinaryOp.Idiv:
+                case BinaryOp.Mod:
                     return 4;
                 case BinaryOp.NumberShiftLeft:
                 case BinaryOp.NumberShiftRight:
