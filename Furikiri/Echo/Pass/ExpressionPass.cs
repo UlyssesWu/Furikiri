@@ -397,11 +397,12 @@ namespace Furikiri.Echo.Pass
                     case OpCode.SAL:
                     case OpCode.SR:
                     case OpCode.CHKINS:
-                    {
-                        var store = false; //Set to Expression
-                        var declare = false; //Is declaration
+                    { 
                         var dstSlot = ins.GetRegisterSlot(0);
                         var srcSlot = ins.GetRegisterSlot(1);
+                        var store = false; //Set to Expression
+                        var declare = false; //Is declaration
+
                         Expression dst = null;
                         if (ex.ContainsKey(dstSlot))
                         {
@@ -478,7 +479,7 @@ namespace Furikiri.Echo.Pass
                                 //case OpCode.CP: //moved!
                                 //    op = BinaryOp.Assign;
                                 //    push = true;
-                                break;
+                                //break;
                             case OpCode.CHKINS:
                                 op = BinaryOp.InstanceOf;
                                 break;

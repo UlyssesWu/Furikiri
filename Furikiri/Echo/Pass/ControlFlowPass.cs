@@ -116,7 +116,8 @@ namespace Furikiri.Echo.Pass
                 }
 
                 dw.Body = new List<Block>(loop.Blocks);
-                dw.Body.Remove(conditionBlock);
+                //dw.Body.Remove(conditionBlock);
+                conditionBlock?.Statements.Remove(conditionBlock.Statements.LastOrDefault(stmt => stmt is IJump));
                 dw.Continue = null;
 
                 var cont = loop.Blocks.LastOrDefault();
@@ -198,6 +199,8 @@ namespace Furikiri.Echo.Pass
             {
                 return false;
             }
+
+            ((IOperation) step).IsSelfAssignment = true; //make increment to v4 += 2 instead of v4 + 2
             dw.Continue.Statements.Remove(step);
 
             //Get Condition
@@ -209,7 +212,7 @@ namespace Furikiri.Echo.Pass
                     first.Statements.Remove(condi);
                 }
             }
-                        
+
             dw.Continue.Statements.Remove(dw.Continue.Statements.LastOrDefault(stmt => stmt is IJump));
 
             f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body};

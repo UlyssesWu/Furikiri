@@ -24,10 +24,20 @@ namespace Furikiri.Echo.Language
         /// </summary>
         public bool HideVoidReturn { get; set; } = true;
 
+        public bool NewLinesAfterStructureControlStatements { get; set; } = true;
+
         public TjsWriter(StringWriter writer)
         {
             _writer = new IndentedTextWriter(writer);
             _formatter = new TjsTextFormatter(_writer);
+        }
+
+        private void AddNewLineAfterStructCtrlStmt()
+        {
+            if (NewLinesAfterStructureControlStatements)
+            {
+                _formatter.WriteLine();
+            }
         }
 
         private void WriteSignature(Method method)
@@ -409,8 +419,9 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteEndBlock();
                 }
             }
+            AddNewLineAfterStructCtrlStmt();
         }
-
+        
         internal override void VisitForStmt(ForStatement forStmt)
         {
             _formatter.WriteKeyword("for");
@@ -433,6 +444,7 @@ namespace Furikiri.Echo.Language
             _formatter.WriteStartBlock();
             Visit(forStmt.Body);
             _formatter.WriteEndBlock();
+            AddNewLineAfterStructCtrlStmt();
         }
 
         internal override void VisitDoWhileStmt(DoWhileStatement doWhile)
@@ -457,6 +469,8 @@ namespace Furikiri.Echo.Language
             _formatter.WriteToken(")");
             _formatter.WriteToken(";");
             _formatter.WriteLine();
+
+            AddNewLineAfterStructCtrlStmt();
         }
 
         internal override void VisitWhileStmt(WhileStatement whileStmt)
@@ -479,6 +493,7 @@ namespace Furikiri.Echo.Language
             _formatter.WriteStartBlock();
             Visit(whileStmt.Body);
             _formatter.WriteEndBlock();
+            AddNewLineAfterStructCtrlStmt();
         }
 
         internal override void VisitPhiExpr(PhiExpression phi)

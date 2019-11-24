@@ -520,6 +520,13 @@ namespace Furikiri.Echo
             //Pass 4: Set Live In
             foreach (var block in Blocks)
             {
+                if (block.InstructionDatas.Count <= 0)
+                {
+                    break;
+                }
+
+                block.InstructionDatas[0].LiveIn = new HashSet<int>();
+
                 for (int i = 1; i < block.InstructionDatas.Count; i++)
                 {
                     var insData = block.InstructionDatas[i];

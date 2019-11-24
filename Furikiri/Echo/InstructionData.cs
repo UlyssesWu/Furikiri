@@ -149,6 +149,13 @@ namespace Furikiri.Echo
                 case DIV:
                 case MOD:
                 case IDIV:
+                    Write.Add(ins.GetRegisterSlot(0));
+                    Read.Add(ins.GetRegisterSlot(0));
+                    break;
+                case INC:
+                case DEC:
+                    Write.Add(ins.GetRegisterSlot(0));
+                    Read.Add(ins.GetRegisterSlot(0));
                     break;
             }
 
@@ -164,6 +171,7 @@ namespace Furikiri.Echo
                     Read.Add(r.Slot);
                 }
             }
+
             //TODO: op such as ADD, reg[0] is both read and wrote
         }
     }
