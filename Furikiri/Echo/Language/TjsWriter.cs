@@ -24,6 +24,9 @@ namespace Furikiri.Echo.Language
         /// </summary>
         public bool HideVoidReturn { get; set; } = true;
 
+        /// <summary>
+        /// Add new line after if/for/while etc.
+        /// </summary>
         public bool NewLinesAfterStructureControlStatements { get; set; } = true;
 
         public TjsWriter(StringWriter writer)
@@ -180,6 +183,7 @@ namespace Furikiri.Echo.Language
                     }
                 }
             }
+
             if (needBrackets)
             {
                 _formatter.WriteToken("(");
@@ -419,9 +423,10 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteEndBlock();
                 }
             }
+
             AddNewLineAfterStructCtrlStmt();
         }
-        
+
         internal override void VisitForStmt(ForStatement forStmt)
         {
             _formatter.WriteKeyword("for");

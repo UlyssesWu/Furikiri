@@ -46,6 +46,7 @@ namespace Furikiri.Echo.Visitors
                     VisitBlockStmt(blockStatement);
                     break;
                 case GotoExpression gotoExpression:
+                    VisitGotoExpr(gotoExpression);
                     break;
                 case ReturnExpression returnExpression:
                     VisitReturnExpr(returnExpression);
@@ -60,6 +61,7 @@ namespace Furikiri.Echo.Visitors
                     VisitPhiExpr(phiExpression);
                     break;
                 case Expression expression:
+                    VisitExpr(expression);
                     break;
 
                 //Statement
@@ -82,10 +84,24 @@ namespace Furikiri.Echo.Visitors
                     VisitContinueStmt(continueStatement);
                     break;
                 case Statement statement:
+                    VisitStmt(statement);
                     break;
                 default:
                     break;
             }
+        }
+
+        internal virtual void VisitStmt(Statement statement)
+        {
+        }
+
+
+        internal virtual void VisitGotoExpr(GotoExpression gotoExpression)
+        {
+        }
+
+        internal virtual void VisitExpr(Expression expression)
+        {
         }
 
         internal virtual void VisitPhiExpr(PhiExpression phi)

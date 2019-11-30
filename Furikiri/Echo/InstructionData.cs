@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Furikiri.Emit;
 using static Furikiri.Emit.OpCode;
@@ -6,6 +7,8 @@ using static Furikiri.Const;
 
 namespace Furikiri.Echo
 {
+    [DebuggerDisplay(
+        "R: {Read?.Count} W: {Write?.Count} D: {Dead?.Count} In: {LiveIn?.Count} Out: {LiveOut?.Count}")]
     class InstructionData
     {
         public Instruction Instruction { get; set; }
