@@ -192,6 +192,38 @@ namespace Furikiri
             return chars.ToRealString();
         }
 
+        /// <summary>
+        /// Read padding based on item count and size per item
+        /// </summary>
+        /// <param name="br"></param>
+        /// <param name="count"></param>
+        /// <param name="sizeOfT"></param>
+        public static void ReadPadding(this BinaryReader br, int count, int sizeOfT = 4)
+        {
+            var padding = sizeOfT - (count * 2) % sizeOfT;
+            if (padding > 0 && padding < sizeOfT)
+            {
+                br.ReadBytes(padding);
+            }
+        }
+
+        public static void WriteAndJumpBack(this BinaryWriter bw, int data, long pos)
+        {
+            var currentPos = bw.BaseStream.Position;
+            bw.BaseStream.Position = pos;
+            bw.Write(data);
+            bw.BaseStream.Position = currentPos;
+        }
+
+        public static int GetOrAddIndex<T>(this List<T> list, T obj)
+        {
+            if (!list.Contains(obj))
+            {
+                list.Add(obj);
+            }
+
+            return list.IndexOf(obj);
+        }
         //internal static ITjsVariant ToTjsVariant(this Variant v)
         //{
         //    throw new NotImplementedException();
