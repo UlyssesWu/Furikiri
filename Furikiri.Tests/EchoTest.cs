@@ -27,7 +27,8 @@ namespace Furikiri.Tests
         [TestMethod]
         public void TestLoadTjs()
         {
-            var path = "..\\..\\Res\\startup.tjs";
+            var path = "..\\..\\Res\\Initialize.tjs.comp";
+            //var path = "..\\..\\Res\\startup.tjsbc";
             Module m = new Module(path);
 
             var method = m.TopLevel.ResolveMethod();

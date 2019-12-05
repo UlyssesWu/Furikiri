@@ -50,7 +50,7 @@ namespace Furikiri.Emit
             {
                 Bytes.AddRange(br.ReadBytes(count));
                 //padding
-                br.ReadPadding(count);
+                br.ReadPadding(count, sizeof(byte));
             }
 
             //short
@@ -68,7 +68,7 @@ namespace Furikiri.Emit
                 }
 
                 //padding
-                br.ReadPadding(count);
+                br.ReadPadding(count, sizeof(short));
             }
 
             //int
@@ -130,7 +130,7 @@ namespace Furikiri.Emit
                     var str = br.Read2ByteString();
                     Strings.Add(str);
                     //TODO: Tjs.MapGlobalStringMap(new string(ch));
-                    br.ReadPadding(str.Length * 2);
+                    br.ReadPadding(str.Length, sizeof(char));
                 }
             }
 
@@ -148,13 +148,43 @@ namespace Furikiri.Emit
                     int len = br.ReadInt32();
                     Octets.Add(br.ReadBytes(len));
                     //padding
-                    br.ReadPadding(count);
+                    br.ReadPadding(len, sizeof(byte));
                 }
             }
         }
 
         public void Write(BinaryWriter bw)
         {
+            //byte
+            bw.Write(Bytes.Count);
+            Bytes.ForEach(bw.Write);
+            bw.WritePadding(Bytes.Count);
+
+            //short
+            bw.Write(Shorts.Count);
+            Shorts.ForEach(bw.Write);
+            bw.WritePadding(Shorts.Count, sizeof(short));
+
+            //int
+            bw.Write(Ints.Count);
+            Ints.ForEach(bw.Write);
+            
+            //long
+            bw.Write(Longs.Count);
+            Longs.ForEach(bw.Write);
+
+            //string
+            bw.Write(Strings.Count);
+            Strings.ForEach(bw.Write2ByteString);
+            bw.WritePadding(Strings.Count, sizeof(char));
+
+            //octet
+            bw.Write(Octets.Count);
+            Octets.ForEach(bytes =>
+            {
+                bw.Write(bytes);
+                bw.WritePadding(bytes.Length);
+            });
         }
     }
 }

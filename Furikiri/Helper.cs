@@ -186,10 +186,19 @@ namespace Furikiri
             char[] chars = new char[len];
             for (int i = 0; i < len; i++)
             {
-                chars[i] = (char) br.ReadInt16();
+                chars[i] = (char) br.ReadInt16(); //can not replaced with ReadChar
             }
 
             return chars.ToRealString();
+        }
+
+        public static void Write2ByteString(this BinaryWriter bw, string str)
+        {
+            bw.Write(str.Length);
+            foreach (var c in str)
+            {
+                bw.Write((short) c);
+            }
         }
 
         /// <summary>
@@ -198,13 +207,26 @@ namespace Furikiri
         /// <param name="br"></param>
         /// <param name="count"></param>
         /// <param name="sizeOfT"></param>
-        public static void ReadPadding(this BinaryReader br, int count, int sizeOfT = 4)
+        /// <param name="paddingWindow"></param>
+        public static void ReadPadding(this BinaryReader br, int count, int sizeOfT = 1, int paddingWindow = 4)
         {
-            var padding = sizeOfT - (count * 2) % sizeOfT;
-            if (padding > 0 && padding < sizeOfT)
+            var padding = paddingWindow - (count * sizeOfT) % paddingWindow;
+            if (padding > 0 && padding < paddingWindow)
             {
                 br.ReadBytes(padding);
             }
+        }
+
+        public static int WritePadding(this BinaryWriter bw, int count, int sizeOfT = 1, int paddingWindow = 4)
+        {
+            var padding = paddingWindow - (count * sizeOfT) % paddingWindow;
+            if (padding > 0 && padding < paddingWindow)
+            {
+                bw.Write(new byte[padding]);
+                return padding;
+            }
+
+            return 0;
         }
 
         public static void WriteAndJumpBack(this BinaryWriter bw, int data, long pos)

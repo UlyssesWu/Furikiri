@@ -79,7 +79,6 @@ namespace Furikiri.Emit
                 Debug.WriteLine($"File size incorrect: Expect {size}, Actual {stream.Length}");
             }
 
-            //TODO: make DATA & OBJS switchable
             bool dataLoaded = false;
             bool objsLoaded = false;
 
