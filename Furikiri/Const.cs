@@ -9,7 +9,7 @@ namespace Furikiri
 
         public const string RegExp = "RegExp";
         public const string RegExpCompile = "_compile";
-
+        public const string Global = "global";
         /// <summary>
         /// A special slot for flag since 0 is (WTF) not represent for it
         /// <para>It shouldn't affect the TJS VM since a normal slot is a short, while this is a int</para>

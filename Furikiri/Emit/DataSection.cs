@@ -20,7 +20,6 @@ namespace Furikiri.Emit
         public List<double> Doubles;
         public List<string> Strings;
         public List<byte[]> Octets;
-        public List<short> VarTypes;
 
         public DataSection(bool init = false)
         {
@@ -33,7 +32,6 @@ namespace Furikiri.Emit
                 Doubles = new List<double>();
                 Strings = new List<string>();
                 Octets = new List<byte[]>();
-                VarTypes = new List<short>();
             }
         }
 

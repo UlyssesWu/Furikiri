@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using Furikiri.AST.Statements;
 using Furikiri.Echo;
@@ -237,14 +238,14 @@ namespace Furikiri
             bw.BaseStream.Position = currentPos;
         }
 
-        public static int GetOrAddIndex<T>(this List<T> list, T obj)
+        public static int GetOrAddIndex<T>(this List<T> list, T obj, bool alwaysAdd = false)
         {
-            if (!list.Contains(obj))
+            if (alwaysAdd || !list.Contains(obj))
             {
                 list.Add(obj);
             }
 
-            return list.IndexOf(obj);
+            return list.LastIndexOf(obj);
         }
         //internal static ITjsVariant ToTjsVariant(this Variant v)
         //{
@@ -365,6 +366,27 @@ namespace Furikiri
                 default:
                     return NAMESPACE_DEFAULT_HASH_BITS;
             }
+        }
+
+        /// <summary>
+        /// Get the string returned by `typeof`
+        /// </summary>
+        /// <param name="varType"></param>
+        /// <returns></returns>
+        public static string ToTjsTypeName(this TjsVarType varType)
+        {
+            return varType switch
+            {
+                TjsVarType.Null => "null",
+                TjsVarType.Void => "void",
+                TjsVarType.Object => "Object",
+                TjsVarType.String => "String",
+                TjsVarType.Octet => "Octet",
+                TjsVarType.Int => "Int",
+                TjsVarType.Real => "Real",
+                TjsVarType.Unknown => "",
+                _ => ""
+            };
         }
 
         internal static string GetParamName(this TjsVarType v, int i)

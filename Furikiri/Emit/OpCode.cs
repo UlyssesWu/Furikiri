@@ -1,5 +1,6 @@
 ﻿// Furikiri
 // OpCode Translation by Ulysses
+// REF: http://hydrozoa.felisworks.com/doc/tjs2doc/contents/
 
 // ReSharper disable InconsistentNaming
 // ReSharper disable IdentifierTypo

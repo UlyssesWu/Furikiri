@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace Furikiri.Emit
 {
@@ -36,10 +33,11 @@ namespace Furikiri.Emit
         /// Func decl unnamed arg array base
         /// </summary>
         public int FuncDeclUnnamedArgArrayBase { get; set; }
+
         /// <summary>
         /// Func decl collapse base
         /// </summary>
-        public int FuncDeclCollapseBase { get; set; }
+        public int FuncDeclCollapseBase { get; set; } = -1;
         public bool SourcePosArraySorted { get; set; }
         public long[] SourcePosArray { get; set; }
         public int[] SuperClassGetterPointer { get; set; }
@@ -72,6 +70,9 @@ namespace Furikiri.Emit
             SuperClassGetterPointer = superPointer;
         }
 
+        public CodeObject()
+        { }
+
         public void SetProperty(TjsInterfaceFlag flag, string name, TjsCodeObject val, CodeObject ths)
         {
             //TODO: this need a TJS function call...
@@ -79,8 +80,15 @@ namespace Furikiri.Emit
             Properties[name] = (val, flag);
         }
         
-        public string GetDisassembleSignatureString() =>
-            $"({ContextType.ContextTypeName()}) {Name} 0x{GetHashCode():X8}";
+        public string GetDisassembleSignatureString(bool asmMode = false)
+        {
+            if (asmMode)
+            {
+                return $"({ContextType.ContextTypeName()}) {Name} ArgCount:{FuncDeclArgCount}";
+            }
+
+            return $"({ContextType.ContextTypeName()}) {Name} 0x{GetHashCode():X8} ArgCount:{FuncDeclArgCount}";
+        }
     }
 
 }
