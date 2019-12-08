@@ -7,16 +7,63 @@ namespace Furikiri.Emit
 {
     public class Method
     {
-        public string Name => Object.Name;
+        public string Name
+        {
+            get => Object.Name;
+            set => Object.Name = value;
+        }
+
         public CodeObject Object { get; set; }
         public List<Instruction> Instructions { get; set; } = new List<Instruction>();
         public Dictionary<short, Variable> Vars { get; set; }
 
-        public bool IsLambda => Object != null && Object.ContextType == TjsContextType.ExprFunction;
+        public int ArgCount
+        {
+            get => Object.FuncDeclArgCount;
+            set => Object.FuncDeclArgCount = value;
+        }
+
+        public bool IsGlobal
+        {
+            get => Object.ContextType == TjsContextType.TopLevel;
+            set
+            {
+                if (value)
+                {
+                    Object.ContextType = TjsContextType.TopLevel;
+                }
+                else if (Object.ContextType == TjsContextType.TopLevel)
+                {
+                    Object.ContextType = TjsContextType.Function;
+                }
+            }
+        }
+
+        public bool IsLambda
+        {
+            get => Object.ContextType == TjsContextType.ExprFunction;
+            set
+            {
+                if (value)
+                {
+                    Object.ContextType = TjsContextType.ExprFunction;
+                }
+                else if (Object.ContextType == TjsContextType.ExprFunction)
+                {
+                    Object.ContextType = TjsContextType.Function;
+                }
+            }
+        }
 
         public Method(short[] code)
         {
+            Object = new CodeObject();
             ParseByteCode(code);
+        }
+
+        public Method()
+        {
+            Object = new CodeObject();
         }
 
         public Method(CodeObject obj)
@@ -133,6 +180,8 @@ namespace Furikiri.Emit
                 offset += instruction.Size;
             }
 
+            List<ITjsVariant> variants = new List<ITjsVariant>();
+
             foreach (var instruction in Instructions)
             {
                 if (instruction.Data != null)
@@ -152,7 +201,7 @@ namespace Furikiri.Emit
                         case OpCode.SPDS:
                             var data = (OperandData) instruction.Data;
                             var reg = instruction.Registers[1];
-                            reg.SetSlot(code.Variants.IndexOf(data.Variant));
+                            reg.SetSlot(variants.GetOrAddIndex(data.Variant));
                             break;
                         case OpCode.LORPD:
                         case OpCode.LANDPD:
@@ -177,13 +226,15 @@ namespace Furikiri.Emit
                         case OpCode.CALLD:
                             var data2 = (OperandData) instruction.Data;
                             var reg2 = instruction.Registers[2];
-                            reg2.SetSlot(code.Variants.IndexOf(data2.Variant));
+                            reg2.SetSlot(variants.GetOrAddIndex(data2.Variant));
                             break;
                         default:
                             break;
                     }
                 }
             }
+
+            code.Variants = variants;
         }
 
         private void ParseByteCode(short[] code)
@@ -202,13 +253,13 @@ namespace Furikiri.Emit
         /// Disassemble to assembly code
         /// </summary>
         /// <returns></returns>
-        public string ToAssemblyCode()
+        public string ToAssemblyCode(bool comment = true)
         {
             StringBuilder sb = new StringBuilder();
             foreach (var ins in Instructions)
             {
                 sb.Append(ins.Offset.ToString("D8")).Append("\t").Append(ins);
-                if (ins.Data != null)
+                if (comment && ins.Data != null)
                 {
                     sb.Append(" // ");
                     sb.Append(ins.Data.Comment);
@@ -218,6 +269,42 @@ namespace Furikiri.Emit
             }
 
             return sb.ToString();
+        }
+
+        public string ConstsToAssemblyDescription()
+        {
+            StringBuilder sb = new StringBuilder();
+            for (var i = 0; i < Object.Variants.Count; i++)
+            {
+                var variant = Object.Variants[i];
+                sb.AppendLine($"*{i} = ({variant.Type.ToTjsTypeName()}) {variant.ToString()}");
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Compile and update <see cref="Object"/>
+        /// </summary>
+        /// <returns></returns>
+        public short[] Compile()
+        {
+            if (Object == null)
+            {
+                Object = new CodeObject();
+            }
+
+            Merge();
+            List<short> code = new List<short>();
+            foreach (var instruction in Instructions)
+            {
+                code.AddRange(instruction.ToCodes());
+            }
+
+            var codeArray = code.ToArray();
+            Object.Code = codeArray;
+
+            return codeArray;
         }
 
         public override string ToString()

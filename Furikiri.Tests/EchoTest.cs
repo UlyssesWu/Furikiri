@@ -19,15 +19,17 @@ namespace Furikiri.Tests
         public void TestDisassemble()
         {
             var path = "..\\..\\Res\\Initialize.tjs.comp";
-            Assembler assembler = new Assembler();
+            Assembler assembler = new Assembler(){AssembleMode = true};
             var code = assembler.Disassemble(path);
-            File.WriteAllText("out.tjsasm", code);
+            //File.WriteAllText("out.tjsasm", code);
+            //TODO: detect this when Data is self e.g. const %1, *5 // *5 = (object) this
         }
 
         [TestMethod]
         public void TestLoadTjs()
         {
-            var path = "..\\..\\Res\\startup.tjs";
+            var path = "..\\..\\Res\\Initialize.tjs.comp";
+            //var path = "..\\..\\Res\\startup.tjsbc";
             Module m = new Module(path);
 
             var method = m.TopLevel.ResolveMethod();

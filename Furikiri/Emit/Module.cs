@@ -12,27 +12,15 @@ namespace Furikiri.Emit
     /// </summary>
     public class Module : ISourceAccessor
     {
-        private const string FILE_TAG_LE = "TJS2";
-        private const string VER_TAG_LE = "100";
-        private const string OBJ_TAG_LE = "OBJS";
-        private const string DATA_TAG_LE = "DATA";
-        private const int MIN_BYTE_COUNT = 64;
-        private const int MIN_SHORT_COUNT = 64;
-        private const int MIN_INT_COUNT = 64;
-        private const int MIN_DOUBLE_COUNT = 8;
-        private const int MIN_LONG_COUNT = 8;
-        private const int MIN_STRING_COUNT = 1024;
+        internal const string FILE_TAG_LE = "TJS2";
+        internal const string VER_TAG_LE = "100";
+        internal const string OBJS_TAG_LE = "OBJS";
+        internal const string DATA_TAG_LE = "DATA";
 
         private const string NO_SCRIPT = "no script";
 
-        private byte[] _bytes;
-        private int[] _ints;
-        private short[] _shorts;
-        private long[] _longs;
-        private double[] _doubles;
-        private string[] _strings;
-        private List<byte[]> _octets;
-        private short[] _varTypes;
+        private DataSection Data { get; set; } = new DataSection();
+        public List<short> VarTypes = new List<short>();
 
         public CodeObject TopLevel { get; set; }
         public List<CodeObject> Objects { get; set; }
@@ -67,47 +55,53 @@ namespace Furikiri.Emit
 
         public void LoadFromStream(Stream stream)
         {
-            using (var br = new BinaryReader(stream))
+            using var br = new BinaryReader(stream);
+            // TJS2
+            var tag = br.ReadChars(4).ToRealString();
+            if (tag != FILE_TAG_LE)
             {
-                // TJS2
-                var tag = br.ReadChars(4).ToRealString();
-                if (tag != FILE_TAG_LE)
-                {
-                    throw new TjsFormatException(TjsBadFormatReason.Header, "Signature wrong");
-                }
+                throw new TjsFormatException(TjsBadFormatReason.Header, "Signature wrong");
+            }
 
-                // 100'\0'
-                var ver = br.ReadChars(3).ToRealString();
-                if (ver != VER_TAG_LE)
-                {
-                    Debug.WriteLine($"Unknown version: {ver}");
-                    //throw new TjsFormatException(TjsBadFormatReason.Version, "Version unsupported");
-                }
+            // 100'\0'
+            var ver = br.ReadChars(3).ToRealString();
+            if (ver != VER_TAG_LE)
+            {
+                Debug.WriteLine($"Unknown version: {ver}");
+                //throw new TjsFormatException(TjsBadFormatReason.Version, "Version unsupported");
+            }
 
-                br.ReadChar();
+            br.ReadChar();
 
-                //file size
-                int size = br.ReadInt32();
-                if (size != stream.Length)
-                {
-                    Debug.WriteLine($"File size incorrect: Expect {size}, Actual {stream.Length}");
-                }
+            //file size
+            int size = br.ReadInt32();
+            if (size != stream.Length)
+            {
+                Debug.WriteLine($"File size incorrect: Expect {size}, Actual {stream.Length}");
+            }
 
-                if (br.ReadChars(4).ToRealString() != DATA_TAG_LE)
-                {
-                    return;
-                }
+            bool dataLoaded = false;
+            bool objsLoaded = false;
 
+            while (br.PeekChar() != -1 && (!dataLoaded || !objsLoaded))
+            {
+                tag = br.ReadChars(4).ToRealString();
                 size = br.ReadInt32();
-                ReadDataArea(br, size);
-
-                // OBJS
-                if (br.ReadChars(4).ToRealString() != OBJ_TAG_LE)
+                if (tag == DATA_TAG_LE && !dataLoaded) //DATA
                 {
-                    return;
+                    Data = new DataSection();
+                    Data.Read(br);
+                    dataLoaded = true;
                 }
-
-                ReadObjects(br);
+                else if (tag == OBJS_TAG_LE && !objsLoaded) //OBJS
+                {
+                    ReadObjects(br);
+                    objsLoaded = true;
+                }
+                else
+                {
+                    br.BaseStream.Seek(size, SeekOrigin.Current);
+                }
             }
         }
 
@@ -121,7 +115,6 @@ namespace Furikiri.Emit
 
         private void ReadObjects(BinaryReader br)
         {
-            int totalSize = br.ReadInt32();
             int topLevel = br.ReadInt32();
             int objCount = br.ReadInt32();
 
@@ -140,7 +133,7 @@ namespace Furikiri.Emit
                     throw new TjsFormatException(TjsBadFormatReason.Header, "ByteCode Signature error");
                 }
 
-                int objSize = br.ReadInt32();
+                int objSize = br.ReadInt32(); // indicate the following size, objSize not included
                 parents[i] = br.ReadInt32();
                 int name = br.ReadInt32();
                 int contextType = br.ReadInt32();
@@ -178,14 +171,14 @@ namespace Furikiri.Emit
                 //var
                 count = br.ReadInt32();
                 int vCount = count * 2;
-                if (_varTypes == null || _varTypes.Length < vCount)
+                if (VarTypes == null)
                 {
-                    _varTypes = new short[vCount];
+                    VarTypes = new List<short>(vCount);
                 }
 
                 for (int j = 0; j < vCount; j++)
                 {
-                    _varTypes[j] = br.ReadInt16();
+                    VarTypes.Add(br.ReadInt16());
                 }
 
                 List<ITjsVariant> vars = new List<ITjsVariant>(count);
@@ -193,8 +186,8 @@ namespace Furikiri.Emit
                 for (int j = 0; j < count; j++)
                 {
                     int p = j * 2;
-                    var type = _varTypes[p];
-                    int index = _varTypes[p + 1];
+                    var type = VarTypes[p];
+                    int index = VarTypes[p + 1];
                     switch ((TjsInternalType) type)
                     {
                         case TjsInternalType.Void:
@@ -214,25 +207,25 @@ namespace Furikiri.Emit
                             replacements.Add((co2, index));
                             break;
                         case TjsInternalType.String:
-                            vars.Add(new TjsString(_strings[index]));
+                            vars.Add(new TjsString(Data.Strings[index]));
                             break;
                         case TjsInternalType.Octet:
-                            vars.Add(new TjsOctet(_octets[index]));
+                            vars.Add(new TjsOctet(Data.Octets[index]));
                             break;
                         case TjsInternalType.Real:
-                            vars.Add(new TjsReal(_doubles[index]));
+                            vars.Add(new TjsReal(Data.Doubles[index]));
                             break;
                         case TjsInternalType.Byte:
-                            vars.Add(new TjsInt(_bytes[index]));
+                            vars.Add(new TjsInt(Data.Bytes[index]));
                             break;
                         case TjsInternalType.Short:
-                            vars.Add(new TjsInt(_shorts[index]));
+                            vars.Add(new TjsInt(Data.Shorts[index]));
                             break;
                         case TjsInternalType.Int:
-                            vars.Add(new TjsInt(_ints[index]));
+                            vars.Add(new TjsInt(Data.Ints[index]));
                             break;
                         case TjsInternalType.Long:
-                            vars.Add(new TjsReal(_longs[index]));
+                            vars.Add(new TjsReal(Data.Longs[index]));
                             break;
 
                         case TjsInternalType.Unknown:
@@ -259,7 +252,7 @@ namespace Furikiri.Emit
 
                 properties.Add(props);
 
-                CodeObject obj = new CodeObject(this, _strings[name], contextType, code, vars, maxVariableCount,
+                CodeObject obj = new CodeObject(this, Data.Strings[name], contextType, code, vars, maxVariableCount,
                     variableReserveCount, maxFrameCount, funcDeclArgCount, funcDeclUnnamedArgArrayBase,
                     funcDeclCollapseBase, true, srcPos, superPointers);
 
@@ -305,7 +298,7 @@ namespace Furikiri.Emit
                     var props = properties[i];
                     for (int j = 0; j < props.Length / 2; j++)
                     {
-                        var name = _strings[props[j * 2]];
+                        var name = Data.Strings[props[j * 2]];
                         var obj = objects[props[j * 2 + 1]];
                         propVar = new TjsCodeObject(obj);
                         pObj?.SetProperty(TjsInterfaceFlag.MemberEnsure | TjsInterfaceFlag.IgnorePropInvoking, name,
@@ -328,136 +321,72 @@ namespace Furikiri.Emit
             Objects = objects;
         }
 
-        private void ReadDataArea(BinaryReader br, int size)
+        private void WriteObjects(BinaryWriter bw)
         {
-            //byte
-            int count = br.ReadInt32();
-            if (_bytes == null || _bytes.Length < count)
+            if (Objects == null)
             {
-                _bytes = new byte[Math.Max(count, MIN_BYTE_COUNT)];
+                Objects = new List<CodeObject>();
             }
 
-            if (count > 0)
+            var totalSizePos = bw.BaseStream.Position;
+            bw.Write(0); //totalSize stub
+            bw.Write(Objects.GetOrAddIndex(TopLevel)); //TopLevel index
+            bw.Write(Objects.Count); //object count
+
+            for (var i = 0; i < Objects.Count; i++) //it works only if you do not remove from the list
             {
-                br.ReadBytes(count).CopyTo(_bytes, 0);
-                //padding
-                var padding = 4 - count % 4;
-                if (padding > 0 && padding < 4)
-                {
-                    br.ReadBytes(padding);
-                }
+                var codeObject = Objects[i];
+                bw.Write(FILE_TAG_LE);
+                WriteObject(bw, codeObject);
+            }
+        }
+
+        private void WriteObject(BinaryWriter bw, CodeObject obj)
+        {
+            var objSizePos = bw.BaseStream.Position;
+            bw.Write(0); //objSize stub
+            bw.Write(Objects.GetOrAddIndex(obj.Parent));
+        }
+
+        public void WriteToStream(Stream stream)
+        {
+            using var bw = new BinaryWriter(stream);
+            bw.Write(FILE_TAG_LE.ToCharArray());
+            bw.Write(VER_TAG_LE.ToCharArray());
+            bw.Write('\0');
+
+            var fileSizePos = bw.BaseStream.Position;
+            bw.Write(0); //fileSize stub
+
+            //DATA
+            bw.Write(DATA_TAG_LE.ToCharArray());
+            var dataSizePos = bw.BaseStream.Position;
+            bw.Write(0); //dataSize stub
+            Data.Write(bw);
+            var dataSize = (int) (bw.BaseStream.Position - dataSizePos - 4);
+            bw.WriteAndJumpBack(dataSize, dataSizePos);
+
+            //OBJS
+            bw.Write(OBJS_TAG_LE.ToCharArray());
+            dataSizePos = bw.BaseStream.Position;
+            bw.Write(0); //dataSize stub
+            WriteObjects(bw);
+            dataSize = (int)(bw.BaseStream.Position - dataSizePos - 4);
+            bw.WriteAndJumpBack(dataSize, dataSizePos);
+        }
+
+        public void CollectData()
+        {
+            if (Data == null)
+            {
+                Data = new DataSection(true);
             }
 
-            //short
-            count = br.ReadInt32();
-            if (_shorts == null || _shorts.Length < count)
-            {
-                _shorts = new short[Math.Max(count, MIN_SHORT_COUNT)];
-            }
+            
+        }
 
-            if (count > 0)
-            {
-                for (int i = 0; i < count; i++)
-                {
-                    _shorts[i] = br.ReadInt16();
-                }
-
-                //padding
-                var padding = 4 - (count * 2) % 4;
-                if (padding > 0 && padding < 4)
-                {
-                    br.ReadBytes(padding);
-                }
-            }
-
-            //int
-            count = br.ReadInt32();
-            if (_ints == null || _ints.Length < count)
-            {
-                _ints = new int[Math.Max(count, MIN_INT_COUNT)];
-            }
-
-            if (count > 0)
-            {
-                for (int i = 0; i < count; i++)
-                {
-                    _ints[i] = br.ReadInt32();
-                }
-            }
-
-            //long
-            count = br.ReadInt32();
-            if (_longs == null || _longs.Length < count)
-            {
-                _longs = new long[Math.Max(count, MIN_LONG_COUNT)];
-            }
-
-            if (count > 0)
-            {
-                for (int i = 0; i < count; i++)
-                {
-                    _longs[i] = br.ReadInt64();
-                }
-            }
-
-            //double
-            count = br.ReadInt32();
-            if (_doubles == null || _doubles.Length < count)
-            {
-                _doubles = new double[Math.Max(count, MIN_DOUBLE_COUNT)];
-            }
-
-            if (count > 0)
-            {
-                for (int i = 0; i < count; i++)
-                {
-                    _doubles[i] = br.ReadDouble();
-                }
-            }
-
-            //string
-            count = br.ReadInt32();
-            if (_strings == null || _strings.Length < count)
-            {
-                _strings = new string[Math.Max(count, MIN_STRING_COUNT)];
-            }
-
-            if (count > 0)
-            {
-                for (int i = 0; i < count; i++)
-                {
-                    var str = br.Read2ByteString();
-                    //TODO: Tjs.MapGlobalStringMap(new string(ch));
-                    _strings[i] = str;
-                    var padding = 4 - (str.Length * 2) % 4;
-                    if (padding > 0 && padding < 4)
-                    {
-                        br.ReadBytes(padding);
-                    }
-                }
-            }
-
-            //octet
-            count = br.ReadInt32();
-            if (_octets == null || _octets.Count < count)
-            {
-                _octets = new List<byte[]>();
-            }
-
-            if (count > 0)
-            {
-                for (int i = 0; i < count; i++)
-                {
-                    int len = br.ReadInt32();
-                    _octets.Add(br.ReadBytes(len));
-                    //padding
-                    var padding = 4 - count % 4;
-                    if (padding > 0 && padding < 4)
-                    {
-                        br.ReadBytes(padding);
-                    }
-                }
-            }
+        private void CollectObjectData(DataSection data, CodeObject code)
+        {
         }
     }
 }

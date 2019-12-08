@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using Furikiri.AST.Statements;
 using Furikiri.Echo;
@@ -186,12 +187,66 @@ namespace Furikiri
             char[] chars = new char[len];
             for (int i = 0; i < len; i++)
             {
-                chars[i] = (char) br.ReadInt16();
+                chars[i] = (char) br.ReadInt16(); //can not replaced with ReadChar
             }
 
             return chars.ToRealString();
         }
 
+        public static void Write2ByteString(this BinaryWriter bw, string str)
+        {
+            bw.Write(str.Length);
+            foreach (var c in str)
+            {
+                bw.Write((short) c);
+            }
+        }
+
+        /// <summary>
+        /// Read padding based on item count and size per item
+        /// </summary>
+        /// <param name="br"></param>
+        /// <param name="count"></param>
+        /// <param name="sizeOfT"></param>
+        /// <param name="paddingWindow"></param>
+        public static void ReadPadding(this BinaryReader br, int count, int sizeOfT = 1, int paddingWindow = 4)
+        {
+            var padding = paddingWindow - (count * sizeOfT) % paddingWindow;
+            if (padding > 0 && padding < paddingWindow)
+            {
+                br.ReadBytes(padding);
+            }
+        }
+
+        public static int WritePadding(this BinaryWriter bw, int count, int sizeOfT = 1, int paddingWindow = 4)
+        {
+            var padding = paddingWindow - (count * sizeOfT) % paddingWindow;
+            if (padding > 0 && padding < paddingWindow)
+            {
+                bw.Write(new byte[padding]);
+                return padding;
+            }
+
+            return 0;
+        }
+
+        public static void WriteAndJumpBack(this BinaryWriter bw, int data, long pos)
+        {
+            var currentPos = bw.BaseStream.Position;
+            bw.BaseStream.Position = pos;
+            bw.Write(data);
+            bw.BaseStream.Position = currentPos;
+        }
+
+        public static int GetOrAddIndex<T>(this List<T> list, T obj, bool alwaysAdd = false)
+        {
+            if (alwaysAdd || !list.Contains(obj))
+            {
+                list.Add(obj);
+            }
+
+            return list.LastIndexOf(obj);
+        }
         //internal static ITjsVariant ToTjsVariant(this Variant v)
         //{
         //    throw new NotImplementedException();
@@ -302,6 +357,27 @@ namespace Furikiri
                 default:
                     return NAMESPACE_DEFAULT_HASH_BITS;
             }
+        }
+
+        /// <summary>
+        /// Get the string returned by `typeof`
+        /// </summary>
+        /// <param name="varType"></param>
+        /// <returns></returns>
+        public static string ToTjsTypeName(this TjsVarType varType)
+        {
+            return varType switch
+            {
+                TjsVarType.Null => "null",
+                TjsVarType.Void => "void",
+                TjsVarType.Object => "Object",
+                TjsVarType.String => "String",
+                TjsVarType.Octet => "Octet",
+                TjsVarType.Int => "Int",
+                TjsVarType.Real => "Real",
+                TjsVarType.Unknown => "",
+                _ => ""
+            };
         }
 
         internal static string GetParamName(this TjsVarType v, int i)

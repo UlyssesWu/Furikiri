@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace Furikiri.Emit
 {
@@ -19,26 +17,32 @@ namespace Furikiri.Emit
         /// Max variable count
         /// </summary>
         public int MaxVariableCount { get; set; }
+
         /// <summary>
         /// Variable reserve count
         /// </summary>
         public int VariableReserveCount { get; set; }
+
         /// <summary>
         /// Max frame count
         /// </summary>
         public int MaxFrameCount { get; set; }
+
         /// <summary>
         /// Func decl arg count
         /// </summary>
         public int FuncDeclArgCount { get; set; }
+
         /// <summary>
         /// Func decl unnamed arg array base
         /// </summary>
         public int FuncDeclUnnamedArgArrayBase { get; set; }
+
         /// <summary>
         /// Func decl collapse base
         /// </summary>
-        public int FuncDeclCollapseBase { get; set; }
+        public int FuncDeclCollapseBase { get; set; } = -1;
+
         public bool SourcePosArraySorted { get; set; }
         public long[] SourcePosArray { get; set; }
         public int[] SuperClassGetterPointer { get; set; }
@@ -57,7 +61,7 @@ namespace Furikiri.Emit
         {
             Script = script;
             Name = name;
-            ContextType = (TjsContextType)type;
+            ContextType = (TjsContextType) type;
             Code = code;
             Variants = da;
             MaxVariableCount = varCount;
@@ -71,15 +75,32 @@ namespace Furikiri.Emit
             SuperClassGetterPointer = superPointer;
         }
 
+        public CodeObject()
+        {
+        }
+
         public void SetProperty(TjsInterfaceFlag flag, string name, TjsCodeObject val, CodeObject ths)
         {
             //TODO: this need a TJS function call...
             val.This = ths;
             Properties[name] = (val, flag);
         }
-        
-        public string GetDisassembleSignatureString() =>
-            $"({ContextType.ContextTypeName()}) {Name} 0x{GetHashCode():X8}";
-    }
 
+        public bool IsLambda => ContextType == TjsContextType.ExprFunction && Name == Const.AnonymousFunctionName;
+
+        public string GetDisassembleSignatureString(bool asmMode = false)
+        {
+            if (asmMode)
+            {
+                if (IsLambda)
+                {
+                    return $"({ContextType.ContextTypeName()}) 0x{GetHashCode():X8} ArgCount:{FuncDeclArgCount}";
+                }
+
+                return $"({ContextType.ContextTypeName()}) {Name} ArgCount:{FuncDeclArgCount}";
+            }
+
+            return $"({ContextType.ContextTypeName()}) {Name} 0x{GetHashCode():X8} ArgCount:{FuncDeclArgCount}";
+        }
+    }
 }
