@@ -91,6 +91,10 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
+            if (Object.IsLambda)
+            {
+                return $"({Object.ContextType.ContextTypeName()})0x{Object.GetHashCode():X8}";
+            }
             return $"({Object.ContextType.ContextTypeName()}){Object.Name}";
         }
     }

@@ -22,6 +22,7 @@ namespace Furikiri.Tests
             Assembler assembler = new Assembler(){AssembleMode = true};
             var code = assembler.Disassemble(path);
             //File.WriteAllText("out.tjsasm", code);
+            //TODO: detect this when Data is self e.g. const %1, *5 // *5 = (object) this
         }
 
         [TestMethod]
