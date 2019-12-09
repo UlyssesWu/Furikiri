@@ -253,12 +253,19 @@ namespace Furikiri.Emit
         /// Disassemble to assembly code
         /// </summary>
         /// <returns></returns>
-        public string ToAssemblyCode(bool comment = true)
+        public string ToAssemblyCode(bool comment = true, bool asmMode = false)
         {
             StringBuilder sb = new StringBuilder();
             foreach (var ins in Instructions)
             {
-                sb.Append(ins.Offset.ToString("D8")).Append("\t").Append(ins);
+                if (asmMode)
+                {
+                    sb.Append(ins.Offset.ToString("D8")).Append(":\t").Append(ins);
+                }
+                else
+                {
+                    sb.Append(ins.Offset.ToString("D8")).Append("\t").Append(ins);
+                }
                 if (comment && ins.Data != null)
                 {
                     sb.Append(" // ");

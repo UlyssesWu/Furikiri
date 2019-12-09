@@ -51,7 +51,7 @@ namespace Furikiri.Emit
                 sb.AppendLine(ConstSectionEnd);
                 sb.AppendLine();
                 sb.AppendLine(CodeSectionBegin);
-                sb.Append(method.ToAssemblyCode());
+                sb.Append(method.ToAssemblyCode(true, AssembleMode));
                 sb.AppendLine(CodeSectionEnd);
             }
             else

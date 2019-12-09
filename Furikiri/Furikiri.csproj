@@ -15,4 +15,8 @@
     <Folder Include="Echo\Transforms\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Superpower" Version="2.3.0" />
+  </ItemGroup>
+
 </Project>
