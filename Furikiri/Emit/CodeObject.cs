@@ -94,13 +94,13 @@ namespace Furikiri.Emit
             {
                 if (IsLambda)
                 {
-                    return $"({ContextType.ContextTypeName()}) 0x{GetHashCode():X8} ArgCount:{FuncDeclArgCount}";
+                    return $"({ContextType.ContextTypeName()}) 0x{GetHashCode():X8} [ArgCount={FuncDeclArgCount}]";
                 }
 
-                return $"({ContextType.ContextTypeName()}) {Name} ArgCount:{FuncDeclArgCount}";
+                return $"({ContextType.ContextTypeName()}) {Name} [ArgCount={FuncDeclArgCount}]";
             }
 
-            return $"({ContextType.ContextTypeName()}) {Name} 0x{GetHashCode():X8} ArgCount:{FuncDeclArgCount}";
+            return $"({ContextType.ContextTypeName()}) {Name} 0x{GetHashCode():X8} [ArgCount={FuncDeclArgCount}]";
         }
     }
 }

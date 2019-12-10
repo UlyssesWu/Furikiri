@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Linq;
 using Furikiri.AST.Statements;
+using Furikiri.Compile;
 using Furikiri.Echo;
 using Furikiri.Echo.Language;
 using Furikiri.Echo.Pass;
@@ -22,7 +23,19 @@ namespace Furikiri.Tests
             Assembler assembler = new Assembler(){AssembleMode = true};
             var code = assembler.Disassemble(path);
             //File.WriteAllText("out.tjsasm", code);
+            File.WriteAllText("out-asm.tjsasm", code);
             //TODO: detect this when Data is self e.g. const %1, *5 // *5 = (object) this
+        }
+
+        [TestMethod]
+        public void TestParseAsm()
+        {
+            var text = File.ReadAllText("out-asm.tjsasm");
+            var tokens = TjsAsmTokenizer.Instance.Tokenize(text);
+            foreach (var token in tokens.Take(100))
+            {
+                var t = token;
+            }
         }
 
         [TestMethod]
