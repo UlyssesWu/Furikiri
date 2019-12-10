@@ -32,7 +32,8 @@ namespace Furikiri.Tests
         {
             var text = File.ReadAllText("out-asm.tjsasm");
             var tokens = TjsAsmTokenizer.Instance.Tokenize(text);
-            foreach (var token in tokens.Take(100))
+            
+            foreach (var token in tokens.Skip(1000).Take(100))
             {
                 var t = token;
             }

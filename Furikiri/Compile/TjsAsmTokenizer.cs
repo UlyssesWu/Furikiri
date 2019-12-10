@@ -16,7 +16,9 @@ namespace Furikiri.Compile
         Register,
         Const,
         Hex,
-        [Token(Example = "ArgCount=0")] Property,
+        [Token(Example = "[ArgCount=0]")] Property,
+        SingleLineComment,
+        Label,
 
         StringValue,
         IntValue,
@@ -33,10 +35,11 @@ namespace Furikiri.Compile
         [Token(Example = ":")] Colon,
         [Token(Example = "(")] LBracket,
         [Token(Example = ")")] RBracket,
-        [Token(Example = "//")] Comment,
+        [Token(Example = "//")] CommentSign,
         [Token(Example = "*")] Star,
         [Token(Example = "%")] Percent,
         [Token(Example = ".")] Dot,
+        [Token(Example = ",")] Comma,
         [Token(Example = "[")] LSBracket,
         [Token(Example = "]")] RSBracket,
     }
@@ -78,6 +81,10 @@ namespace Furikiri.Compile
             from end in Character.EqualTo(']')
             select Unit.Value;
 
+        private static TextParser<Unit> LabelToken =>
+            from content in Span.Regex(@"^[A-Za-z0-9_]+:") //@"^[A-Za-z][A-Za-z0-9_]+:"
+            select Unit.Value;
+
         public static Tokenizer<TjsAsmToken> Instance =>
             new TokenizerBuilder<TjsAsmToken>()
                 .Ignore(Span.WhiteSpace)
@@ -89,19 +96,22 @@ namespace Furikiri.Compile
                 .Match(PropertyToken, TjsAsmToken.Property, false)
                 .Match(RegisterToken, TjsAsmToken.Register, true)
                 .Match(ConstToken, TjsAsmToken.Const, true)
+                .Match(LabelToken, TjsAsmToken.Label, true)
                 .Match(QuotedString.CStyle, TjsAsmToken.StringValue, false)
                 .Match(HexToken, TjsAsmToken.Hex, true)
                 .Match(Numerics.Integer, TjsAsmToken.IntValue, true)
                 .Match(Numerics.Decimal, TjsAsmToken.RealValue, true)
                 .Match(OctetToken, TjsAsmToken.OctetValue, false)
+                .Match(Comment.CPlusPlusStyle, TjsAsmToken.SingleLineComment, false)
                 .Match(Span.EqualTo("="), TjsAsmToken.Assign, false)
                 .Match(Span.EqualTo(":"), TjsAsmToken.Colon, false)
                 .Match(Span.EqualTo("("), TjsAsmToken.LBracket, false)
                 .Match(Span.EqualTo(")"), TjsAsmToken.RBracket, false)
-                .Match(Span.EqualTo("//"), TjsAsmToken.Comment, false)
+                .Match(Span.EqualTo("//"), TjsAsmToken.CommentSign, false)
                 .Match(Span.EqualTo("*"), TjsAsmToken.Star, false)
                 .Match(Span.EqualTo("%"), TjsAsmToken.Percent, false)
                 .Match(Span.EqualTo("."), TjsAsmToken.Dot, false)
+                .Match(Span.EqualTo(","), TjsAsmToken.Comma, false)
                 .Match(Span.EqualTo("["), TjsAsmToken.LSBracket, false)
                 .Match(Span.EqualTo("]"), TjsAsmToken.RSBracket, false)
                 .Match(Span.NonWhiteSpace, TjsAsmToken.Text, true)
