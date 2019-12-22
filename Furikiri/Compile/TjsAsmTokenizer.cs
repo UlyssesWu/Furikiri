@@ -1,4 +1,6 @@
-﻿using Furikiri.Emit;
+﻿using System.Collections.Generic;
+using System.Linq;
+using Furikiri.Emit;
 using Superpower;
 using Superpower.Display;
 using Superpower.Model;
@@ -20,10 +22,10 @@ namespace Furikiri.Compile
         SingleLineComment,
         Label,
 
-        StringValue,
-        IntValue,
-        RealValue,
-        OctetValue,
+        [Token(Category = "Value")] StringValue,
+        [Token(Category = "Value")] IntValue,
+        [Token(Category = "Value")] RealValue,
+        [Token(Category = "Value")] OctetValue,
         //ObjectValue,
 
         ConstBegin,
@@ -44,36 +46,47 @@ namespace Furikiri.Compile
         [Token(Example = "]")] RSBracket,
     }
 
-    public class TjsAsmTokenizer
+    public static class TjsAsmTokenizer
     {
-        static TextParser<Unit> TypeDescriptionToken =>
+        internal static readonly TextParser<string> TypeDescriptionToken =
             from begin in Character.EqualTo('(')
-            from content in Character.Except(')').IgnoreMany()
+            from content in Character.Except(')').Many()
             from end in Character.EqualTo(')')
-            select Unit.Value;
+            select new string(content);
 
-        static TextParser<Unit> RegisterToken =>
+        internal static readonly TextParser<int> RegisterToken =
             from begin in Character.EqualTo('%')
-            from content in Numerics.Integer
-            select Unit.Value;
+            from content in Numerics.IntegerInt32
+            select content;
 
-        static TextParser<Unit> ConstToken =>
+        internal static readonly TextParser<int> ConstToken =
             from begin in Character.EqualTo('*')
-            from content in Numerics.Integer
-            select Unit.Value;
+            from content in Numerics.IntegerInt32
+            select content;
 
-        static TextParser<Unit> OctetToken =>
+        internal static readonly TextParser<byte[]> OctetToken =
             from begin in Span.EqualTo("<%")
-            from content in Numerics.HexDigits.IgnoreMany()
+            from content in Numerics.HexDigits.Many()
             from end in Span.EqualTo("%>")
-            select Unit.Value;
+            select OctetSpanToBytes(content);
 
-        static TextParser<Unit> HexToken =>
+        private static byte[] OctetSpanToBytes(TextSpan[] spans)
+        {
+            List<byte> bytes = new List<byte>();
+            foreach (var span in spans)
+            {
+                bytes.AddRange(span.ToStringValue().HexStringToBytes());
+            }
+
+            return bytes.ToArray();
+        }
+
+        internal static readonly TextParser<Unit> HexToken =
             from begin in Span.EqualToIgnoreCase("0x")
             from content in Numerics.HexDigits
             select Unit.Value;
 
-        static TextParser<Unit> PropertyToken =>
+        internal static readonly TextParser<Unit> PropertyToken =
             from start in Character.EqualTo('[')
             from name in Character.Except('=').IgnoreMany()
             from equal in Character.EqualTo('=')
@@ -81,11 +94,11 @@ namespace Furikiri.Compile
             from end in Character.EqualTo(']')
             select Unit.Value;
 
-        private static TextParser<Unit> LabelToken =>
+        internal static readonly TextParser<Unit> LabelToken =
             from content in Span.Regex(@"^[A-Za-z0-9_]+:") //@"^[A-Za-z][A-Za-z0-9_]+:"
             select Unit.Value;
 
-        public static Tokenizer<TjsAsmToken> Instance =>
+        public static readonly Tokenizer<TjsAsmToken> Instance =
             new TokenizerBuilder<TjsAsmToken>()
                 .Ignore(Span.WhiteSpace)
                 .Match(Span.EqualTo(Assembler.ConstSectionBegin), TjsAsmToken.ConstBegin, true)

@@ -20,7 +20,6 @@ namespace Furikiri.Emit
         private const string NO_SCRIPT = "no script";
 
         private DataSection Data { get; set; } = new DataSection();
-        public List<short> VarTypes = new List<short>();
 
         public CodeObject TopLevel { get; set; }
         public List<CodeObject> Objects { get; set; }
@@ -171,14 +170,12 @@ namespace Furikiri.Emit
                 //var
                 count = br.ReadInt32();
                 int vCount = count * 2;
-                if (VarTypes == null)
-                {
-                    VarTypes = new List<short>(vCount);
-                }
+                var varTypes = new List<short>(vCount);
+
 
                 for (int j = 0; j < vCount; j++)
                 {
-                    VarTypes.Add(br.ReadInt16());
+                    varTypes.Add(br.ReadInt16());
                 }
 
                 List<ITjsVariant> vars = new List<ITjsVariant>(count);
@@ -186,8 +183,8 @@ namespace Furikiri.Emit
                 for (int j = 0; j < count; j++)
                 {
                     int p = j * 2;
-                    var type = VarTypes[p];
-                    int index = VarTypes[p + 1];
+                    var type = varTypes[p];
+                    int index = varTypes[p + 1];
                     switch ((TjsInternalType) type)
                     {
                         case TjsInternalType.Void:
@@ -371,7 +368,7 @@ namespace Furikiri.Emit
             dataSizePos = bw.BaseStream.Position;
             bw.Write(0); //dataSize stub
             WriteObjects(bw);
-            dataSize = (int)(bw.BaseStream.Position - dataSizePos - 4);
+            dataSize = (int) (bw.BaseStream.Position - dataSizePos - 4);
             bw.WriteAndJumpBack(dataSize, dataSizePos);
         }
 
@@ -381,8 +378,6 @@ namespace Furikiri.Emit
             {
                 Data = new DataSection(true);
             }
-
-            
         }
 
         private void CollectObjectData(DataSection data, CodeObject code)
