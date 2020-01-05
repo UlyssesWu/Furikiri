@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using Furikiri.Emit;
 using Superpower;
@@ -21,6 +22,8 @@ namespace Furikiri.Compile
         [Token(Example = "[ArgCount=0]")] Property,
         SingleLineComment,
         Label,
+        OpCode,
+        OpParameter,
 
         [Token(Category = "Value")] StringValue,
         [Token(Category = "Value")] IntValue,
@@ -44,6 +47,8 @@ namespace Furikiri.Compile
         [Token(Example = ",")] Comma,
         [Token(Example = "[")] LSBracket,
         [Token(Example = "]")] RSBracket,
+        [Token(Example = "<%")] LOctetBracket,
+        [Token(Example = "%>")] ROctetBracket,
     }
 
     public static class TjsAsmTokenizer
@@ -70,6 +75,10 @@ namespace Furikiri.Compile
             from end in Span.EqualTo("%>")
             select OctetSpanToBytes(content);
 
+        internal static readonly TextParser<OpCode> OpCodeToken =
+            from code in OpCodeParser()
+            select code;
+
         private static byte[] OctetSpanToBytes(TextSpan[] spans)
         {
             List<byte> bytes = new List<byte>();
@@ -79,6 +88,17 @@ namespace Furikiri.Compile
             }
 
             return bytes.ToArray();
+        }
+
+        private static TextParser<OpCode> OpCodeParser()
+        {
+            TextParser<OpCode> parser = null;
+            foreach (OpCode op in Enum.GetValues(typeof(OpCode)))
+            {
+                var p = Span.EqualToIgnoreCase(op.ToString()).Value(op);
+                parser = parser == null ? p : parser.Or(p);
+            }
+            return parser;
         }
 
         internal static readonly TextParser<Unit> HexToken =
@@ -94,9 +114,10 @@ namespace Furikiri.Compile
             from end in Character.EqualTo(']')
             select Unit.Value;
 
-        internal static readonly TextParser<Unit> LabelToken =
-            from content in Span.Regex(@"^[A-Za-z0-9_]+:") //@"^[A-Za-z][A-Za-z0-9_]+:"
-            select Unit.Value;
+        internal static readonly TextParser<int> LabelToken =
+            from content in Numerics.IntegerInt32
+            //from content in Span.Regex(@"^[A-Za-z0-9_]+:") //@"^[A-Za-z][A-Za-z0-9_]+:"
+            select content;
 
         public static readonly Tokenizer<TjsAsmToken> Instance =
             new TokenizerBuilder<TjsAsmToken>()
@@ -115,6 +136,7 @@ namespace Furikiri.Compile
                 .Match(Numerics.Integer, TjsAsmToken.IntValue, true)
                 .Match(Numerics.Decimal, TjsAsmToken.RealValue, true)
                 .Match(OctetToken, TjsAsmToken.OctetValue, false)
+                .Match(OpCodeToken, TjsAsmToken.OpCode, true)
                 .Match(Comment.CPlusPlusStyle, TjsAsmToken.SingleLineComment, false)
                 .Match(Span.EqualTo("="), TjsAsmToken.Assign, false)
                 .Match(Span.EqualTo(":"), TjsAsmToken.Colon, false)
@@ -127,6 +149,8 @@ namespace Furikiri.Compile
                 .Match(Span.EqualTo(","), TjsAsmToken.Comma, false)
                 .Match(Span.EqualTo("["), TjsAsmToken.LSBracket, false)
                 .Match(Span.EqualTo("]"), TjsAsmToken.RSBracket, false)
+                .Match(Span.EqualTo("<%"), TjsAsmToken.LOctetBracket, false)
+                .Match(Span.EqualTo("%>"), TjsAsmToken.ROctetBracket, false)
                 .Match(Span.NonWhiteSpace, TjsAsmToken.Text, true)
                 .Build(); //keep last
     }
