@@ -14,7 +14,7 @@ namespace Furikiri.CLI
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Furikiri TJS2 Disassembler/Decompiler \"Girigiri\"");
+            Console.WriteLine("Furikiri TJS2 Disassembler/Decompiler");
             Console.WriteLine("by Ulysses, wdwxy12345@gmail.com");
             Console.WriteLine();
 

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Furikiri.Emit;
 using static Furikiri.Emit.OpCode;
@@ -6,6 +7,8 @@ using static Furikiri.Const;
 
 namespace Furikiri.Echo
 {
+    [DebuggerDisplay(
+        "R: {Read?.Count} W: {Write?.Count} D: {Dead?.Count} In: {LiveIn?.Count} Out: {LiveOut?.Count}")]
     class InstructionData
     {
         public Instruction Instruction { get; set; }
@@ -162,7 +165,20 @@ namespace Furikiri.Echo
                 case JNF:
                     Read.Add(FlagReg);
                     break;
-                
+                case ADD:
+                case SUB:
+                case MUL:
+                case DIV:
+                case MOD:
+                case IDIV:
+                    Write.Add(ins.GetRegisterSlot(0));
+                    Read.Add(ins.GetRegisterSlot(0));
+                    break;
+                case INC:
+                case DEC:
+                    Write.Add(ins.GetRegisterSlot(0));
+                    Read.Add(ins.GetRegisterSlot(0));
+                    break;
             }
 
             foreach (var reg in ins.Registers)
@@ -177,6 +193,7 @@ namespace Furikiri.Echo
                     Read.Add(r.Slot);
                 }
             }
+
             //TODO: op such as ADD, reg[0] is both read and wrote
         }
     }

@@ -65,7 +65,7 @@ namespace Furikiri.Emit
         {
             get
             {
-                var rs = from r in Registers where r is RegisterRef rr select (RegisterRef) r;
+                var rs = from r in Registers where r is RegisterRef select (RegisterRef) r;
                 if (rs.Any())
                 {
                     return rs.Max(r => r.Slot);

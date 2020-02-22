@@ -24,10 +24,23 @@ namespace Furikiri.Echo.Language
         /// </summary>
         public bool HideVoidReturn { get; set; } = true;
 
+        /// <summary>
+        /// Add new line after if/for/while etc.
+        /// </summary>
+        public bool NewLinesAfterStructureControlStatements { get; set; } = true;
+
         public TjsWriter(StringWriter writer)
         {
             _writer = new IndentedTextWriter(writer);
             _formatter = new TjsTextFormatter(_writer);
+        }
+
+        private void AddNewLineAfterStructCtrlStmt()
+        {
+            if (NewLinesAfterStructureControlStatements)
+            {
+                _formatter.WriteLine();
+            }
         }
 
         private void WriteSignature(Method method)
@@ -147,6 +160,30 @@ namespace Furikiri.Echo.Language
             }
 
             bool needBrackets = bin.NeedBrackets();
+            if (bin.IsSelfAssignment)
+            {
+                needBrackets = false;
+                if (bin.Op.CanSelfAssign())
+                {
+                    Visit(bin.Left);
+                    _formatter.WriteSpace();
+                    _formatter.WriteToken(bin.Op.ToSelfAssignSymbol());
+                    _formatter.WriteSpace();
+                    Visit(bin.Right);
+                    return;
+                }
+                else
+                {
+                    if (bin.Op != BinaryOp.Assign) //do not make var a = a = b;
+                    {
+                        Visit(bin.Left);
+                        _formatter.WriteSpace();
+                        _formatter.WriteToken("=");
+                        _formatter.WriteSpace();
+                    }
+                }
+            }
+
             if (needBrackets)
             {
                 _formatter.WriteToken("(");
@@ -236,6 +273,11 @@ namespace Furikiri.Echo.Language
         internal override void VisitExpressionStmt(ExpressionStatement expression)
         {
             int pos = _formatter.CurrentPosition;
+            if (expression.Expression is IOperation bin)
+            {
+                bin.IsSelfAssignment = true;
+            }
+
             Visit(expression.Expression);
             if (_formatter.CurrentPosition == pos)
             {
@@ -267,6 +309,14 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitUnaryExpr(UnaryExpression unary)
         {
+            if (unary.IsSelfAssignment && !unary.Op.CanSelfAssign())
+            {
+                Visit(unary.Target);
+                _formatter.WriteSpace();
+                _formatter.WriteIdentifier("=");
+                _formatter.WriteSpace();
+            }
+
             switch (unary.Op)
             {
                 case UnaryOp.Inc:
@@ -326,6 +376,8 @@ namespace Furikiri.Echo.Language
         internal override void VisitContinueStmt(ContinueStatement continueStmt)
         {
             _formatter.WriteKeyword("continue");
+            _formatter.WriteToken(";");
+            _formatter.WriteLine();
         }
 
         internal override void VisitReturnExpr(ReturnExpression ret)
@@ -371,6 +423,8 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteEndBlock();
                 }
             }
+
+            AddNewLineAfterStructCtrlStmt();
         }
 
         internal override void VisitForStmt(ForStatement forStmt)
@@ -395,6 +449,7 @@ namespace Furikiri.Echo.Language
             _formatter.WriteStartBlock();
             Visit(forStmt.Body);
             _formatter.WriteEndBlock();
+            AddNewLineAfterStructCtrlStmt();
         }
 
         internal override void VisitDoWhileStmt(DoWhileStatement doWhile)
@@ -419,6 +474,8 @@ namespace Furikiri.Echo.Language
             _formatter.WriteToken(")");
             _formatter.WriteToken(";");
             _formatter.WriteLine();
+
+            AddNewLineAfterStructCtrlStmt();
         }
 
         internal override void VisitWhileStmt(WhileStatement whileStmt)
@@ -441,6 +498,7 @@ namespace Furikiri.Echo.Language
             _formatter.WriteStartBlock();
             Visit(whileStmt.Body);
             _formatter.WriteEndBlock();
+            AddNewLineAfterStructCtrlStmt();
         }
 
         internal override void VisitPhiExpr(PhiExpression phi)

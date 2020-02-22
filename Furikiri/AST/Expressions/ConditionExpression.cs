@@ -2,7 +2,7 @@
 
 namespace Furikiri.AST.Expressions
 {
-    class ConditionExpression : Expression
+    class ConditionExpression : Expression, IJump
     {
         public override AstNodeType Type => AstNodeType.ConditionExpression;
         public override IEnumerable<IAstNode> Children => null;

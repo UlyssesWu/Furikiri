@@ -18,6 +18,7 @@ namespace Furikiri.Echo.Pass
                 if (loop != null)
                 {
                     newStmts.Add(loop.LoopLogic.ToStatement());
+                    block.Hidden = false; //TODO: temp fix
                 }
                 else
                 {
