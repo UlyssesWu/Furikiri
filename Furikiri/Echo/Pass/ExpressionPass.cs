@@ -73,6 +73,7 @@ namespace Furikiri.Echo.Pass
                 //get from.Output && from.Def
                 var commonInput = block.From.Select(b => b.Output).Union(block.From.Select(b => b.Def)).GetIntersection();
                 commonInput.IntersectWith(block.Input);
+                //flag can be phi
                 if (commonInput.Count > 0)
                 {
                     foreach (var inSlot in commonInput)
@@ -89,9 +90,12 @@ namespace Furikiri.Echo.Pass
                             phi.ThenBranch = context.BlockFinalStates[block.From[0]][inSlot]; //if jump, use the state from the jump-from block 
                             phi.ElseBranch = context.BlockFinalStates[elseBlock][inSlot];
                             //Next: Merge condition: if (v1) then v1 else v2 => v1 || v2 (infer v1 is bool)
+                            if (phi.ThenBranch != phi.ElseBranch)
+                            {
+                                exps[inSlot] = phi;
+                            }
                         }
 
-                        exps[inSlot] = phi;
                     }
                 }
             }
