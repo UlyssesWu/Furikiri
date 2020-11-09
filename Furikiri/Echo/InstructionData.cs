@@ -55,11 +55,9 @@ namespace Furikiri.Echo
                 case CONST:
                 case CP:
                 case CL:
-                case INC:
                 case INCPD:
                 case INCPI:
                 case INCP:
-                case DEC:
                 case DECPD:
                 case DECPI:
                 case DECP:
@@ -95,27 +93,21 @@ namespace Furikiri.Echo
                 case SRPD:
                 case SRPI:
                 case SRP:
-                case ADD:
                 case ADDPD:
                 case ADDPI:
                 case ADDP:
-                case SUB:
                 case SUBPD:
                 case SUBPI:
                 case SUBP:
-                case MOD:
                 case MODPD:
                 case MODPI:
                 case MODP:
-                case DIV:
                 case DIVPD:
                 case DIVPI:
                 case DIVP:
-                case IDIV:
                 case IDIVPD:
                 case IDIVPI:
                 case IDIVP:
-                case MUL:
                 case MULPD:
                 case MULPI:
                 case MULP:

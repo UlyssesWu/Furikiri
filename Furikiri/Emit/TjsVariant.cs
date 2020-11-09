@@ -41,7 +41,7 @@ namespace Furikiri.Emit
     {
         public TjsVarType Type => TjsVarType.Object;
         public object Value { get; set; }
-        public string DebugString => Value.ToString();
+        public string DebugString => Value?.ToString() ?? "(void)";
         public bool Internal { get; set; } = false;
 
         public TjsObject(object obj)
