@@ -1,11 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net472</TargetFrameworks>
+    <TargetFrameworks>net5.0</TargetFrameworks>
     <Authors>Ulysses</Authors>
     <Company>Independent Galgrammer</Company>
     <Description>TJS2 Decompiler "Furikiri"</Description>
-    <Copyright>Copyright © UlyssesWu 2018-2019</Copyright>
+    <Copyright>Copyright © UlyssesWu 2018-2020</Copyright>
     <PackageProjectUrl>https://github.com/UlyssesWu/Furikiri</PackageProjectUrl>
     <LangVersion>8</LangVersion>
     <PackageLicenseUrl>https://github.com/UlyssesWu/Furikiri/blob/master/LICENSE</PackageLicenseUrl>

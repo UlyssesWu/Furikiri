@@ -72,10 +72,11 @@ namespace Furikiri.Tests
         [TestMethod]
         public void TestDecompileTjs()
         {
-            var path = "..\\..\\Res\\Initialize.tjs.comp";
+            var path = "..\\..\\..\\Res\\Initialize.tjs.comp";
             Decompiler decompiler = new Decompiler(path);
             //var result = decompiler.Decompile();
             var result = decompiler.Decompile("global");
+            //var result = decompiler.Decompile("countLayerMetrics");
             //var result = decompiler.Decompile("Test"); //there is a bug at [var b3 = b2 || b;] to be solved only by data flow analysis
             // B1 -> B2 -> B3, B1 -> B3, B3.From = B1 & B2, B3.Input = flag, B1.Output & B1.Def = flag, B2.Output & B2.Def = flag => flag = φ
             //var result = decompiler.Decompile("TestLoop"); //bug: the generated expression is wrong at [v4 ++ += 2]
