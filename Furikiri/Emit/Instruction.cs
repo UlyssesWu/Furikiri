@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using static Furikiri.Emit.OpCode;
 
@@ -27,7 +28,7 @@ namespace Furikiri.Emit
         /// <summary>
         /// Byte Size
         /// </summary>
-        public int Size => 1 + Registers.Sum(i => i.Size);
+        public virtual int Size => 1 + Registers.Sum(i => i.Size);
 
         public IRegisterData Data { get; internal set; }
 
@@ -304,8 +305,9 @@ namespace Furikiri.Emit
                 case CALLD:
                 case CALLI:
                 case NEW:
-                    ins = new Instruction(op)
+                    ins = new CallInstruction(op)
                         {Registers = {new RegisterRef(code[index + 1]), new RegisterRef(code[index + 2])}};
+                    var callIns = (CallInstruction) ins;
                     int idx = index + 3;
                     int paramCount;
                     if (op == CALLI || op == CALLD)
@@ -331,10 +333,13 @@ namespace Furikiri.Emit
 
                     if (paramCount == -1) //omit(ignore) param
                     {
+                        callIns.ParameterExpandStyle = FuncParameterExpand.Omit;
                         break;
                     }
-                    else if (paramCount == -2) //expand param
+                    else if (paramCount == -2) //expand param, an extra byte (not associated to register!) is used for count
                     {
+                        callIns.ParameterExpandStyle = FuncParameterExpand.Expand;
+
                         idx++;
                         paramCount = code[idx];
                         for (int i = 0; i < paramCount; i++)
@@ -347,6 +352,8 @@ namespace Furikiri.Emit
                     }
                     else //normal param
                     {
+                        callIns.ParameterExpandStyle = FuncParameterExpand.Normal;
+
                         for (int i = 0; i < paramCount; i++)
                         {
                             idx++;
@@ -355,6 +362,9 @@ namespace Furikiri.Emit
                         }
                     }
 
+                    break;
+                default:
+                    Console.WriteLine($"Unknown OpCode at {index}: {op}");
                     break;
             }
 
@@ -573,7 +583,7 @@ namespace Furikiri.Emit
             return OpCode.ToString().ToLowerInvariant();
         }
 
-        public short[] ToCodes()
+        public virtual short[] ToCodes()
         {
             List<short> output = new List<short>(Size) {OpCode.ToS()};
             foreach (var register in Registers)

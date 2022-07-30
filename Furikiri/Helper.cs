@@ -576,6 +576,11 @@ namespace Furikiri
             return "";
         }
 
+        internal static int GetExtraSize(this FuncParameterExpand style)
+        {
+            return style == FuncParameterExpand.Expand ? 1 : 0;
+        }
+
         /// <summary>
         /// Is OpCode a Jump
         /// </summary>
@@ -590,6 +595,16 @@ namespace Furikiri
             }
 
             return code == OpCode.JMP || code == OpCode.JF || code == OpCode.JNF;
+        }
+
+        public static bool IsCall(this OpCode code)
+        {
+            return code == OpCode.CALL || code == OpCode.CALLI || code == OpCode.CALLD;
+        }
+
+        public static bool IsCallOrNew(this OpCode code)
+        {
+            return code == OpCode.CALL || code == OpCode.CALLI || code == OpCode.CALLD || code == OpCode.NEW;
         }
 
         public static bool IsCompare(this BinaryOp code)
