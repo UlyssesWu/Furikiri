@@ -8,7 +8,9 @@ namespace Furikiri.Emit
 {
     public class CallInstruction : Instruction
     {
-        public FuncParameterExpand ParameterExpandStyle { get; set; }
+        public FuncParameterExpand ParameterExpandStyle => (FuncParameterExpand)(OpCode.IsInstanceCall()
+            ? ((RegisterShort)Registers[3]).Value
+            : ((RegisterShort)Registers[2]).Value);
 
         public CallInstruction(OpCode op) : base(op)
         {
@@ -47,14 +49,34 @@ namespace Furikiri.Emit
             AddCodes(Registers[0]);
             AddCodes(Registers[1]);
 
-            if (ParameterExpandStyle == FuncParameterExpand.Expand)
+            if (OpCode == OpCode.CALLD || OpCode == OpCode.CALLI)
             {
-                output.Add((short)Registers.Skip(2).Count());
-            }
+                AddCodes(Registers[2]); //method
+                AddCodes(Registers[3]); //paramCount
 
-            foreach (var register in Registers.Skip(2))
+                if (ParameterExpandStyle == FuncParameterExpand.Expand)
+                {
+                    output.Add((short)Registers.Skip(4).Count());
+                }
+
+                foreach (var register in Registers.Skip(4))
+                {
+                    AddCodes(register);
+                }
+            }
+            else
             {
-                AddCodes(register);
+                AddCodes(Registers[2]); //paramCount
+
+                if (ParameterExpandStyle == FuncParameterExpand.Expand)
+                {
+                    output.Add((short)Registers.Skip(3).Count());
+                }
+
+                foreach (var register in Registers.Skip(3))
+                {
+                    AddCodes(register);
+                }
             }
 
             return output.ToArray();
