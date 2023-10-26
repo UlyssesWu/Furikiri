@@ -7,17 +7,12 @@ Furikiri is currently in development. The disassembler works well but the decomp
 The following softwares/projects are parts of Furikiri.
 
 ## Girigiri (Furikiri.CLI)
-*ギリギリ(girigiri)愛♫~ キリキリ(kirikiri)舞い♫~*
 
 Girigiri ([ギリギリ](https://youtu.be/dQLG0lwe_RM)) is the front-end (console) of Furikiri. 
 
 It's a managed TJS2 bytecode disassembler/decompiler which does not require kirikiri engine (e.g. KRKR 2/Z/#) to run.
 
-## Yurikiri
-
-Yurikiri ([ゆりきり](https://www.youtube.com/watch?v=NRAXFjvhnRc)) is a project to create a managed (.NET/Unity) Text Adventure Game (AVG) runtime. 
-
-Related projects:
+## Related projects
 * [KirikiriSharp](https://github.com/Project-AZUSA/KirikiriSharp)
 * [IronTJS](https://github.com/Project-AZUSA/IronTJS)
 * [Yuri AVG Engine](https://github.com/Project-AZUSA/YuriAVGEngine)
