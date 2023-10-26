@@ -4,8 +4,6 @@ Furikiri (FreeKiri / [フリキリ](https://ja.wikipedia.org/wiki/%E3%83%95%E3%8
 
 Furikiri is currently in development. The disassembler works well but the decompiler is NOT ready for use. Pull request is welcomed.
 
-The following softwares/projects are parts of Furikiri.
-
 ## Girigiri (Furikiri.CLI)
 
 Girigiri ([ギリギリ](https://youtu.be/dQLG0lwe_RM)) is the front-end (console) of Furikiri. 
