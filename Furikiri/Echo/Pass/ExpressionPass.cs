@@ -97,7 +97,6 @@ namespace Furikiri.Echo.Pass
                                 exps[inSlot] = phi;
                             }
                         }
-
                     }
                 }
             }
@@ -137,6 +136,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.CLT:
                     case OpCode.CGT:
                     {
+                        //BUG: cdeq %-6, %0 left is null
                         var left = ex[ins.GetRegisterSlot(0)];
                         var right = ex[ins.GetRegisterSlot(1)];
                         BinaryOp op = BinaryOp.Unknown;
@@ -401,7 +401,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.SAL:
                     case OpCode.SR:
                     case OpCode.CHKINS:
-                    { 
+                    {
                         var dstSlot = ins.GetRegisterSlot(0);
                         var srcSlot = ins.GetRegisterSlot(1);
                         var store = false; //Set to Expression
@@ -480,10 +480,10 @@ namespace Furikiri.Echo.Pass
                             case OpCode.SR:
                                 op = BinaryOp.BitShiftRight;
                                 break;
-                                //case OpCode.CP: //moved!
-                                //    op = BinaryOp.Assign;
-                                //    push = true;
-                                //break;
+                            //case OpCode.CP: //moved!
+                            //    op = BinaryOp.Assign;
+                            //    push = true;
+                            //break;
                             case OpCode.CHKINS:
                                 op = BinaryOp.InstanceOf;
                                 break;
@@ -680,7 +680,9 @@ namespace Furikiri.Echo.Pass
                     //Invoke
                     case OpCode.CALL:
                     {
-                        var call = new InvokeExpression(((OperandData) ins.Data).Variant as TjsCodeObject);
+                        //TODO: BUG here, Data is null
+                        var method = ex[ins.GetRegisterSlot(1)];
+                        var call = new InvokeExpression(method);
                         var dst = ins.GetRegisterSlot(0);
                         call.Instance = null;
                         var paramCount = ins.GetRegisterSlot(2);
@@ -930,6 +932,10 @@ namespace Furikiri.Echo.Pass
                     }
                         break;
                     case OpCode.CHGTHIS:
+                    {
+                        var ico = new BinaryExpression(ex[ins.GetRegisterSlot(0)], ex[ins.GetRegisterSlot(1)], BinaryOp.InContextOf);
+                        ex[ins.GetRegisterSlot(0)] = ico;
+                    }
                         break;
                     case OpCode.GLOBAL:
                     {
@@ -972,7 +978,7 @@ namespace Furikiri.Echo.Pass
             //Process next
             foreach (var succ in block.To)
             {
-                BlockProcess(context, succ, ex); //TODO: deep copy flag?
+                BlockProcess(context, succ, new Dictionary<int, Expression>(ex)); //TODO: deep copy flag?
             }
         }
     }

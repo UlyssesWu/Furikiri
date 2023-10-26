@@ -172,15 +172,13 @@ namespace Furikiri.Echo.Language
                     Visit(bin.Right);
                     return;
                 }
-                else
+
+                if (bin.Op != BinaryOp.Assign) //do not make var a = a = b;
                 {
-                    if (bin.Op != BinaryOp.Assign) //do not make var a = a = b;
-                    {
-                        Visit(bin.Left);
-                        _formatter.WriteSpace();
-                        _formatter.WriteToken("=");
-                        _formatter.WriteSpace();
-                    }
+                    Visit(bin.Left);
+                    _formatter.WriteSpace();
+                    _formatter.WriteToken("=");
+                    _formatter.WriteSpace();
                 }
             }
 

@@ -119,6 +119,7 @@ namespace Furikiri.CLI
             catch (Exception e)
             {
                 Console.WriteLine("Failed!");
+                Console.WriteLine(e);
             }
         }
 

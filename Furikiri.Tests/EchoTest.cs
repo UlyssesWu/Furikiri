@@ -19,7 +19,7 @@ namespace Furikiri.Tests
         [TestMethod]
         public void TestDisassemble()
         {
-            var path = "..\\..\\Res\\Initialize.tjs.comp";
+            var path = "..\\..\\..\\Res\\Initialize.tjs.comp";
             Assembler assembler = new Assembler(){AssembleMode = true};
             var code = assembler.Disassemble(path);
             //File.WriteAllText("out.tjsasm", code);
@@ -42,7 +42,7 @@ namespace Furikiri.Tests
         [TestMethod]
         public void TestLoadTjs()
         {
-            var path = "..\\..\\Res\\Initialize.tjs.comp";
+            var path = "..\\..\\..\\Res\\Initialize.tjs.comp";
             //var path = "..\\..\\Res\\startup.tjsbc";
             Module m = new Module(path);
 
@@ -58,7 +58,7 @@ namespace Furikiri.Tests
         [TestMethod]
         public void TestLoadTjs2()
         {
-            var path = "..\\..\\Res\\Initialize.tjs.comp";
+            var path = "..\\..\\..\\Res\\Initialize.tjs.comp";
             Module m = new Module(path);
             var method = m.TopLevel.ResolveMethod();
             var offset = 0;
@@ -73,9 +73,11 @@ namespace Furikiri.Tests
         public void TestDecompileTjs()
         {
             var path = "..\\..\\..\\Res\\Initialize.tjs.comp";
+            //var path = "..\\..\\..\\Res\\startup.tjs";
             Decompiler decompiler = new Decompiler(path);
             //var result = decompiler.Decompile();
             var result = decompiler.Decompile("global");
+            //var result = decompiler.Decompile("autopath");
             //var result = decompiler.Decompile("countLayerMetrics");
             //var result = decompiler.Decompile("Test"); //there is a bug at [var b3 = b2 || b;] to be solved only by data flow analysis
             // B1 -> B2 -> B3, B1 -> B3, B3.From = B1 & B2, B3.Input = flag, B1.Output & B1.Def = flag, B2.Output & B2.Def = flag => flag = φ
@@ -103,7 +105,7 @@ namespace Furikiri.Tests
         [TestMethod]
         public void TestDecompileBlock()
         {
-            var path = "..\\..\\Res\\Initialize.tjs.comp";
+            var path = "..\\..\\..\\Res\\Initialize.tjs.comp";
             Module md = new Module(path);
             var mt = md.TopLevel.ResolveMethod();
             mt.Compact();
@@ -150,7 +152,7 @@ namespace Furikiri.Tests
         [TestMethod]
         public void TestCompileTjs()
         {
-            var path = "..\\..\\Res\\Initialize.tjs";
+            var path = "..\\..\\..\\Res\\Initialize.tjs";
             Tjs.mStorage = null;
             Tjs.Initialize();
             Tjs scriptEngine = new Tjs();

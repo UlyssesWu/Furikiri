@@ -466,6 +466,7 @@ namespace Furikiri
                 BinaryOp.BitShiftLeft => "<<<",
                 BinaryOp.LogicAnd => "&&",
                 BinaryOp.LogicOr => "||",
+                BinaryOp.InContextOf => "incontextof",
                 _ => "#"
             };
         }

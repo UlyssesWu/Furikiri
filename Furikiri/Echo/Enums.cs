@@ -35,6 +35,10 @@ namespace Furikiri.Echo
         InstanceOf,
         GreaterOrEqual,
         LessOrEqual,
+        /// <summary>
+        /// incontextof 运算符会先对左侧表达式求值，然后对右侧表达式求值。将左侧表达式的结果作为对象，将这个对象的上下文部分替换为右侧表达式的结果，替换后的对象作为该运算符的结果。
+        /// </summary>
+        InContextOf,
     }
 
     public enum UnaryOp

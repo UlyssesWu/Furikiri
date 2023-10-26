@@ -806,6 +806,7 @@ namespace Furikiri.Emit
         THROW = 122,
         /// <summary>
         /// change this
+        /// 将用%dest表示的对象的闭包部分更改为用%src表示的对象
         /// %dest で表されたオブジェクトのクロージャ部分を、%src で示されたオブジェクトに変更します。
         /// <example>chgthis %dest, %src</example>
         /// </summary>
