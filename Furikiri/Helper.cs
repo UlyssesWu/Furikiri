@@ -603,6 +603,16 @@ namespace Furikiri
             return code == OpCode.CALL || code == OpCode.CALLI || code == OpCode.CALLD;
         }
 
+        /// <summary>
+        /// CALLI or CALLD
+        /// </summary>
+        /// <param name="code"></param>
+        /// <returns></returns>
+        public static bool IsInstanceCall(this OpCode code)
+        {
+            return code == OpCode.CALLI || code == OpCode.CALLD;
+        }
+
         public static bool IsCallOrNew(this OpCode code)
         {
             return code == OpCode.CALL || code == OpCode.CALLI || code == OpCode.CALLD || code == OpCode.NEW;

@@ -314,31 +314,31 @@ namespace Furikiri.Emit
                     {
                         if (op == CALLD)
                         {
-                            ins.Registers.Add(new RegisterValue(code[idx]));
+                            ins.Registers.Add(new RegisterValue(code[idx])); //[2]
                         }
                         else
                         {
-                            ins.Registers.Add(new RegisterRef(code[idx]));
+                            ins.Registers.Add(new RegisterRef(code[idx])); //[2]
                         }
 
                         idx++;
-                        ins.Registers.Add(new RegisterShort(code[idx]));
+                        ins.Registers.Add(new RegisterShort(code[idx])); //[3]
                         paramCount = code[idx];
                     }
                     else
                     {
-                        ins.Registers.Add(new RegisterShort(code[idx]));
+                        ins.Registers.Add(new RegisterShort(code[idx])); //[2]
                         paramCount = code[idx];
                     }
 
                     if (paramCount == -1) //omit(ignore) param
                     {
-                        callIns.ParameterExpandStyle = FuncParameterExpand.Omit;
+                        //callIns.ParameterExpandStyle = FuncParameterExpand.Omit;
                         break;
                     }
                     else if (paramCount == -2) //expand param, an extra byte (not associated to register!) is used for count
                     {
-                        callIns.ParameterExpandStyle = FuncParameterExpand.Expand;
+                        //callIns.ParameterExpandStyle = FuncParameterExpand.Expand;
 
                         idx++;
                         paramCount = code[idx];
@@ -352,7 +352,7 @@ namespace Furikiri.Emit
                     }
                     else //normal param
                     {
-                        callIns.ParameterExpandStyle = FuncParameterExpand.Normal;
+                        //callIns.ParameterExpandStyle = FuncParameterExpand.Normal;
 
                         for (int i = 0; i < paramCount; i++)
                         {
