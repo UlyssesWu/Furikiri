@@ -1,0 +1,1 @@
+tjs2Compiler.exe %1 c

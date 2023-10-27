@@ -680,7 +680,6 @@ namespace Furikiri.Echo.Pass
                     //Invoke
                     case OpCode.CALL:
                     {
-                        //TODO: BUG here, Data is null
                         var method = ex[ins.GetRegisterSlot(1)];
                         var call = new InvokeExpression(method);
                         var dst = ins.GetRegisterSlot(0);
@@ -978,7 +977,7 @@ namespace Furikiri.Echo.Pass
             //Process next
             foreach (var succ in block.To)
             {
-                BlockProcess(context, succ, new Dictionary<int, Expression>(ex)); //TODO: deep copy flag?
+                BlockProcess(context, succ, new Dictionary<int, Expression>(ex)); //TODO: validate if deep copy ex is correct
             }
         }
     }
