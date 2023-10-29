@@ -2,6 +2,7 @@
 
 namespace Furikiri.Emit
 {
+    //REF: http://www.kaede-software.com/2012/10/tjs2_1.html
     /// <summary>
     /// Internal Code Object, can execute ByteCode (in krkr, not here)
     /// </summary>
@@ -30,16 +31,19 @@ namespace Furikiri.Emit
 
         /// <summary>
         /// Func decl arg count
+        /// 参数数量
         /// </summary>
         public int FuncDeclArgCount { get; set; }
 
         /// <summary>
         /// Func decl unnamed arg array base
+        /// 在匿名数组参数之前定义的参数数量
         /// </summary>
         public int FuncDeclUnnamedArgArrayBase { get; set; }
 
         /// <summary>
         /// Func decl collapse base
+        /// 在命名数组参数之前定义的参数数量
         /// </summary>
         public int FuncDeclCollapseBase { get; set; } = -1;
 

@@ -126,10 +126,14 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.CL:
                     {
-                        ex[ins.GetRegisterSlot(0)] = null;
+                        ex[ins.GetRegisterSlot(0)] = new ConstantExpression(TjsVoid.Void);
                     }
                         break;
                     case OpCode.CCL:
+                        for (int j = ins.GetRegisterSlot(0); j < ins.GetRegisterSlot(1); j++)
+                        {
+                            ex[j] = new ConstantExpression(TjsVoid.Void);
+                        }
                         break;
                     case OpCode.CEQ:
                     case OpCode.CDEQ:

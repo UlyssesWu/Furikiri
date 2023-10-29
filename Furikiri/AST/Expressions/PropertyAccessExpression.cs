@@ -1,7 +1,9 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Furikiri.AST.Expressions
 {
+    [DebuggerDisplay("{Instance}::{Property}")]
     class PropertyAccessExpression : Expression, IInstance
     {
         public override AstNodeType Type => AstNodeType.PropertyAccessExpression;

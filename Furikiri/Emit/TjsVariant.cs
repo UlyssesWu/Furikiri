@@ -12,6 +12,15 @@ namespace Furikiri.Emit
         string DebugString { get; }
     }
 
+    // null 是表示“哪个对象都不表示”的对象。与 void 不同。
+    // 对 null 对象进行操作会导致错误。
+    // 使用 incontextof 运算符将函数的上下文改成 null 后，那个函数会在被调用位置的上下文中执行。
+
+    /// <summary>
+    /// void 表示“什么也没有”。应用于各种表现为“什么也没有”的场合。与 null 不同。
+    /// 已声明了的变量 (什么东西都没有代入的变量) 的值就是 void 。
+    /// 作为字符串来处理的时候相当于空 字符串 ( '' )。作为数值来处理的时候相当于 0 。
+    /// </summary>
     [DebuggerDisplay("{DebugString}")]
     public class TjsVoid : ITjsVariant
     {
@@ -26,7 +35,7 @@ namespace Furikiri.Emit
         /// <summary>
         /// Void
         /// </summary>
-        public static TjsVoid Void => _void ?? (_void = new TjsVoid());
+        public static TjsVoid Void => _void ??= new TjsVoid();
 
         public string DebugString => "(void)";
 
