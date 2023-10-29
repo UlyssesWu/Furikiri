@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace Furikiri.AST.Expressions
 {
-    [DebuggerDisplay("{Instance}::{Property}")]
+    [DebuggerDisplay("{Instance}[{Property}]")]
     class PropertyAccessExpression : Expression, IInstance
     {
         public override AstNodeType Type => AstNodeType.PropertyAccessExpression;
@@ -19,5 +19,10 @@ namespace Furikiri.AST.Expressions
 
         public bool HideInstance { get; }
         public Expression Instance { get; set; }
+
+        public override string ToString()
+        {
+            return $"{Instance}[{Property}]";
+        }
     }
 }

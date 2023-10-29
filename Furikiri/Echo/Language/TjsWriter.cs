@@ -219,7 +219,14 @@ namespace Furikiri.Echo.Language
                 _formatter.WriteToken(".");
             }
 
-            _formatter.WriteIdentifier(invoke.Method);
+            if (invoke.MethodExpression != null)
+            {
+                Visit(invoke.MethodExpression);
+            }
+            else
+            {
+                _formatter.WriteIdentifier(invoke.Method);
+            }
             _formatter.WriteToken("(");
             for (var i = 0; i < invoke.Parameters.Count; i++)
             {
@@ -240,6 +247,12 @@ namespace Furikiri.Echo.Language
             {
                 Visit(prop.Instance);
                 //_formatter.WriteToken(".");
+                _formatter.WriteToken("[");
+                Visit(prop.Property);
+                _formatter.WriteToken("]");
+            }
+            else
+            {
                 _formatter.WriteToken("[");
                 Visit(prop.Property);
                 _formatter.WriteToken("]");
