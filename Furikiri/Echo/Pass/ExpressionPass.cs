@@ -40,10 +40,29 @@ namespace Furikiri.Echo.Pass
             var argCount = context.Object.FuncDeclArgCount;
             for (short i = 0; i < argCount; i++)
             {
-                short slot = (short) (-i - 3);
+                short slot = (short) (-i + Const.ArgBase);
                 var v = new Variable(slot) {IsParameter = true};
                 context.Vars.Add(slot, v);
                 exps.Add(slot, new LocalExpression(v));
+            }
+
+            // create array params if needed
+            var hasUnnamedArray = context.Object.FuncDeclUnnamedArgArrayBase > 0; //not sure
+            var hasCollapseArray = context.Object.FuncDeclCollapseBase >= 0;
+            if (hasCollapseArray || hasUnnamedArray)
+            {
+                short slot = (short) ((hasCollapseArray? - context.Object.FuncDeclCollapseBase : - context.Object.FuncDeclUnnamedArgArrayBase) + Const.ArgBase);
+                var array = new Variable(slot) { IsParameter = true, VarType = TjsVarType.Object};
+                if (hasCollapseArray)
+                {
+                    array.IsNamedArray = true;
+                }
+                else
+                {
+                    array.IsUnnamedArray = true;
+                }
+                context.Vars.Add(slot, array);
+                exps.Add(slot, new LocalExpression(array));
             }
 
             BlockProcess(context, entry, exps);
@@ -81,7 +100,8 @@ namespace Furikiri.Echo.Pass
                         //Generate Phi
                         var phi = new PhiExpression(inSlot);
                         //From must be sorted since we need first condition
-                        if (block.From[0].Statements?.Last() is ConditionExpression condition)
+                        //TODO: don't even have statements here.
+                        if (block.From[0].Statements?.LastOrDefault() is ConditionExpression condition)
                         {
                             phi.Condition = condition;
                             //var thenBlock = context.BlockTable[condition.JumpTo];
@@ -103,7 +123,8 @@ namespace Furikiri.Echo.Pass
 
             Expression retExp = null;
             var ex = new Dictionary<int, Expression>(exps);
-            var flag = ex.ContainsKey(Const.FlagReg) ? ex[Const.FlagReg] : null;
+            var flag = ex.TryGetValue(Const.FlagReg, out var fl) ? fl : null;
+
             var expList = new List<IAstNode>();
             block.Statements = expList;
             InstructionData insData = null;

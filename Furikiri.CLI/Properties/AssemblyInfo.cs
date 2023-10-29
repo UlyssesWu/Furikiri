@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Independent Galgrammer")]
 [assembly: AssemblyProduct("Furikiri")]
-[assembly: AssemblyCopyright("Copyright © Ulysses 2018-2019")]
+[assembly: AssemblyCopyright("Copyright © Ulysses 2018-2023")]
 [assembly: AssemblyTrademark("wdwxy12345@gmail.com")]
 [assembly: AssemblyCulture("")]
 

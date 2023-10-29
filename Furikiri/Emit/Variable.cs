@@ -8,7 +8,26 @@ namespace Furikiri.Emit
         public string Name { get; set; }
         public TjsVarType VarType { get; set; }
         public bool IsParameter { get; set; }
-        public string DefaultName => $"{(IsParameter ? "p" : "v")}{Math.Abs(Slot)}"; //Math.Abs(Slot) + 2
+        public bool IsUnnamedArray { get; set; }
+        public bool IsNamedArray { get; set; }
+
+        public string DefaultName
+        {
+            get
+            {
+                if (IsNamedArray)
+                {
+                    return $"{Const.DefaultFunctionArgArrayName}{Math.Abs(Slot)}";
+                }
+
+                if (IsUnnamedArray)
+                {
+                    return "*";
+                }
+                return $"{(IsParameter ? "p" : "v")}{Math.Abs(Slot)}";
+                //Math.Abs(Slot) + 2
+            }
+        }
 
         public Variable(short slot)
         {

@@ -12,6 +12,7 @@ namespace Furikiri
         public const string RegExpCompile = "_compile";
         public const string Global = "global";
         public const string AnonymousFunctionName = "(anonymous)";
+        public const string DefaultFunctionArgArrayName = "__params";
         public const string SingleLineComment = "//";
         /// <summary>
         /// A special slot for flag since 0 is (WTF) not represent for it
@@ -31,5 +32,10 @@ namespace Furikiri
         /// %-2, this ?? global
         /// </summary>
         public const short ThisProxyReg = -2;
+
+        /// <summary>
+        /// %-3, start of function args
+        /// </summary>
+        public const short ArgBase = -3;
     }
 }

@@ -29,7 +29,7 @@ namespace Furikiri.AST.Expressions
         
         public string Name { get; set; }
 
-        public IdentifierType IdentifierType { get; set; } = IdentifierType.Normal;
+        public IdentifierType IdentifierType { get; set; }
 
         public IdentifierExpression(string name, IdentifierType idType = IdentifierType.Normal)
         {
