@@ -1,0 +1,1 @@
+tjsdisasm.exe %1 > dec.tjsasm
