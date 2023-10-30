@@ -70,6 +70,14 @@ namespace Furikiri.Tests
         }
 
         [TestMethod]
+        public void TestDecompileUnitTest()
+        {
+            var path = "..\\..\\..\\Res\\unittest.tjs.comp";
+            Decompiler decompiler = new Decompiler(path);
+            var result = decompiler.Decompile("TestTry");
+        }
+
+        [TestMethod]
         public void TestDecompileTjs()
         {
             var path = "..\\..\\..\\Res\\Initialize.tjs.comp";

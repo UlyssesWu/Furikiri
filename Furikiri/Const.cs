@@ -13,6 +13,7 @@ namespace Furikiri
         public const string Global = "global";
         public const string AnonymousFunctionName = "(anonymous)";
         public const string DefaultFunctionArgArrayName = "__params";
+        public const string DefaultCatchVarName = "__e";
         public const string SingleLineComment = "//";
         /// <summary>
         /// A special slot for flag since 0 is (WTF) not represent for it

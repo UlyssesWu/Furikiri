@@ -77,6 +77,66 @@ namespace Furikiri.Echo
             return TjsVarType.Null;
         }
 
+        public List<Block> SelectBlocks(Block start, Block end, bool fromEndToStart = false, bool includeStart = true, bool includeEnd = false)
+        {
+            var result = new List<Block>();
+
+            void AddBlock(Block blk)
+            {
+                if (blk.Start >= end.Start)
+                {
+                    return;
+                }
+
+                if (blk.Start <= start.Start)
+                {
+                    return;
+                }
+
+                if (!result.Contains(blk))
+                {
+                    result.Add(blk);
+                }
+
+                if (fromEndToStart)
+                {
+                    foreach (var f in blk.From)
+                    {
+                        AddBlock(f);
+                    }
+                }
+                else
+                {
+                    foreach (var to in blk.To)
+                    {
+                        AddBlock(to);
+                    }
+                }
+            }
+
+            if (fromEndToStart)
+            {
+                end.From.ForEach(AddBlock);
+            }
+            else
+            {
+                start.To.ForEach(AddBlock);
+            }
+
+            if (includeStart)
+            {
+                result.Add(start);
+            }
+
+            if (includeEnd)
+            {
+                result.Add(end);
+            }
+
+            result.Sort((b1, b2) => b1.Start - b2.Start);
+            return result;
+        }
+
         #region CFG
 
         public void BuildCFG(List<Instruction> instructions)

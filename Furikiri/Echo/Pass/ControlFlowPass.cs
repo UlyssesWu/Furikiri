@@ -5,6 +5,7 @@ using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
 using Furikiri.Echo.Logical;
+using Furikiri.Emit;
 
 namespace Furikiri.Echo.Pass
 {
@@ -16,6 +17,9 @@ namespace Furikiri.Echo.Pass
         {
             _context = context;
             _context.LoopSetSort();
+
+            //try
+            BuildTry();
 
             IntervalAnalysisDoWhilePass();
 
@@ -51,6 +55,59 @@ namespace Furikiri.Echo.Pass
             }
 
             return statement;
+        }
+
+        private void BuildTry()
+        {
+            Block FindTryEnd(Block startTry, Block catchOrExitTry, Block current)
+            {
+                if (current.Start <= startTry.Start)
+                {
+                    return null;
+                }
+                
+                if (current.Instructions.Any(i => i.OpCode == OpCode.EXTRY))
+                {
+                    var lastIns = current.Instructions.LastOrDefault();
+                    if (lastIns is {OpCode: OpCode.JMP})
+                    {
+                        var target = current.To.First();
+                        if (target.Start >= catchOrExitTry.Start)
+                        {
+                            return target;
+                        }
+                    }
+                }
+
+                foreach (var next in current.From)
+                {
+                    var b = FindTryEnd(startTry, catchOrExitTry, next);
+                    if (b != null)
+                    {
+                        return b;
+                    }
+                }
+
+                return null;
+            }
+
+            foreach (var block in _context.Blocks)
+            {
+                if (block.Instructions.LastOrDefault()?.OpCode == OpCode.ENTRY)
+                {
+                    //TODO: when first instruction is ENTRY
+                    TryLogic t = new TryLogic();
+                    t.EnterTry = block;
+                    t.CatchClause = (Expression) block.Statements.LastOrDefault(stmt => stmt is CatchExpression);
+                    var catchOrExitTry = _context.BlockTable[((JumpData) block.Instructions.Last().Data).Goto.Line];
+                    var tryEnd = FindTryEnd(block, catchOrExitTry, catchOrExitTry);
+                    t.ExitTry = tryEnd ?? catchOrExitTry;
+                    if (tryEnd != null && tryEnd != catchOrExitTry) //has catch
+                    {
+                        t.CatchBody = _context.SelectBlocks(catchOrExitTry, tryEnd, true);
+                    }
+                }
+            }
         }
 
         public Expression FindCondition(Loop l)

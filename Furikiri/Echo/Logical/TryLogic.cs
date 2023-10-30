@@ -7,11 +7,14 @@ namespace Furikiri.Echo.Logical
 {
     internal class TryLogic : ILogical
     {
+        public Block EnterTry { get; set; }
+        public Block ExitTry { get; set; }
+
         public List<Block> Body { get; set; }
 
-        public Expression Catch { get; set; }
+        public Expression CatchClause { get; set; }
 
-        public List<Block> Finally { get; set; }
+        public List<Block> CatchBody { get; set; }
 
         public Statement ToStatement()
         {

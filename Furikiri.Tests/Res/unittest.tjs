@@ -372,3 +372,17 @@ function TestRegExp()
     var r3 = /start(.*?)end/gi;
 	var r4 = /\\.\\.\\./l;
 }
+
+function TestTry()
+{
+	try
+	{
+		var n = 1 / 0.0;
+		return n;
+	}
+	catch(e)
+	{
+		System.inform(e.message);
+	}
+	System.inform("exit try");
+}

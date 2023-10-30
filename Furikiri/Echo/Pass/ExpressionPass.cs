@@ -946,10 +946,12 @@ namespace Furikiri.Echo.Pass
                     }
                         break;
                     case OpCode.ENTRY:
-                        //Console.WriteLine();
+                        var catchVar = new IdentifierExpression(Const.DefaultCatchVarName);
+                        ex[ins.GetRegisterSlot(0)] = catchVar;
+                        expList.Add(new CatchExpression(catchVar));
                         break;
                     case OpCode.EXTRY:
-                        //Console.WriteLine();
+                        //extry + jmp = 无异常退出
                         break;
                     case OpCode.THROW:
                     {
