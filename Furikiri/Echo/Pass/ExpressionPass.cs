@@ -946,8 +946,10 @@ namespace Furikiri.Echo.Pass
                     }
                         break;
                     case OpCode.ENTRY:
+                        //Console.WriteLine();
                         break;
                     case OpCode.EXTRY:
+                        //Console.WriteLine();
                         break;
                     case OpCode.THROW:
                     {

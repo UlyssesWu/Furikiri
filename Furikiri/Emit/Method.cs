@@ -122,6 +122,7 @@ namespace Furikiri.Emit
                     case OpCode.JF:
                     case OpCode.JNF:
                     case OpCode.JMP:
+                    case OpCode.ENTRY:
                         var jmp = new JumpData(instruction,
                             Instructions.FirstOrDefault(ins =>
                                 ins.Offset == instruction.Registers[0].GetSlot() + instruction.Offset));
@@ -191,6 +192,7 @@ namespace Furikiri.Emit
                         case OpCode.JF:
                         case OpCode.JNF:
                         case OpCode.JMP:
+                        case OpCode.ENTRY:
                             instruction.Registers[0]
                                 .SetSlot(((JumpData) instruction.Data).Goto.Offset - instruction.Offset);
                             break;

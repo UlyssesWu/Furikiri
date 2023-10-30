@@ -592,10 +592,10 @@ namespace Furikiri
         {
             if (conditionalOnly)
             {
-                return code == OpCode.JF || code == OpCode.JNF;
+                return code == OpCode.JF || code == OpCode.JNF || code == OpCode.ENTRY;
             }
 
-            return code == OpCode.JMP || code == OpCode.JF || code == OpCode.JNF;
+            return code == OpCode.JMP || code == OpCode.JF || code == OpCode.JNF || code == OpCode.ENTRY;
         }
 
         public static bool IsCall(this OpCode code)
