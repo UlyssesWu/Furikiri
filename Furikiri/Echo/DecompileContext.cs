@@ -77,6 +77,16 @@ namespace Furikiri.Echo
             return TjsVarType.Null;
         }
 
+        public bool IsArg(short slot)
+        {
+            if (slot > Const.ArgBase)
+            {
+                return false;
+            }
+
+            return Vars.ContainsKey(slot) && Vars[slot].IsParameter;
+        }
+
         public List<Block> SelectBlocks(Block start, Block end, bool fromEndToStart = false, bool includeStart = true, bool includeEnd = false)
         {
             var result = new List<Block>();
@@ -168,7 +178,7 @@ namespace Furikiri.Echo
                 NEXT:
                 Instruction label = null;
                 Instruction branch = null;
-                for (int i = currentAddr + 1; i < instructions.Count; i++)
+                for (int i = currentAddr; i < instructions.Count; i++)
                 {
                     var ins = instructions[i];
                     if (label == null && ins.JumpedFrom != null)

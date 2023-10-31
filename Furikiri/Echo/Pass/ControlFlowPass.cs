@@ -18,10 +18,9 @@ namespace Furikiri.Echo.Pass
             _context = context;
             _context.LoopSetSort();
 
+            IntervalAnalysisDoWhilePass();
             //try
             BuildTry();
-
-            IntervalAnalysisDoWhilePass();
 
             foreach (var b in _context.Blocks)
             {
@@ -95,7 +94,6 @@ namespace Furikiri.Echo.Pass
             {
                 if (block.Instructions.LastOrDefault()?.OpCode == OpCode.ENTRY)
                 {
-                    //TODO: when first instruction is ENTRY
                     TryLogic t = new TryLogic();
                     t.EnterTry = block;
                     t.CatchClause = (Expression) block.Statements.LastOrDefault(stmt => stmt is CatchExpression);
@@ -106,6 +104,8 @@ namespace Furikiri.Echo.Pass
                     {
                         t.CatchBody = _context.SelectBlocks(catchOrExitTry, tryEnd, true);
                     }
+
+                    t.Body = _context.SelectBlocks(block, catchOrExitTry, includeStart: false);
                 }
             }
         }
@@ -157,18 +157,18 @@ namespace Furikiri.Echo.Pass
                 dw.Break = FindBreak(loop);
 
                 Block conditionBlock = null;
-                if (lastBlock.Statements.GetCondition() is ConditionExpression lastCondi &&
-                    lastCondi.TrueBranch == loop.Header.Start)
+                if (lastBlock.Statements.GetCondition() is ConditionExpression lastCond &&
+                    lastCond.TrueBranch == loop.Header.Start)
                 {
-                    dw.Condition = lastCondi;
+                    dw.Condition = lastCond;
                     conditionBlock = lastBlock;
                 }
                 else if (lastBlock.Statements.Count == 1 && lastBlock.Statements[0] is GotoExpression &&
-                         loop.Header.Statements.GetCondition() is ConditionExpression condi &&
-                         condi.FalseBranch == dw.Break.Start)
+                         loop.Header.Statements.GetCondition() is ConditionExpression cond &&
+                         cond.FalseBranch == dw.Break.Start)
                 {
                     dw.IsWhile = true;
-                    dw.Condition = condi;
+                    dw.Condition = cond;
                     conditionBlock = loop.Header;
                 }
 
@@ -430,7 +430,7 @@ namespace Furikiri.Echo.Pass
             if (!falseIsContent && then == trueBlock)
             {
                 var falseCondition = falseBlock.Statements.GetCondition();
-                if (MergeIfCondition(falseCondition, falseBlock, dominator, ref merge, ref then, ref @else))
+                if (falseCondition != null && MergeIfCondition(falseCondition, falseBlock, dominator, ref merge, ref then, ref @else))
                 {
                     falseBlock.Hidden = true;
                     merge = condition.Condition.Or(merge);

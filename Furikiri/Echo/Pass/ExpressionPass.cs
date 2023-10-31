@@ -385,13 +385,9 @@ namespace Furikiri.Echo.Pass
                         }
 
                         Expression dst = null;
-                        if (ex.ContainsKey(dstSlot))
+                        if (dstSlot <= Const.ArgBase)
                         {
-                            //dst = ex[dstSlot];
-                            ex[dstSlot] = src;
-                        }
-                        else if (dstSlot < -2)
-                        {
+                            var declare = !context.IsArg(dstSlot);
                             var l = new LocalExpression(context.Object, dstSlot);
                             //if (!l.IsParameter)
                             //{
@@ -400,9 +396,14 @@ namespace Furikiri.Echo.Pass
                             dst = l;
                             ex[dstSlot] = l; //assignment -> statements, local -> expressions
 
-                            BinaryExpression b = new BinaryExpression(dst, src, BinaryOp.Assign) {IsDeclaration = true};
+                            BinaryExpression b = new BinaryExpression(dst, src, BinaryOp.Assign) {IsDeclaration = declare };
                             //ex[dstSlot] = b;
                             expList.Add(b);
+                        }
+                        else if (ex.ContainsKey(dstSlot))
+                        {
+                            //dst = ex[dstSlot];
+                            ex[dstSlot] = src;
                         }
                         else if (dstSlot != 0)
                         {
@@ -429,7 +430,8 @@ namespace Furikiri.Echo.Pass
                     {
                         var dstSlot = ins.GetRegisterSlot(0);
                         var srcSlot = ins.GetRegisterSlot(1);
-                        var store = false; //Set to Expression
+                        var saveToEx = true; //Set to Expression
+                        var appendToExpList = dstSlot <= Const.ArgBase;
                         var declare = false; //Is declaration
 
                         Expression dst = null;
@@ -437,7 +439,7 @@ namespace Furikiri.Echo.Pass
                         {
                             dst = ex[dstSlot];
                         }
-                        else if (dstSlot < -2)
+                        else if (dstSlot <= Const.ArgBase)
                         {
                             var l = new LocalExpression(context.Object, dstSlot);
                             //if (!l.IsParameter)
@@ -446,7 +448,7 @@ namespace Furikiri.Echo.Pass
                             //}
                             dst = l;
                             ex[dstSlot] = l;
-                            store = false;
+                            saveToEx = false;
                             declare = true;
                         }
 
@@ -516,12 +518,15 @@ namespace Furikiri.Echo.Pass
 
                         BinaryExpression b = new BinaryExpression(dst, src, op) {IsDeclaration = declare};
 
-                        if (store)
+                        if (saveToEx)
                         {
                             ex[dstSlot] = b;
                         }
 
-                        expList.Add(b);
+                        if (appendToExpList)
+                        {
+                            expList.Add(b); //TODO: need add?
+                        }
                     }
                         break;
                     case OpCode.ADDPD:
