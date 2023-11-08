@@ -80,9 +80,9 @@ namespace Furikiri.Echo.Pass
         }
 
         public void BlockProcess(DecompileContext context, Block block,
-            Dictionary<int, Expression> exps)
+            Dictionary<int, Expression> exps = null)
         {
-            if (block.Statements != null)
+            if (context.BlockFinalStates.ContainsKey(block) || block.Statements != null)
             {
                 return;
             }
@@ -389,6 +389,14 @@ namespace Furikiri.Echo.Pass
                         {
                             var declare = !context.IsArg(dstSlot);
                             var l = new LocalExpression(context.Object, dstSlot);
+
+                            //This is wrong. todo: phi
+                            //if ((src is LocalExpression localExp && localExp.VariableDef.Slot == dstSlot) || (src is BinaryExpression binaryExp && binaryExp.Left is LocalExpression le && le.Slot == dstSlot))
+                            //{
+                            //    ex[dstSlot] = l;
+                            //    continue;
+                            //}
+
                             //if (!l.IsParameter)
                             //{
                             //    expList.Add(l);
@@ -1006,7 +1014,7 @@ namespace Furikiri.Echo.Pass
 
             //Save states
             ex[Const.FlagReg] = flag;
-            context.BlockFinalStates[block] = ex;
+            context.BlockFinalStates[block] = new Dictionary<int, Expression>(ex);
 
             //Process next
             foreach (var succ in block.To)
