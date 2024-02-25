@@ -515,11 +515,7 @@ namespace Furikiri.Echo.Language
         internal override void VisitPhiExpr(PhiExpression phi)
         {
             //FIXME: This is a fake implementation
-            Visit(phi.ThenBranch);
-            _formatter.WriteSpace();
-            _formatter.WriteToken("||");
-            _formatter.WriteSpace();
-            Visit(phi.ElseBranch);
+            _formatter.Write(phi.ToString());
         }
     }
 }

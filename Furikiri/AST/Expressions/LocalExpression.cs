@@ -31,5 +31,10 @@ namespace Furikiri.AST.Expressions
         {
             return VariableDef.ToString();
         }
+
+        public static implicit operator LocalExpression(Variable v)
+        {
+            return new LocalExpression(v);
+        }
     }
 }

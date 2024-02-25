@@ -9,7 +9,7 @@ namespace Furikiri.Echo
     /// <summary>
     /// Basic Block
     /// </summary>
-    [DebuggerDisplay("{Start}-{End} ({Length})")]
+    [DebuggerDisplay("{Start}-{End} ({Length}) [{Id}]")]
     class Block
     {
         public int Id { get; internal set; }

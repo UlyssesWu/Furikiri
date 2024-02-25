@@ -87,38 +87,112 @@ namespace Furikiri.Echo.Pass
                 return;
             }
 
+            //Process prev
+            foreach (var prev in block.From)
+            {
+                if (prev != null && prev != block && block.Dominator.Get(prev.Id) && !context.BlockFinalStates.ContainsKey(prev))
+                {
+                    BlockProcess(context, prev);
+                }
+            }
+
+            //merge final states from Froms
+            if (exps == null)
+            {
+                var fromsExceptSelf = block.From.Where(b => b != block && context.BlockFinalStates.ContainsKey(b)).ToList();
+                if (fromsExceptSelf.Count > 1)
+                {
+                    var finalStates = new Dictionary<int, Expression>();
+                    var allKeys = fromsExceptSelf.SelectMany(b => context.BlockFinalStates[b].Keys).Distinct();
+                    foreach (var k in allKeys)
+                    {
+                        var expsList = block.From.Select(b => context.BlockFinalStates[b].TryGetValue(k, out var v) ? v : null).ToList();
+                        if (expsList.All(e => e == null))
+                        {
+                            continue;
+                        }
+
+                        if (expsList.All(e => e != null))
+                        {
+                            var first = expsList.First();
+                            if (expsList.All(e => e.Equals(first)))
+                            {
+                                finalStates[k] = first;
+                            }
+                            else
+                            {
+                                var phi = new PhiExpression(k);
+                                phi.PossibleExpressions.AddRange(expsList);
+                                finalStates[k] = phi;
+                            }
+                        }
+                        else
+                        {
+                            var phi = new PhiExpression(k);
+                            phi.PossibleExpressions.AddRange(expsList.Where(e => e != null));
+                            finalStates[k] = phi;
+                        }
+                    }
+
+                    exps = finalStates;
+                }
+                else if (fromsExceptSelf.Count == 1)
+                {
+                    exps = context.BlockFinalStates[fromsExceptSelf.First()];
+                }
+                else
+                {
+                    exps = new Dictionary<int, Expression>();
+                }
+            }
+
             if (block.From.Count > 1)
             {
-                //get from.Output && from.Def
-                var commonInput = block.From.Select(b => b.Output).Union(block.From.Select(b => b.Def)).GetIntersection();
-                commonInput.IntersectWith(block.Input);
-                //flag can be phi
+                var commonInput = block.From.Select(b => b.Def).Append(block.Input).GetIntersection();
                 if (commonInput.Count > 0)
                 {
                     foreach (var inSlot in commonInput)
                     {
-                        //Generate Phi
-                        var phi = new PhiExpression(inSlot);
-                        //From must be sorted since we need first condition
-                        //TODO: don't even have statements here.
-                        if (block.From[0].Statements?.LastOrDefault() is ConditionExpression condition)
+                        if (context.Vars.ContainsKey((short)inSlot))
                         {
-                            phi.Condition = condition;
-                            //var thenBlock = context.BlockTable[condition.JumpTo];
-                            var elseBlock = context.BlockTable[condition.ElseTo];
-                            //phi.ThenBranch = context.BlockFinalStates[trueBlock][inSlot];
-                            phi.ThenBranch =
-                                context.BlockFinalStates[block.From[0]]
-                                    [inSlot]; //if jump, use the state from the jump-from block 
-                            phi.ElseBranch = context.BlockFinalStates[elseBlock][inSlot];
-                            //Next: Merge condition: if (v1) then v1 else v2 => v1 || v2 (infer v1 is bool)
-                            if (phi.ThenBranch != phi.ElseBranch)
-                            {
-                                exps[inSlot] = phi;
-                            }
+                            exps[inSlot] = (LocalExpression)context.Vars[(short) inSlot];
+                            continue;
                         }
+
+                        var phi = new PhiExpression(inSlot);
+                        exps[inSlot] = phi;
                     }
                 }
+                ////get from.Output && from.Def
+                //var commonInput = block.From.Select(b => b.Output).Union(block.From.Select(b => b.Def)).GetIntersection();
+                //commonInput.IntersectWith(block.Input);
+                ////flag can be phi
+                //if (commonInput.Count > 0)
+                //{
+                //    foreach (var inSlot in commonInput)
+                //    {
+                //        //Generate Phi
+                //        var phi = new PhiExpression(inSlot);
+                //        //From must be sorted since we need first condition
+                //        //TODO: don't even have statements here.
+                //        if (block.From[0].Statements?.LastOrDefault() is ConditionExpression condition)
+                //        {
+                //            phi.Condition = condition;
+                //            //var thenBlock = context.BlockTable[condition.JumpTo];
+                //            var elseBlock = context.BlockTable[condition.ElseTo];
+                //            //phi.ThenBranch = context.BlockFinalStates[trueBlock][inSlot];
+                //            phi.ThenBranch =
+                //                context.BlockFinalStates[block.From[0]]
+                //                    [inSlot]; //if jump, use the state from the jump-from block 
+                //            phi.ElseBranch = context.BlockFinalStates[elseBlock][inSlot];
+                //            //Next: Merge condition: if (v1) then v1 else v2 => v1 || v2 (infer v1 is bool)
+                //            if (phi.ThenBranch != phi.ElseBranch)
+                //            {
+                //                exps[inSlot] = phi;
+                //            }
+                //        }
+                //    }
+                //}
             }
 
             Expression retExp = null;
@@ -1019,7 +1093,8 @@ namespace Furikiri.Echo.Pass
             //Process next
             foreach (var succ in block.To)
             {
-                BlockProcess(context, succ, new Dictionary<int, Expression>(ex)); //TODO: validate if deep copy ex is correct
+                //BlockProcess(context, succ, new Dictionary<int, Expression>(ex)); //TODO: validate if deep copy ex is correct
+                BlockProcess(context, succ);
             }
         }
     }
