@@ -7,9 +7,9 @@ using Furikiri.Echo.Language;
 using Furikiri.Echo.Pass;
 using Furikiri.Emit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Tjs2;
-using Tjs2.Engine;
-using Tjs2.Sharper;
+//using Tjs2;
+//using Tjs2.Engine;
+//using Tjs2.Sharper;
 
 namespace Furikiri.Tests
 {
@@ -156,20 +156,20 @@ namespace Furikiri.Tests
             var result = sWriter.ToString();
         }
 
-        //DO NOT WORK
-        [TestMethod]
-        public void TestCompileTjs()
-        {
-            var path = "..\\..\\..\\Res\\Initialize.tjs";
-            Tjs.mStorage = null;
-            Tjs.Initialize();
-            Tjs scriptEngine = new Tjs();
-            Compiler c = new Compiler(scriptEngine);
-            using (var fs = File.Create("out.tjsbin"))
-            {
-                BinaryStream bs = new TjsBinaryStream(fs);
-                c.Compile(File.ReadAllText(path), false, false, bs);
-            }
-        }
+        ////DO NOT WORK
+        //[TestMethod]
+        //public void TestCompileTjs()
+        //{
+        //    var path = "..\\..\\..\\Res\\Initialize.tjs";
+        //    Tjs.mStorage = null;
+        //    Tjs.Initialize();
+        //    Tjs scriptEngine = new Tjs();
+        //    Compiler c = new Compiler(scriptEngine);
+        //    using (var fs = File.Create("out.tjsbin"))
+        //    {
+        //        BinaryStream bs = new TjsBinaryStream(fs);
+        //        c.Compile(File.ReadAllText(path), false, false, bs);
+        //    }
+        //}
     }
 }

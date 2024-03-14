@@ -153,6 +153,11 @@ namespace Furikiri.Echo.Pass
                 {
                     foreach (var inSlot in commonInput)
                     {
+                        if (inSlot == Const.FlagReg)
+                        {
+                            continue;
+                        }
+
                         if (context.Vars.ContainsKey((short)inSlot))
                         {
                             exps[inSlot] = (LocalExpression)context.Vars[(short) inSlot];
@@ -359,7 +364,10 @@ namespace Furikiri.Echo.Pass
                         }
 
                         var u = new UnaryExpression(dst, op);
-                        //ex[dstSlot] = u;
+                        if (dstSlot > 0)
+                        {
+                            ex[dstSlot] = u;
+                        }
                         expList.Add(u);
                     }
                         break;

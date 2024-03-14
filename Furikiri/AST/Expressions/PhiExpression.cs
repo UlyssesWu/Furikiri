@@ -24,7 +24,7 @@ namespace Furikiri.AST.Expressions
 
         public override string ToString()
         {
-            return $"(phi) {string.Join(" OR ", PossibleExpressions)}";
+            return $"{string.Join(" || ", PossibleExpressions)}";
         }
     }
 }

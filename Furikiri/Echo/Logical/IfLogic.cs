@@ -28,9 +28,7 @@ namespace Furikiri.Echo.Logical
         public void Invert()
         {
             Condition = Condition.Invert();
-            var tmp = Then;
-            Then = Else;
-            Else = tmp;
+            (Then, Else) = (Else, Then);
         }
 
         public IfLogic Simplify()
