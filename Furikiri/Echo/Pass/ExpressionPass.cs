@@ -87,10 +87,12 @@ namespace Furikiri.Echo.Pass
                 return;
             }
 
+            //context.ProcessVisitedBlocks.Add(block.Id);
+
             //Process prev
             foreach (var prev in block.From)
             {
-                if (prev != null && prev != block && block.Dominator.Get(prev.Id) && !context.BlockFinalStates.ContainsKey(prev))
+                if (prev != null && prev != block && !context.BlockFinalStates.ContainsKey(prev) && prev.Id <= block.Id) //TODO: just temp
                 {
                     BlockProcess(context, prev);
                 }

@@ -21,6 +21,8 @@ namespace Furikiri.Echo
 
         //internal List<ILogical> Logicals { get; set; } = new List<ILogical>();
 
+        internal HashSet<int> ProcessVisitedBlocks { get; set; } = new HashSet<int>();
+
         internal Block EntryBlock { get; set; }
 
         /// <summary>
