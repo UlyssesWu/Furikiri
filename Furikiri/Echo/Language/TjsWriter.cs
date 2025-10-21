@@ -1,4 +1,5 @@
-﻿using System.CodeDom.Compiler;
+﻿using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -283,6 +284,27 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitExpressionStmt(ExpressionStatement expression)
         {
+            // Skip Phi expressions that can be simplified (they should be inlined)
+            if (expression.Expression is PhiExpression phi)
+            {
+                if (phi.CanSimplify || phi.PossibleExpressions.Count == 0)
+                {
+                    return;
+                }
+                
+                // For unresolved Phi, output as comment only
+                _formatter.Write("// Unresolved phi node (slot ");
+                _formatter.Write(phi.Slot.ToString());
+                _formatter.Write("): ");
+                for (int i = 0; i < phi.PossibleExpressions.Count; i++)
+                {
+                    if (i > 0) _formatter.Write(" | ");
+                    _formatter.Write(phi.PossibleExpressions[i]?.ToString() ?? "null");
+                }
+                _formatter.WriteLine();
+                return;
+            }
+
             int pos = _formatter.CurrentPosition;
             if (expression.Expression is IOperation bin)
             {
@@ -343,7 +365,16 @@ namespace Furikiri.Echo.Language
                 case UnaryOp.InvertSign:
                 case UnaryOp.Not:
                     _formatter.WriteToken(unary.Op.ToSymbol());
-                    Visit(unary.Target);
+                    // Check if target is an unresolved Phi - if so, just use a placeholder
+                    if (unary.Target is PhiExpression phi && !phi.CanSimplify && !phi.IsConditional)
+                    {
+                        // Output the target as a simple local reference instead of the phi
+                        _formatter.WriteIdentifier("p" + Math.Abs(phi.Slot));
+                    }
+                    else
+                    {
+                        Visit(unary.Target);
+                    }
                     break;
                 case UnaryOp.ToInt:
                 case UnaryOp.ToReal:
@@ -514,8 +545,46 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitPhiExpr(PhiExpression phi)
         {
-            //FIXME: This is a fake implementation
-            _formatter.Write(phi.ToString());
+            // If this is a conditional Phi (from if-else), output as ternary expression
+            if (phi.IsConditional)
+            {
+                _formatter.WriteToken("(");
+                Visit(phi.Condition.Condition);
+                _formatter.WriteSpace();
+                _formatter.WriteToken("?");
+                _formatter.WriteSpace();
+                Visit(phi.ThenBranch);
+                _formatter.WriteSpace();
+                _formatter.WriteToken(":");
+                _formatter.WriteSpace();
+                Visit(phi.ElseBranch);
+                _formatter.WriteToken(")");
+            }
+            // If simplified, output the single value
+            else if (phi.CanSimplify)
+            {
+                Visit(phi.Simplify());
+            }
+            // If only one possible expression, use it
+            else if (phi.PossibleExpressions.Count == 1)
+            {
+                Visit(phi.PossibleExpressions[0]);
+            }
+            // Otherwise, this is an unresolved Phi - try to output something reasonable
+            else if (phi.PossibleExpressions.Count > 0)
+            {
+                // Try to find a common base and show differences
+                // For now, just pick the first expression with a comment
+                _formatter.Write("/*phi:");
+                _formatter.Write(phi.Slot.ToString());
+                _formatter.Write("*/ ");
+                Visit(phi.PossibleExpressions[0]);
+            }
+            else
+            {
+                // Empty Phi - this shouldn't happen but handle it gracefully
+                _formatter.Write("/*empty phi*/");
+            }
         }
     }
 }

@@ -124,17 +124,25 @@ namespace Furikiri.Echo
             m.Compact();
             context.BuildCFG(m.Instructions);
             
+            // Pass 1: Register members
             var pass1 = new RegMemberPass();
             var entry = pass1.Process(context, new BlockStatement());
 
+            // Pass 2: Build expressions (generates Phi nodes)
             var pass2 = new ExpressionPass();
             entry = pass2.Process(context, entry);
 
-            var pass3 = new ControlFlowPass();
+            // Pass 3: Expression propagation and Phi elimination
+            var pass3 = new ExpressionPropagationPass();
             entry = pass3.Process(context, entry);
 
-            var pass4 = new StatementCollectPass();
+            // Pass 4: Control flow analysis
+            var pass4 = new ControlFlowPass();
             entry = pass4.Process(context, entry);
+
+            // Pass 5: Collect statements
+            var pass5 = new StatementCollectPass();
+            entry = pass5.Process(context, entry);
 
             m.Vars = context.Vars;
             

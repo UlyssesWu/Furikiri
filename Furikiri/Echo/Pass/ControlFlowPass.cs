@@ -19,6 +19,7 @@ namespace Furikiri.Echo.Pass
             _context.LoopSetSort();
 
             IntervalAnalysisDoWhilePass();
+            
             //try
             BuildTry();
 
@@ -39,7 +40,10 @@ namespace Furikiri.Echo.Pass
                         {
                             dw.IsWhile = true;
                             dw.Condition = logic.Condition;
-                            dw.Body = logic.Then.Blocks;
+                            // Keep the original loop body, don't replace with logic.Then.Blocks
+                            // because logic.Then only contains the immediate successor, not the entire loop body
+                            // But remove the header block from the body since it contains the condition
+                            dw.Body.Remove(loop.Header);
                         }
                         else
                         {
@@ -52,8 +56,42 @@ namespace Furikiri.Echo.Pass
                     }
                 }
             }
+            
+            // Process if-else structures within loop bodies AFTER while detection
+            foreach (var loop in context.LoopSet)
+            {
+                if (loop.LoopLogic is DoWhileLogic dw)
+                {
+                    StructureLoopBodyIfElse(dw.Body);
+                }
+                else if (loop.LoopLogic is ForLogic fl)
+                {
+                    StructureLoopBodyIfElse(fl.Body);
+                }
+            }
 
             return statement;
+        }
+
+        /// <summary>
+        /// Structure if-else statements within loop body
+        /// </summary>
+        private void StructureLoopBodyIfElse(List<Block> bodyBlocks)
+        {
+            if (bodyBlocks == null) return;
+            
+            foreach (var block in bodyBlocks)
+            {
+                // Skip blocks that are already hidden
+                if (block.Hidden) continue;
+                
+                if (StructureIfElse(block, out var logic))
+                {
+                    block.Statements.Replace(logic.Condition, logic.Simplify().ToStatement());
+                    // Hide the blocks that are part of the if-else structure
+                    logic.HideBlocks(false); // Don't hide the condition block itself
+                }
+            }
         }
 
         private void BuildTry()
