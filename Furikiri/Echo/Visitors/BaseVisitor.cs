@@ -83,6 +83,9 @@ namespace Furikiri.Echo.Visitors
                 case ContinueStatement continueStatement:
                     VisitContinueStmt(continueStatement);
                     break;
+                case TryStatement tryStatement:
+                    VisitTryStmt(tryStatement);
+                    break;
                 case Statement statement:
                     VisitStmt(statement);
                     break;
@@ -124,11 +127,15 @@ namespace Furikiri.Echo.Visitors
         {
         }
 
+        internal virtual void VisitBreakStmt(BreakStatement breakStmt)
+        {
+        }
+
         internal virtual void VisitContinueStmt(ContinueStatement continueStmt)
         {
         }
 
-        internal virtual void VisitBreakStmt(BreakStatement breakStmt)
+        internal virtual void VisitTryStmt(TryStatement tryStmt)
         {
         }
 

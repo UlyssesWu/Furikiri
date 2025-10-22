@@ -586,5 +586,32 @@ namespace Furikiri.Echo.Language
                 _formatter.Write("/*empty phi*/");
             }
         }
+
+        internal override void VisitTryStmt(TryStatement tryStmt)
+        {
+            _formatter.WriteKeyword("try");
+            _formatter.WriteLine();
+            _formatter.WriteStartBlock();
+            Visit(tryStmt.Try);
+            _formatter.WriteEndBlock();
+
+            if (tryStmt.Catch != null)
+            {
+                _formatter.WriteKeyword("catch");
+                _formatter.WriteToken("(");
+                Visit(tryStmt.Catch);
+                _formatter.WriteToken(")");
+                _formatter.WriteLine();
+                _formatter.WriteStartBlock();
+                // Catch body is temporarily stored in Finally
+                if (tryStmt.Finally != null)
+                {
+                    Visit(tryStmt.Finally);
+                }
+                _formatter.WriteEndBlock();
+            }
+
+            AddNewLineAfterStructCtrlStmt();
+        }
     }
 }

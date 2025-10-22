@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Linq;
 using Furikiri.AST.Statements;
 using Furikiri.Compile;
@@ -74,7 +75,8 @@ namespace Furikiri.Tests
         {
             var path = "..\\..\\..\\Res\\unittest.tjs.comp";
             Decompiler decompiler = new Decompiler(path);
-            var result = decompiler.Decompile("TestLoop");
+            var result = decompiler.Decompile("TestTry");
+            Console.WriteLine(result);
         }
 
         [TestMethod]

@@ -13,7 +13,13 @@ namespace Furikiri.Echo.Logical
 
         private void HideBlocks()
         {
-            Body.SafeHide();
+            // Hide all body blocks unconditionally to prevent duplicate collection
+            // After if-else structuring, blocks may contain only a Statement, 
+            // but they should still be hidden as they're part of the loop body
+            foreach (var block in Body)
+            {
+                block.Hidden = true;
+            }
         }
 
         public Statement ToStatement()

@@ -16,7 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Furikiri\Furikiri.csproj" />
-    <ProjectReference Include="..\KrkrSharp\Tjs2Net\Tjs2Net.csproj" />
   </ItemGroup>
 
 </Project>

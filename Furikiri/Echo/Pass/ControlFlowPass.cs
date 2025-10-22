@@ -40,10 +40,15 @@ namespace Furikiri.Echo.Pass
                         {
                             dw.IsWhile = true;
                             dw.Condition = logic.Condition;
-                            // Keep the original loop body, don't replace with logic.Then.Blocks
-                            // because logic.Then only contains the immediate successor, not the entire loop body
-                            // But remove the header block from the body since it contains the condition
-                            dw.Body.Remove(loop.Header);
+                            // Keep the original loop body. Only strip the conditional jump/condition
+                            // from the header block if present, but do NOT remove the entire header,
+                            // as it may contain legitimate loop body statements (e.g., inner if-else chains).
+                            var lastCtrl = loop.Header.Statements.LastOrDefault(st =>
+                                st is ConditionExpression || st is GotoExpression || st is BreakStatement || st is ContinueStatement);
+                            if (lastCtrl != null)
+                            {
+                                loop.Header.Statements.Remove(lastCtrl);
+                            }
                         }
                         else
                         {
@@ -80,16 +85,28 @@ namespace Furikiri.Echo.Pass
         {
             if (bodyBlocks == null) return;
             
-            foreach (var block in bodyBlocks)
+            // Process blocks multiple times to handle nested structures properly
+            bool changed = true;
+            int maxIterations = 5;
+            int iteration = 0;
+            while (changed && iteration < maxIterations)
             {
-                // Skip blocks that are already hidden
-                if (block.Hidden) continue;
+                changed = false;
+                iteration++;
                 
-                if (StructureIfElse(block, out var logic))
+                for (int i = 0; i < bodyBlocks.Count; i++)
                 {
-                    block.Statements.Replace(logic.Condition, logic.Simplify().ToStatement());
-                    // Hide the blocks that are part of the if-else structure
-                    logic.HideBlocks(false); // Don't hide the condition block itself
+                    var block = bodyBlocks[i];
+                    // Skip blocks that are already hidden
+                    if (block.Hidden) continue;
+                    
+                    if (StructureIfElse(block, out var logic))
+                    {
+                        block.Statements.Replace(logic.Condition, logic.Simplify().ToStatement());
+                        // Hide the blocks that are part of the if-else structure
+                        logic.HideBlocks(false); // Don't hide the condition block itself
+                        changed = true;
+                    }
                 }
             }
         }
@@ -102,11 +119,11 @@ namespace Furikiri.Echo.Pass
                 {
                     return null;
                 }
-                
+
                 if (current.Instructions.Any(i => i.OpCode == OpCode.EXTRY))
                 {
                     var lastIns = current.Instructions.LastOrDefault();
-                    if (lastIns is {OpCode: OpCode.JMP})
+                    if (lastIns is { OpCode: OpCode.JMP })
                     {
                         var target = current.To.First();
                         if (target.Start >= catchOrExitTry.Start)
@@ -134,8 +151,8 @@ namespace Furikiri.Echo.Pass
                 {
                     TryLogic t = new TryLogic();
                     t.EnterTry = block;
-                    t.CatchClause = (Expression) block.Statements.LastOrDefault(stmt => stmt is CatchExpression);
-                    var catchOrExitTry = _context.BlockTable[((JumpData) block.Instructions.Last().Data).Goto.Line];
+                    t.CatchClause = (Expression)block.Statements.LastOrDefault(stmt => stmt is CatchExpression);
+                    var catchOrExitTry = _context.BlockTable[((JumpData)block.Instructions.Last().Data).Goto.Line];
                     var tryEnd = FindTryEnd(block, catchOrExitTry, catchOrExitTry);
                     t.ExitTry = tryEnd ?? catchOrExitTry;
                     if (tryEnd != null && tryEnd != catchOrExitTry) //has catch
@@ -211,7 +228,11 @@ namespace Furikiri.Echo.Pass
                 }
 
                 dw.Body = new List<Block>(loop.Blocks);
-                //dw.Body.Remove(conditionBlock);
+                // Remove condition block from body if it's not part of the loop body
+                if (conditionBlock != null && conditionBlock != loop.Header)
+                {
+                    dw.Body.Remove(conditionBlock);
+                }
                 conditionBlock?.Statements.Remove(conditionBlock.Statements.LastOrDefault(stmt => stmt is IJump));
                 dw.Continue = null;
 
@@ -448,7 +469,8 @@ namespace Furikiri.Echo.Pass
             var trueIsContent = IsBranchContent(trueBlock);
             var falseIsContent = IsBranchContent(falseBlock);
 
-            if (trueBlock != then && falseBlock != dominator) //it's else if, can not merge
+            // Allow else if merging by checking if falseBlock contains another condition
+            if (trueBlock != then && falseBlock != dominator && !falseBlock.Statements.IsCondition()) //it's else if, can not merge
             {
                 @else = conditionBlock;
                 return false;
@@ -499,7 +521,8 @@ namespace Furikiri.Echo.Pass
         {
             //TODO: avoid remove essential break/continue;
             var gt = from.Statements.LastOrDefault(st =>
-                st is ConditionExpression || st is GotoExpression || st is ContinueStatement || st is BreakStatement);
+                //st is ConditionExpression || 
+                st is GotoExpression || st is ContinueStatement || st is BreakStatement);
             if (gt != null)
             {
                 from.Statements.Remove(gt);
@@ -618,15 +641,25 @@ namespace Furikiri.Echo.Pass
                     }
                     else if (elseBlock.To.Count == 1)
                     {
-                        if (elseBlock.To[0] != thenBlock.To[0])
+                        // In a loop, both branches might jump back to loop header
+                        if (loop != null && elseBlock.To[0] == loop.Header && thenBlock.To.Count > 0 && thenBlock.To[0] == loop.Header)
+                        {
+                            // Both branches jump back to loop header, this is valid
+                            logic.Else.Type = LogicalBlockType.BlockList;
+                            logic.Else.Blocks = new List<Block> {elseBlock};
+                            RemoveLastGoto(elseBlock, elseBlock.To[0]);
+                        }
+                        else if (elseBlock.To[0] != thenBlock.To[0])
                         {
                             return false;
                         }
-
-                        //hasElse = true;
-                        logic.Else.Type = LogicalBlockType.BlockList;
-                        logic.Else.Blocks = new List<Block> {elseBlock};
-                        RemoveLastGoto(elseBlock, elseBlock.To[0]);
+                        else
+                        {
+                            //hasElse = true;
+                            logic.Else.Type = LogicalBlockType.BlockList;
+                            logic.Else.Blocks = new List<Block> {elseBlock};
+                            RemoveLastGoto(elseBlock, elseBlock.To[0]);
+                        }
                     }
                     else
                     {
