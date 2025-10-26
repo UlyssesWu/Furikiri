@@ -20,7 +20,7 @@ namespace Furikiri.AST.Statements
         {
         }
 
-        public void ResolveFromBlocks()
+        public void ResolveFromBlocks(List<Loop> loopSet = null)
         {
             if (Blocks == null || Blocks.Count == 0)
             {
@@ -34,8 +34,23 @@ namespace Furikiri.AST.Statements
                 {
                     continue;
                 }
-                Statements.AddRange(block.Statements.Select(node =>
-                    node is Expression exp ? new ExpressionStatement(exp) : node));
+                
+                // Check if this block is a loop header
+                Loop loop = loopSet?.FirstOrDefault(l => l.Header == block);
+                if (loop != null && loop.LoopLogic != null && !loop.IsBeingResolved)
+                {
+                    // Mark as being resolved to prevent infinite recursion
+                    loop.IsBeingResolved = true;
+                    // Add the loop statement instead of block statements
+                    Statements.Add(loop.LoopLogic.ToStatement());
+                    loop.IsBeingResolved = false;
+                }
+                else
+                {
+                    // Add block statements as usual
+                    Statements.AddRange(block.Statements.Select(node =>
+                        node is Expression exp ? new ExpressionStatement(exp) : node));
+                }
             }
 
             Resolved = true;

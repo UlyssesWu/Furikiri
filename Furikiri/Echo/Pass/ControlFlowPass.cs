@@ -207,8 +207,12 @@ namespace Furikiri.Echo.Pass
 
             foreach (var loop in _context.LoopSet)
             {
+                // Set AllLoops reference for nested loop resolution
+                loop.AllLoops = _context.LoopSet;
+                
                 var lastBlock = loop.Blocks.Last();
                 var dw = new DoWhileLogic();
+                dw.AllLoops = loop.AllLoops;
                 dw.Break = FindBreak(loop);
 
                 Block conditionBlock = null;
@@ -227,7 +231,34 @@ namespace Furikiri.Echo.Pass
                     conditionBlock = loop.Header;
                 }
 
-                dw.Body = new List<Block>(loop.Blocks);
+                // For nested loops, only include blocks that are not part of child loops (except child headers)
+                dw.Body = new List<Block>();
+                foreach (var block in loop.Blocks)
+                {
+                    // Skip the loop's own header - it's not part of the body
+                    if (block == loop.Header)
+                    {
+                        continue;
+                    }
+                    
+                    // Check if this block belongs to any child loop
+                    bool isInChildLoop = false;
+                    foreach (var childLoop in loop.Children)
+                    {
+                        // Child loop header should be kept in parent loop body
+                        if (childLoop.Blocks.Contains(block) && block != childLoop.Header)
+                        {
+                            isInChildLoop = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!isInChildLoop)
+                    {
+                        dw.Body.Add(block);
+                    }
+                }
+                
                 // Remove condition block from body if it's not part of the loop body
                 if (conditionBlock != null && conditionBlock != loop.Header)
                 {
@@ -331,7 +362,7 @@ namespace Furikiri.Echo.Pass
 
             dw.Continue.Statements.Remove(dw.Continue.Statements.LastOrDefault(stmt => stmt is IJump));
 
-            f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body};
+            f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body, AllLoops = loop.AllLoops};
             prev.Statements.Remove(lastAssign);
 
             foreach (var bodyBlock in f.Body)

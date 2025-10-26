@@ -11,6 +11,7 @@ namespace Furikiri.Echo.Logical
         public Block Break { get; set; }
         public List<Block> Body { get; set; }
         public bool IsWhile { get; set; }
+        public List<Loop> AllLoops { get; set; }
 
         public DoWhileLogic(bool isWhile = false)
         {
@@ -30,7 +31,8 @@ namespace Furikiri.Echo.Logical
 
         public Statement ToStatement()
         {
-            var body = new BlockStatement(Body, true);
+            var body = new BlockStatement(Body, false);
+            body.ResolveFromBlocks(AllLoops);
             if (IsWhile)
             {
                 WhileStatement dw = new WhileStatement(Condition, body);

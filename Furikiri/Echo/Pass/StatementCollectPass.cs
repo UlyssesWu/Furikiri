@@ -17,8 +17,13 @@ namespace Furikiri.Echo.Pass
                 var loop = context.LoopSet.FirstOrDefault(l => l.Header == block);
                 if (loop != null)
                 {
-                    newStmts.Add(loop.LoopLogic.ToStatement());
-                    block.Hidden = false; //TODO: temp fix
+                    // Only add loop statement if this loop is not a child of another loop
+                    // Child loops will be included in their parent loop's body naturally
+                    if (loop.Parent == null)
+                    {
+                        newStmts.Add(loop.LoopLogic.ToStatement());
+                        block.Hidden = false; //TODO: temp fix
+                    }
                 }
                 else
                 {

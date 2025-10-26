@@ -24,6 +24,16 @@ namespace Furikiri.Echo
         public List<Block> Body { get; set; } = new List<Block>();
         public Block Break { get; set; } 
         public Block Continue { get; set; }
+        
+        /// <summary>
+        /// Reference to all loops in the context for nested loop resolution
+        /// </summary>
+        public List<Loop> AllLoops { get; set; }
+        
+        /// <summary>
+        /// Flag to prevent infinite recursion when resolving nested loops
+        /// </summary>
+        public bool IsBeingResolved { get; set; }
 
         public bool Contains(Block b)
         {
