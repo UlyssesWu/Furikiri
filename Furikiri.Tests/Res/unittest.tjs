@@ -107,6 +107,25 @@ function TestTry()
 	catch(e)
 	{
 		System.inform(e.message);
+		throw e;
+	}
+	System.inform("exit try");
+}
+
+function TestTry2()
+{
+	try
+	{
+		try
+		{
+			System.inform("try body");
+		}
+		catch
+		{}
+		return n;
+	}
+	catch
+	{
 	}
 	System.inform("exit try");
 }

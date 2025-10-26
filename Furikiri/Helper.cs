@@ -603,6 +603,11 @@ namespace Furikiri
             return code == OpCode.CALL || code == OpCode.CALLI || code == OpCode.CALLD;
         }
 
+        public static bool CanBeJunk(this OpCode code)
+        {
+            return code == OpCode.NOP || code == OpCode.DEBUGGER;
+        }
+
         /// <summary>
         /// CALLI or CALLD
         /// </summary>

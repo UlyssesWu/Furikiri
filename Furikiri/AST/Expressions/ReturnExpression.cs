@@ -13,5 +13,10 @@ namespace Furikiri.AST.Expressions
         {
             Return = ret;
         }
+
+        public override string ToString()
+        {
+            return "return";
+        }
     }
 }

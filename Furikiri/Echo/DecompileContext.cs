@@ -229,7 +229,8 @@ namespace Furikiri.Echo
                     continue;
                 }
 
-                var gotoLine = ((JumpData) branch.Data).Goto.Line;
+                var gotoTarget = ((JumpData)branch.Data).Goto;
+                var gotoLine = gotoTarget.Line;
                 // ReSharper disable once SimplifyLinqExpression
                 if (!Blocks.Any(b => b.Start == gotoLine))
                 {
@@ -243,6 +244,24 @@ namespace Furikiri.Echo
                 if (!branch.OpCode.IsJump(true))
                 {
                     continue;
+                }
+
+                if (branch.OpCode == OpCode.ENTRY) //special case for ENTRY: create catch indicate block
+                {
+                    if (gotoLine > 1)
+                    {
+                        var prev1 = GetPrevValidInstruction(gotoTarget);
+                        if (prev1 is {OpCode: OpCode.JMP})
+                        {
+                            var prev2 = GetPrevValidInstruction(prev1);
+                            if (prev2 is {OpCode: OpCode.EXTRY})
+                            {
+                                var catchIndicateBlock = GetOrCreateBlockAt(prev2.Line);
+                                catchIndicateBlock.From.Add(block);
+                                workList.Push(prev2.Line); //extry; jmp {catch}
+                            }
+                        }
+                    }
                 }
 
                 nextBlock = GetOrCreateBlockAt(addrAfterBranch); //next block: right after branch (if not jumped)
@@ -267,6 +286,29 @@ namespace Furikiri.Echo
             {
                 //TJS2 is a simple language, the entry block is always the start block
                 EntryBlock = Blocks[0];
+            }
+
+            Instruction GetPrevValidInstruction(Instruction ins)
+            {
+                if (ins == null)
+                {
+                    return null;
+                }
+                var index = ins.Line;
+                while (index > 0)
+                {
+                    var prev = instructions[index - 1];
+                    if (prev.OpCode.CanBeJunk())
+                    {
+                        index--;
+                    }
+                    else
+                    {
+                        return prev;
+                    }
+                }
+
+                return null;
             }
         }
 

@@ -24,7 +24,7 @@ namespace Furikiri.Echo
             Script = new Module(path);
         }
 
-        internal string Decompile(string objName)
+        public string Decompile(string objName)
         {
             if (Script == null)
             {
