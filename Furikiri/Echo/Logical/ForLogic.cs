@@ -11,6 +11,7 @@ namespace Furikiri.Echo.Logical
         public Expression Increment { get; set; }
         public List<Block> Body { get; set; }
         public List<Loop> AllLoops { get; set; }
+        public Loop CurrentLoop { get; set; }
 
         private void HideBlocks()
         {
@@ -26,7 +27,7 @@ namespace Furikiri.Echo.Logical
         public Statement ToStatement()
         {
             var body = new BlockStatement(Body, false);
-            body.ResolveFromBlocks(AllLoops);
+            body.ResolveFromBlocks(AllLoops, CurrentLoop);
             ForStatement f = new ForStatement(Initializer, Condition, Increment) {Body = body};
             HideBlocks();
             return f;

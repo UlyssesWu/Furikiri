@@ -427,7 +427,23 @@ namespace Furikiri.Echo
                         var natureLoop = NaturalLoopForEdge(to, block);
                         if (natureLoop != null)
                         {
-                            LoopSet.Add(natureLoop);
+                            // Check if we already have a loop with the same header
+                            var existingLoop = LoopSet.FirstOrDefault(l => l.Header == natureLoop.Header);
+                            if (existingLoop != null)
+                            {
+                                // Merge the blocks from the new loop into the existing one
+                                foreach (var b in natureLoop.Blocks)
+                                {
+                                    if (!existingLoop.Blocks.Contains(b))
+                                    {
+                                        existingLoop.Blocks.Add(b);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                LoopSet.Add(natureLoop);
+                            }
                         }
                     }
                 }

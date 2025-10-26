@@ -862,6 +862,8 @@ namespace Furikiri.Echo.Pass
                                 {
                                     call.InvokeType = InvokeType.RegExpCompile;
                                     ex[callerSlot] = call;
+                                    // Remove the previously added 'new RegExp()' from expList
+                                    expList.Remove(invoke);
                                     break;
                                 }
                             }

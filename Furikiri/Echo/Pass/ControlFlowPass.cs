@@ -213,6 +213,7 @@ namespace Furikiri.Echo.Pass
                 var lastBlock = loop.Blocks.Last();
                 var dw = new DoWhileLogic();
                 dw.AllLoops = loop.AllLoops;
+                dw.CurrentLoop = loop;
                 dw.Break = FindBreak(loop);
 
                 Block conditionBlock = null;
@@ -222,7 +223,7 @@ namespace Furikiri.Echo.Pass
                     dw.Condition = lastCond;
                     conditionBlock = lastBlock;
                 }
-                else if (lastBlock.Statements.Count == 1 && lastBlock.Statements[0] is GotoExpression &&
+                else if (lastBlock.Statements.LastOrDefault() is GotoExpression goto1 && goto1.JumpTo == loop.Header.Start &&
                          loop.Header.Statements.GetCondition() is ConditionExpression cond &&
                          cond.FalseBranch == dw.Break.Start)
                 {
@@ -235,8 +236,9 @@ namespace Furikiri.Echo.Pass
                 dw.Body = new List<Block>();
                 foreach (var block in loop.Blocks)
                 {
-                    // Skip the loop's own header - it's not part of the body
-                    if (block == loop.Header)
+                    // For while loops, skip the header as it only contains the condition
+                    // For do-while loops, include the header as it's part of the body
+                    if (block == loop.Header && dw.IsWhile)
                     {
                         continue;
                     }
@@ -362,7 +364,7 @@ namespace Furikiri.Echo.Pass
 
             dw.Continue.Statements.Remove(dw.Continue.Statements.LastOrDefault(stmt => stmt is IJump));
 
-            f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body, AllLoops = loop.AllLoops};
+            f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body, AllLoops = loop.AllLoops, CurrentLoop = loop};
             prev.Statements.Remove(lastAssign);
 
             foreach (var bodyBlock in f.Body)

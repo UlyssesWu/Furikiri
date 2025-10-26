@@ -20,7 +20,7 @@ namespace Furikiri.AST.Statements
         {
         }
 
-        public void ResolveFromBlocks(List<Loop> loopSet = null)
+        public void ResolveFromBlocks(List<Loop> loopSet = null, Loop currentLoop = null)
         {
             if (Blocks == null || Blocks.Count == 0)
             {
@@ -37,7 +37,8 @@ namespace Furikiri.AST.Statements
                 
                 // Check if this block is a loop header
                 Loop loop = loopSet?.FirstOrDefault(l => l.Header == block);
-                if (loop != null && loop.LoopLogic != null && !loop.IsBeingResolved)
+                // Skip if this is the current loop being resolved (to avoid infinite recursion/duplication)
+                if (loop != null && loop.LoopLogic != null && !loop.IsBeingResolved && loop != currentLoop)
                 {
                     // Mark as being resolved to prevent infinite recursion
                     loop.IsBeingResolved = true;

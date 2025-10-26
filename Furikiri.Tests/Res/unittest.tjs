@@ -37,6 +37,14 @@ function TestLoop(p3)
 	{
 		i++;
 	}
+
+	while (p3 < 100)
+    {
+        do
+        {
+            p3++;
+        } while (p3 < 110);
+    }
 	
 	if(p3 > 4396)
 	{
