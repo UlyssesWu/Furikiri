@@ -1,1 +1,1 @@
-..\..\Furikiri.CLI\bin\Debug\net6.0\girigiri.exe %1
+..\..\Furikiri.CLI\bin\Debug\net8.0\girigiri.exe %1
