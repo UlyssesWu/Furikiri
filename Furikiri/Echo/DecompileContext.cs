@@ -1,7 +1,10 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using Furikiri.AST;
 using Furikiri.AST.Expressions;
+using Furikiri.AST.Statements;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo
@@ -646,6 +649,72 @@ namespace Furikiri.Echo
                     var insData = block.InstructionDatas[i];
                     insData.LiveIn = block.InstructionDatas[i - 1].LiveOut;
                 }
+            }
+        }
+
+        internal string DumpState(string stage)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=== " + stage + " ===");
+            foreach (var block in Blocks.OrderBy(b => b.Start))
+            {
+                var from = string.Join(",", block.From.OrderBy(b => b.Start).Select(b => b.Start));
+                var to = string.Join(",", block.To.OrderBy(b => b.Start).Select(b => b.Start));
+                sb.AppendLine($"Block#{block.Id} [{block.Start}-{block.End}] hidden={block.Hidden} from=[{from}] to=[{to}]");
+                if (block.Instructions.Count > 0)
+                {
+                    var ins = string.Join(" | ", block.Instructions.Select(i => $"{i.Line}:{i.OpCode}"));
+                    sb.AppendLine("  ins: " + ins);
+                }
+
+                if (block.Statements != null)
+                {
+                    if (block.Statements.Count == 0)
+                    {
+                        sb.AppendLine("  stmts: <empty>");
+                    }
+                    else
+                    {
+                        for (var i = 0; i < block.Statements.Count; i++)
+                        {
+                            sb.AppendLine($"  stmt[{i}]: {FormatNode(block.Statements[i])}");
+                        }
+                    }
+                }
+                else
+                {
+                    sb.AppendLine("  stmts: <null>");
+                }
+            }
+
+            if (LoopSet.Count > 0)
+            {
+                sb.AppendLine("Loops:");
+                foreach (var loop in LoopSet)
+                {
+                    var blocks = string.Join(",", loop.Blocks.OrderBy(b => b.Start).Select(b => b.Start));
+                    var children = string.Join(",", loop.Children.Select(l => l.Header?.Start ?? -1));
+                    var parent = loop.Parent?.Header?.Start.ToString() ?? "-";
+                    sb.AppendLine($"  loop header={loop.Header?.Start} parent={parent} children=[{children}] blocks=[{blocks}]");
+                }
+            }
+
+            sb.AppendLine();
+            return sb.ToString();
+        }
+
+        private static string FormatNode(IAstNode node)
+        {
+            switch (node)
+            {
+                case ExpressionStatement es:
+                    return $"ExprStmt({es.Expression?.GetType().Name}): {es.Expression}";
+                case Statement st:
+                    return $"Stmt({st.GetType().Name})";
+                case Expression ex:
+                    return $"Expr({ex.GetType().Name}): {ex}";
+                default:
+                    return node?.GetType().Name ?? "null";
             }
         }
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -108,7 +108,8 @@ namespace Furikiri.Echo.Pass
                     var allKeys = fromsExceptSelf.SelectMany(b => context.BlockFinalStates[b].Keys).Distinct();
                     foreach (var k in allKeys)
                     {
-                        var expsList = block.From.Select(b => context.BlockFinalStates[b].TryGetValue(k, out var v) ? v : null).ToList();
+                        var expsList = fromsExceptSelf
+                            .Select(b => context.BlockFinalStates[b].TryGetValue(k, out var v) ? v : null).ToList();
                         if (expsList.All(e => e == null))
                         {
                             continue;
@@ -125,6 +126,7 @@ namespace Furikiri.Echo.Pass
                             {
                                 var phi = new PhiExpression(k);
                                 phi.PossibleExpressions.AddRange(expsList);
+                                TryAnnotateConditionalPhi(block, fromsExceptSelf, phi);
                                 finalStates[k] = phi;
                             }
                         }
@@ -932,11 +934,10 @@ namespace Furikiri.Echo.Pass
                         }
 
                         ex[dst] = call;
-                        //if (dst == 0) //just execute and discard result
-                        //{
-                        //    expList.Add(call);
-                        //}
-                        expList.Add(call);
+                        if (dst == 0) //just execute and discard result
+                        {
+                            expList.Add(call);
+                        }
                     }
                         break;
                     case OpCode.GPD:
@@ -1044,7 +1045,8 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.ENTRY:
                         var catchVar = new IdentifierExpression(Const.DefaultCatchVarName);
-                        ex[ins.GetRegisterSlot(0)] = catchVar;
+                        // ENTRY layout: entry <jump-offset>, <catch-register>
+                        ex[ins.GetRegisterSlot(1)] = catchVar;
                         expList.Add(new CatchExpression(catchVar));
                         break;
                     case OpCode.EXTRY:
@@ -1106,6 +1108,36 @@ namespace Furikiri.Echo.Pass
                 //BlockProcess(context, succ, new Dictionary<int, Expression>(ex)); //TODO: validate if deep copy ex is correct
                 BlockProcess(context, succ);
             }
+        }
+
+        private static void TryAnnotateConditionalPhi(Block mergeBlock, List<Block> froms, PhiExpression phi)
+        {
+            if (phi == null || froms == null || froms.Count != 2 || phi.PossibleExpressions.Count != 2)
+            {
+                return;
+            }
+
+            var condPred = froms.FirstOrDefault(b => b.Statements?.LastOrDefault() is ConditionExpression);
+            if (condPred == null)
+            {
+                return;
+            }
+
+            var cond = (ConditionExpression)condPred.Statements.Last(s => s is ConditionExpression);
+            if (cond.TrueBranch != mergeBlock.Start && cond.FalseBranch != mergeBlock.Start)
+            {
+                return;
+            }
+
+            var condPredIdx = froms.IndexOf(condPred);
+            var otherIdx = condPredIdx == 0 ? 1 : 0;
+            var condPredValue = phi.PossibleExpressions[condPredIdx];
+            var otherValue = phi.PossibleExpressions[otherIdx];
+            var trueToMerge = cond.TrueBranch == mergeBlock.Start;
+
+            phi.Condition = cond;
+            phi.ThenBranch = trueToMerge ? condPredValue : otherValue;
+            phi.ElseBranch = trueToMerge ? otherValue : condPredValue;
         }
     }
 }

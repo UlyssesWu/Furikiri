@@ -1,6 +1,4 @@
-﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
@@ -20,7 +18,7 @@ namespace Furikiri.Echo.Logical
 
         internal void HideBlocks()
         {
-            EnterTry.Hidden = true;
+            // Keep entry block visible because it now holds the synthesized TryStatement.
             if (Body != null)
             {
                 foreach (var block in Body)
@@ -40,6 +38,45 @@ namespace Furikiri.Echo.Logical
         public Statement ToStatement()
         {
             var tryStatement = new TryStatement();
+            
+            IAstNode NormalizeNode(IAstNode node)
+            {
+                if (node is Expression expr)
+                {
+                    return new ExpressionStatement(expr);
+                }
+                return node;
+            }
+
+            bool IsControlFlowNode(IAstNode node, bool includeCatch)
+            {
+                if (node is ExpressionStatement es)
+                {
+                    if (es.Expression is GotoExpression || es.Expression is IJump)
+                    {
+                        return true;
+                    }
+
+                    if (includeCatch && es.Expression is CatchExpression)
+                    {
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                if (node is GotoExpression || node is IJump)
+                {
+                    return true;
+                }
+
+                if (includeCatch && node is CatchExpression)
+                {
+                    return true;
+                }
+
+                return false;
+            }
 
             // Build try block
             var tryBlock = new BlockStatement();
@@ -47,14 +84,18 @@ namespace Furikiri.Echo.Logical
             {
                 foreach (var block in Body)
                 {
+                    if (block.Hidden)
+                    {
+                        continue;
+                    }
                     if (block.Statements != null)
                     {
                         foreach (var stmt in block.Statements)
                         {
                             // Skip CatchExpression and jump statements
-                            if (!(stmt is CatchExpression) && !(stmt is GotoExpression) && !(stmt is IJump))
+                            if (!IsControlFlowNode(stmt, includeCatch: true))
                             {
-                                tryBlock.Statements.Add(stmt);
+                                tryBlock.Statements.Add(NormalizeNode(stmt));
                             }
                         }
                     }
@@ -75,14 +116,18 @@ namespace Furikiri.Echo.Logical
                 {
                     foreach (var block in CatchBody)
                     {
+                        if (block.Hidden)
+                        {
+                            continue;
+                        }
                         if (block.Statements != null)
                         {
                             foreach (var stmt in block.Statements)
                             {
                                 // Skip jump statements at the end
-                                if (!(stmt is GotoExpression) && !(stmt is IJump))
+                                if (!IsControlFlowNode(stmt, includeCatch: false))
                                 {
-                                    catchBlock.Statements.Add(stmt);
+                                    catchBlock.Statements.Add(NormalizeNode(stmt));
                                 }
                             }
                         }

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Furikiri.AST;
@@ -113,6 +113,42 @@ namespace Furikiri.Echo.Pass
 
         private void BuildTry()
         {
+            List<Block> SelectBlocksInRange(int startInclusive, int endExclusive)
+            {
+                return _context.Blocks
+                    .Where(b => b.Start >= startInclusive && b.Start < endExclusive)
+                    .OrderBy(b => b.Start)
+                    .ToList();
+            }
+
+            Block GetJumpTarget(Block b)
+            {
+                var last = b.Instructions.LastOrDefault();
+                if (last == null || last.OpCode != OpCode.JMP)
+                {
+                    return null;
+                }
+
+                var jumpData = last.Data as JumpData;
+                if (jumpData == null)
+                {
+                    return null;
+                }
+
+                return _context.BlockTable.TryGetValue(jumpData.Goto.Line, out var target) ? target : null;
+            }
+
+            Block FindTryEndByExtryJump(Block enterTry, Block catchOrExitTry)
+            {
+                return _context.Blocks
+                    .Where(b => b.Start > enterTry.Start && b.Start < catchOrExitTry.Start)
+                    .Where(b => b.Instructions.Any(i => i.OpCode == OpCode.EXTRY))
+                    .Select(GetJumpTarget)
+                    .Where(target => target != null && target.Start > catchOrExitTry.Start)
+                    .OrderBy(target => target.Start)
+                    .FirstOrDefault();
+            }
+
             Block FindTryEnd(Block startTry, Block catchOrExitTry, Block current)
             {
                 if (current.Start <= startTry.Start)
@@ -145,22 +181,33 @@ namespace Furikiri.Echo.Pass
                 return null;
             }
 
-            foreach (var block in _context.Blocks)
-            {
-                if (block.Instructions.LastOrDefault()?.OpCode == OpCode.ENTRY)
-                {
-                    TryLogic t = new TryLogic();
-                    t.EnterTry = block;
-                    t.CatchClause = (Expression)block.Statements.LastOrDefault(stmt => stmt is CatchExpression);
-                    var catchOrExitTry = _context.BlockTable[((JumpData)block.Instructions.Last().Data).Goto.Line];
-                    var tryEnd = FindTryEnd(block, catchOrExitTry, catchOrExitTry);
-                    t.ExitTry = tryEnd ?? catchOrExitTry;
-                    if (tryEnd != null && tryEnd != catchOrExitTry) //has catch
-                    {
-                        t.CatchBody = _context.SelectBlocks(catchOrExitTry, tryEnd, true);
-                    }
+            var entryBlocks = _context.Blocks
+                .Where(b => b.Instructions.LastOrDefault()?.OpCode == OpCode.ENTRY)
+                .OrderByDescending(b => b.Start)
+                .ToList();
 
-                    t.Body = _context.SelectBlocks(block, catchOrExitTry, includeStart: false);
+            foreach (var block in entryBlocks)
+            {
+                TryLogic t = new TryLogic();
+                t.EnterTry = block;
+                t.CatchClause = (Expression)block.Statements.LastOrDefault(stmt => stmt is CatchExpression);
+                var catchOrExitTry = _context.BlockTable[((JumpData)block.Instructions.Last().Data).Goto.Line];
+                var tryEnd = FindTryEndByExtryJump(block, catchOrExitTry) ?? FindTryEnd(block, catchOrExitTry, catchOrExitTry);
+                t.ExitTry = tryEnd ?? catchOrExitTry;
+                t.Body = SelectBlocksInRange(block.Start + 1, catchOrExitTry.Start);
+                if (tryEnd != null && tryEnd != catchOrExitTry) // has catch
+                {
+                    t.CatchBody = SelectBlocksInRange(catchOrExitTry.Start, tryEnd.Start);
+                }
+
+                var tryStatement = t.ToStatement();
+                if (t.CatchClause != null && block.Statements.Contains(t.CatchClause))
+                {
+                    block.Statements.Replace(t.CatchClause, tryStatement);
+                }
+                else
+                {
+                    block.Statements.Insert(0, tryStatement);
                 }
             }
         }
@@ -277,6 +324,9 @@ namespace Furikiri.Echo.Pass
         internal bool DoWhileToFor(Loop loop, DoWhileLogic dw, out ForLogic f)
         {
             f = null;
+
+            // Nested loops are prone to incorrect statement hoisting during for-conversion.
+            // Keep them as while/do-while to preserve semantics first.
             var first = loop.Blocks.First();
             var idx = _context.Blocks.IndexOf(first);
             if (idx < 1)

@@ -1,22 +1,24 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFrameworks>net10.0</TargetFrameworks>
-    <Authors>Ulysses</Authors>
-    <Company>Independent Galgrammer</Company>
-    <Description>TJS2 Decompiler "Furikiri"</Description>
-    <Copyright>Copyright © UlyssesWu 2018-2026</Copyright>
-    <PackageProjectUrl>https://github.com/UlyssesWu/Furikiri</PackageProjectUrl>
-    <LangVersion>8</LangVersion>
-    <PackageLicenseUrl>https://github.com/UlyssesWu/Furikiri/blob/master/LICENSE</PackageLicenseUrl>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFrameworks>net10.0</TargetFrameworks>
+		<Authors>UlyssesWu</Authors>
+		<Company>UlyssesWu</Company>
+		<Description>TJS2 Decompiler "Furikiri"</Description>
+		<Copyright>Copyright © UlyssesWu 2018-2026</Copyright>
+		<PackageProjectUrl>https://github.com/UlyssesWu/Furikiri</PackageProjectUrl>
+		<LangVersion>14</LangVersion>
+		<PackageLicenseUrl>https://github.com/UlyssesWu/Furikiri/blob/master/LICENSE</PackageLicenseUrl>
+		<AssemblyVersion>0.2.0.0</AssemblyVersion>
+		<FileVersion>0.2.0.0</FileVersion>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <Folder Include="Echo\Transforms\" />
-  </ItemGroup>
+	<ItemGroup>
+		<Folder Include="Echo\Transforms\" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Superpower" Version="3.1.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Superpower" Version="3.1.0" />
+	</ItemGroup>
 
 </Project>

@@ -1,6 +1,8 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
+using System;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Furikiri.AST.Statements;
 using Furikiri.Echo.Language;
 using Furikiri.Echo.Pass;
@@ -122,30 +124,88 @@ namespace Furikiri.Echo
             var m = Script.Methods[obj];
             m.Compact();
             context.BuildCFG(m.Instructions);
+            if (IsDebugDumpEnabled())
+            {
+                InitDebugDump(obj);
+                DumpDebugState(obj, context, "After BuildCFG");
+            }
             
             // Pass 1: Register members
             var pass1 = new RegMemberPass();
             var entry = pass1.Process(context, new BlockStatement());
+            DumpDebugState(obj, context, "After RegMemberPass");
 
             // Pass 2: Build expressions (generates Phi nodes)
             var pass2 = new ExpressionPass();
             entry = pass2.Process(context, entry);
+            DumpDebugState(obj, context, "After ExpressionPass");
 
             // Pass 3: Expression propagation and Phi elimination
             var pass3 = new ExpressionPropagationPass();
             entry = pass3.Process(context, entry);
+            DumpDebugState(obj, context, "After ExpressionPropagationPass");
 
             // Pass 4: Control flow analysis
             var pass4 = new ControlFlowPass();
             entry = pass4.Process(context, entry);
+            DumpDebugState(obj, context, "After ControlFlowPass");
 
             // Pass 5: Collect statements
             var pass5 = new StatementCollectPass();
             entry = pass5.Process(context, entry);
+            DumpDebugState(obj, context, "After StatementCollectPass");
 
             m.Vars = context.Vars;
             
             return entry;
+        }
+
+        private static bool IsDebugDumpEnabled()
+        {
+            return Config.DumpDecompileDebug ||
+                   string.Equals(Environment.GetEnvironmentVariable("FURIKIRI_DEBUG_DUMP"), "1",
+                       StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetDebugDumpDir()
+        {
+            var envDir = Environment.GetEnvironmentVariable("FURIKIRI_DEBUG_DIR");
+            if (!string.IsNullOrWhiteSpace(envDir))
+            {
+                return envDir;
+            }
+
+            return Path.Combine(Directory.GetCurrentDirectory(), "decompile-debug");
+        }
+
+        private static string GetDebugDumpPath(CodeObject obj)
+        {
+            var dir = GetDebugDumpDir();
+            Directory.CreateDirectory(dir);
+            var rawName = string.IsNullOrWhiteSpace(obj?.Name) ? "top-level" : obj.Name;
+            var invalid = Path.GetInvalidFileNameChars();
+            var safeName = new string(rawName.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+            return Path.Combine(dir, $"{safeName}.debug.txt");
+        }
+
+        private static void InitDebugDump(CodeObject obj)
+        {
+            var path = GetDebugDumpPath(obj);
+            var banner = new StringBuilder();
+            banner.AppendLine($"Decompiler debug dump for: {obj?.Name ?? "top-level"}");
+            banner.AppendLine();
+            File.WriteAllText(path, banner.ToString());
+        }
+
+        private static void DumpDebugState(CodeObject obj, DecompileContext context, string stage)
+        {
+            if (!IsDebugDumpEnabled())
+            {
+                return;
+            }
+
+            var path = GetDebugDumpPath(obj);
+            File.AppendAllText(path, context.DumpState(stage));
         }
     }
 }

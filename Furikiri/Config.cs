@@ -1,13 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
 namespace Furikiri
 {
     public class Config
     {
         public static bool AggressiveStringMerge { get; set; } = true;
-        public bool HideVoidReturn { get; set; } = true;
-        public bool UseBooleanWhenPossible { get; set; } = false;
+        #if DEBUG
+        public static bool DumpDecompileDebug { get; set; } = true;
+        #else
+        public static bool DumpDecompileDebug { get; set; } = false;
+        #endif
+        public static bool HideVoidReturn { get; set; } = true;
+        public static bool UseBooleanWhenPossible { get; set; } = false;
     }
 }

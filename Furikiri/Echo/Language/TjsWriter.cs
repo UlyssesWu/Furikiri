@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.IO;
@@ -18,6 +18,8 @@ namespace Furikiri.Echo.Language
     {
         private IFormatter _formatter;
         private IndentedTextWriter _writer;
+        private readonly HashSet<string> _declaredLocals = new HashSet<string>();
+        private bool _inForInitializer;
         public Dictionary<Method, BlockStatement> MethodRefs = new Dictionary<Method, BlockStatement>();
 
         /// <summary>
@@ -98,6 +100,7 @@ namespace Furikiri.Echo.Language
         /// <param name="block"></param>
         private void WriteMethodBody(Method method, BlockStatement block, bool braces = true)
         {
+            _declaredLocals.Clear();
             if (braces)
             {
                 _formatter.WriteToken("{");
@@ -147,13 +150,25 @@ namespace Furikiri.Echo.Language
         {
             if (bin.IsDeclaration)
             {
+                var declaredName = TryGetDeclaredName(bin.Left);
+                var shouldEmitVar = true;
                 if (bin.Left is IdentifierExpression id && id.Instance is IdentifierExpression instance &&
                     !instance.HideInstance)
                 {
                     //this is to prevent adding `var` before `System.var = a;`
                     //do nothing
+                    shouldEmitVar = false;
                 }
                 else
+                {
+                    if (_inForInitializer && !string.IsNullOrEmpty(declaredName) &&
+                        _declaredLocals.Contains(declaredName))
+                    {
+                        shouldEmitVar = false;
+                    }
+                }
+
+                if (shouldEmitVar)
                 {
                     _formatter.WriteIdentifier("var");
                     _formatter.WriteSpace();
@@ -196,6 +211,28 @@ namespace Furikiri.Echo.Language
             if (needBrackets)
             {
                 _formatter.WriteToken(")");
+            }
+
+            if (bin.IsDeclaration)
+            {
+                var declaredName = TryGetDeclaredName(bin.Left);
+                if (!string.IsNullOrEmpty(declaredName))
+                {
+                    _declaredLocals.Add(declaredName);
+                }
+            }
+        }
+
+        private static string TryGetDeclaredName(Expression left)
+        {
+            switch (left)
+            {
+                case LocalExpression local:
+                    return local.ToString();
+                case IdentifierExpression id when id.Instance == null:
+                    return id.Name;
+                default:
+                    return null;
             }
         }
 
@@ -475,7 +512,9 @@ namespace Furikiri.Echo.Language
             _formatter.WriteSpace();
             _formatter.WriteToken("(");
 
+            _inForInitializer = true;
             Visit(forStmt.Initializer);
+            _inForInitializer = false;
             _formatter.WriteToken(";");
             _formatter.WriteSpace();
 
@@ -548,6 +587,30 @@ namespace Furikiri.Echo.Language
             // If this is a conditional Phi (from if-else), output as ternary expression
             if (phi.IsConditional)
             {
+                if (phi.Slot == Const.FlagReg && phi.Condition?.Condition != null)
+                {
+                    var cond = phi.Condition.Condition;
+                    if (phi.ElseBranch != null && IsSameExpression(phi.ThenBranch, cond))
+                    {
+                        Visit(cond);
+                        _formatter.WriteSpace();
+                        _formatter.WriteToken("||");
+                        _formatter.WriteSpace();
+                        Visit(phi.ElseBranch);
+                        return;
+                    }
+
+                    if (phi.ThenBranch != null && IsSameExpression(phi.ElseBranch, cond))
+                    {
+                        Visit(cond);
+                        _formatter.WriteSpace();
+                        _formatter.WriteToken("&&");
+                        _formatter.WriteSpace();
+                        Visit(phi.ThenBranch);
+                        return;
+                    }
+                }
+
                 _formatter.WriteToken("(");
                 Visit(phi.Condition.Condition);
                 _formatter.WriteSpace();
@@ -587,6 +650,31 @@ namespace Furikiri.Echo.Language
             }
         }
 
+        private static bool IsSameExpression(Expression a, Expression b)
+        {
+            if (a == null || b == null)
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(a, b))
+            {
+                return true;
+            }
+
+            if (a is LocalExpression la && b is LocalExpression lb)
+            {
+                return la.Slot == lb.Slot;
+            }
+
+            if (a is IdentifierExpression ia && b is IdentifierExpression ib)
+            {
+                return ia.FullName == ib.FullName;
+            }
+
+            return a.ToString() == b.ToString();
+        }
+
         internal override void VisitTryStmt(TryStatement tryStmt)
         {
             _formatter.WriteKeyword("try");
@@ -598,9 +686,12 @@ namespace Furikiri.Echo.Language
             if (tryStmt.Catch != null)
             {
                 _formatter.WriteKeyword("catch");
-                _formatter.WriteToken("(");
-                Visit(tryStmt.Catch);
-                _formatter.WriteToken(")");
+                if (tryStmt.Catch.Expression is CatchExpression catchClause && catchClause.Exception != null)
+                {
+                    _formatter.WriteToken("(");
+                    Visit(catchClause.Exception);
+                    _formatter.WriteToken(")");
+                }
                 _formatter.WriteLine();
                 _formatter.WriteStartBlock();
                 // Catch body is temporarily stored in Finally

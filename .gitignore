@@ -334,3 +334,7 @@ ASALocalRun/
 /KrkrSharp
 /bak
 /.vscode
+/docs/tjs2
+/.cursor
+/RunTest/decompile-debug
+/RunTest/decompiled.tjs
