@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Furikiri.CLI/Furikiri.CLI.csproj" />
+  <Project Path="Furikiri.Core/Furikiri.Core.csproj" />
+  <Project Path="Furikiri.Tests/Furikiri.Tests.csproj" />
+  <Project Path="RunTest/RunTest.csproj" />
+</Solution>

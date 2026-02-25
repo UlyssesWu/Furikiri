@@ -1,14 +1,8 @@
 # Furikiri
 
-Furikiri (FreeKiri / [フリキリ](https://ja.wikipedia.org/wiki/%E3%83%95%E3%83%AA%E3%82%AF%E3%83%AA#OVA) / 福里吉里) is a managed TJS2 disassembler/decompiler.
+Furikiri (FreeKiri / フリキリ / 福里吉里) is a managed TJS2 bytecode disassembler/decompiler.
 
-Furikiri is currently in development. The disassembler works well but the decompiler is NOT ready for use. Pull request is welcomed.
-
-## Girigiri (Furikiri.CLI)
-
-Girigiri ([ギリギリ](https://youtu.be/dQLG0lwe_RM)) is the front-end (console) of Furikiri. 
-
-It's a managed TJS2 bytecode disassembler/decompiler which does not require kirikiri engine (e.g. KRKR 2/Z/#) to run.
+Furikiri is currently in development. The disassembler works well but the decompiler is NOT ready for use.
 
 ## Related projects
 * [KirikiriSharp](https://github.com/Project-AZUSA/KirikiriSharp)
@@ -17,6 +11,6 @@ It's a managed TJS2 bytecode disassembler/decompiler which does not require kiri
 
 ---
 
-by Ulysses (wdwxy12345@gmail.com) from [Independent Galgrammer](https://github.com/galgrammer) 
+by Ulysses (wdwxy12345@gmail.com)
 
 Furikiri is licensed under **LGPLv3**.

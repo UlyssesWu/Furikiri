@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Furikiri\Furikiri.csproj" />
+    <ProjectReference Include="..\Furikiri.Core\Furikiri.Core.csproj" />
   </ItemGroup>
 
 </Project>
