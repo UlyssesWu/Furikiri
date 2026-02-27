@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -58,6 +58,7 @@ namespace Furikiri.Echo
         IsFalse,
         TypeOf,
         Invalidate,
+        PropertyRef,
         PropertyObject,
     }
 }

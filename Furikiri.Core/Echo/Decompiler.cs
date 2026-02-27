@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Furikiri.AST.Statements;
+using Furikiri.AST.Expressions;
 using Furikiri.Echo.Language;
 using Furikiri.Echo.Pass;
 using Furikiri.Emit;
@@ -76,6 +77,8 @@ namespace Furikiri.Echo
             Dictionary<Method, BlockStatement> methods = new Dictionary<Method, BlockStatement>();
             Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)> propertyBlocks =
                 new Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)>();
+            var classObjects = Script.Objects.Where(o => o.ContextType == TjsContextType.Class).ToList();
+            var classSuperExpressions = new Dictionary<CodeObject, Expression>();
 
             methods.Add(Script.Methods[Script.TopLevel], DecompileObject(Script.TopLevel));
             foreach (var method in Script.Methods)
@@ -101,33 +104,37 @@ namespace Furikiri.Echo
                 }
             }
 
-            var writer = new StringWriter();
-            var tjs = new TjsWriter(writer){MethodRefs = methods};
-            tjs.WriteLicense();
-
-            // Write normal function declarations first so top-level `delete foo` statements
-            // always appear after `function foo(...)` declarations.
-            var topLevelMethod = Script.Methods[Script.TopLevel];
-            foreach (var m in methods)
+            // Resolve/decompile superclass getter proxies so class declarations can emit extends.
+            foreach (var classObj in classObjects)
             {
-                if (m.Key == topLevelMethod || m.Key.IsLambda)
+                if (classObj.SuperClass == null)
                 {
                     continue;
                 }
 
-                if (m.Key.Object.ContextType is TjsContextType.PropertyGetter or TjsContextType.PropertySetter)
+                var superBlock = DecompileObject(classObj.SuperClass);
+                Expression superExpr = null;
+                if (superBlock?.Statements != null)
                 {
-                    continue;
+                    foreach (var statement in superBlock.Statements)
+                    {
+                        if (statement is ExpressionStatement exprStmt && exprStmt.Expression is ReturnExpression ret &&
+                            ret.Return != null)
+                        {
+                            superExpr = ret.Return;
+                            break;
+                        }
+                    }
                 }
 
-                tjs.WriteLine();
-                tjs.WriteFunction(m.Key, m.Value);
-                tjs.WriteLine();
+                if (superExpr != null)
+                {
+                    classSuperExpressions[classObj] = superExpr;
+                }
             }
 
-            tjs.WriteLine();
-
-            // Then output properties with associated getter/setter bodies.
+            // Build property blocks before class/function emission so class writer can inline
+            // class-owned properties into class bodies.
             foreach (var property in Script.Properties.Values)
             {
                 BlockStatement getterBlock = null;
@@ -145,8 +152,58 @@ namespace Furikiri.Echo
                 propertyBlocks[property] = (getterBlock, setterBlock);
             }
 
+            var writer = new StringWriter();
+            var tjs = new TjsWriter(writer)
+            {
+                MethodRefs = methods,
+                PropertyRefs = propertyBlocks,
+                ClassSuperExpressions = classSuperExpressions
+            };
+            tjs.WriteLicense();
+
+            var topLevelMethod = Script.Methods[Script.TopLevel];
+            // Write classes first so top-level class alias statements can be skipped safely.
+            foreach (var classObj in classObjects)
+            {
+                tjs.WriteLine();
+                tjs.WriteClass(classObj);
+                tjs.WriteLine();
+            }
+
+            // Write normal function declarations first so top-level `delete foo` statements
+            // always appear after `function foo(...)` declarations.
+            foreach (var m in methods)
+            {
+                if (m.Key == topLevelMethod || m.Key.IsLambda)
+                {
+                    continue;
+                }
+
+                if (m.Key.Object.ContextType is TjsContextType.PropertyGetter or TjsContextType.PropertySetter)
+                {
+                    continue;
+                }
+
+                if (m.Key.Object.Parent?.ContextType == TjsContextType.Class)
+                {
+                    continue;
+                }
+
+                tjs.WriteLine();
+                tjs.WriteFunction(m.Key, m.Value);
+                tjs.WriteLine();
+            }
+
+            tjs.WriteLine();
+
+            // Then output top-level properties with associated getter/setter bodies.
             foreach (var propertyBlock in propertyBlocks)
             {
+                if (propertyBlock.Key.Parent?.ContextType == TjsContextType.Class)
+                {
+                    continue;
+                }
+
                 tjs.WriteProperty(propertyBlock.Key, propertyBlock.Value.Getter, propertyBlock.Value.Setter);
                 tjs.WriteLine();
             }
@@ -164,7 +221,11 @@ namespace Furikiri.Echo
         private BlockStatement DecompileObject(CodeObject obj)
         {
             var context = new DecompileContext(obj);
-            var m = Script.Methods[obj];
+            Method m;
+            if (!Script.Methods.TryGetValue(obj, out m))
+            {
+                m = obj.ResolveMethod();
+            }
             m.Compact();
             context.BuildCFG(m.Instructions);
             if (IsDebugDumpEnabled())

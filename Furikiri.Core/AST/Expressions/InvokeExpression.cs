@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Furikiri.Emit;
 
 namespace Furikiri.AST.Expressions
@@ -44,6 +44,7 @@ namespace Furikiri.AST.Expressions
         public Expression Instance { get; set; }
 
         public List<Expression> Parameters { get; set; } = new List<Expression>();
+        public bool HasOmittedArguments { get; set; }
 
         public InvokeExpression(string name)
         {

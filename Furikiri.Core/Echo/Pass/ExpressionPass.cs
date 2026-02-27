@@ -79,6 +79,21 @@ namespace Furikiri.Echo.Pass
             return statement;
         }
 
+        private static bool IsCollectionCtor(Expression expression)
+        {
+            if (expression is not InvokeExpression invoke || invoke.InvokeType != InvokeType.Ctor)
+            {
+                return false;
+            }
+
+            if (invoke.MethodExpression is IdentifierExpression id)
+            {
+                return id.FullName == "global.Array" || id.FullName == "global.Dictionary";
+            }
+
+            return false;
+        }
+
         public void BlockProcess(DecompileContext context, Block block,
             Dictionary<int, Expression> exps = null)
         {
@@ -367,12 +382,28 @@ namespace Furikiri.Echo.Pass
                                 break;
                         }
 
+                        // INC/DEC on VM temp registers often model numeric index stepping.
+                        // If the target is a concrete integer constant, fold it directly to
+                        // avoid producing invalid chains like 0++++ in decompiled output.
+                        if ((op == UnaryOp.Inc || op == UnaryOp.Dec) &&
+                            dst is ConstantExpression constExpr &&
+                            constExpr.Variant is TjsInt intVal)
+                        {
+                            var nextValue = op == UnaryOp.Inc ? intVal.IntValue + 1 : intVal.IntValue - 1;
+                            var folded = new ConstantExpression(new TjsInt(nextValue));
+                            ex[dstSlot] = folded;
+                            break;
+                        }
+
                         var u = new UnaryExpression(dst, op);
                         if (dstSlot > 0)
                         {
                             ex[dstSlot] = u;
                         }
-                        expList.Add(u);
+                        if (dstSlot <= Const.ArgBase)
+                        {
+                            expList.Add(u);
+                        }
                     }
                         break;
                     case OpCode.INCPD:
@@ -491,8 +522,40 @@ namespace Furikiri.Echo.Pass
                             ex[dstSlot] = l; //assignment -> statements, local -> expressions
 
                             BinaryExpression b = new BinaryExpression(dst, src, BinaryOp.Assign) {IsDeclaration = declare };
-                            //ex[dstSlot] = b;
-                            expList.Add(b);
+                            var insertedDeclarationAtArrayInit = false;
+                            // Keep temp collection constructor aliases stable so subsequent
+                            // element assignments print against the local variable rather than
+                            // repeatedly materializing anonymous literals (e.g. [][0] = ...).
+                            if (srcSlot > Const.ArgBase && IsCollectionCtor(src))
+                            {
+                                ex[srcSlot] = l;
+                                var firstAssignIndex = -1;
+                                for (var k = 0; k < expList.Count; k++)
+                                {
+                                    if (expList[k] is BinaryExpression prevAssign &&
+                                        prevAssign.Left is PropertyAccessExpression access &&
+                                        ReferenceEquals(access.Instance, src))
+                                    {
+                                        if (firstAssignIndex < 0)
+                                        {
+                                            firstAssignIndex = k;
+                                        }
+                                        access.Instance = l;
+                                    }
+                                }
+
+                                if (firstAssignIndex >= 0)
+                                {
+                                    expList.Insert(firstAssignIndex, b);
+                                    insertedDeclarationAtArrayInit = true;
+                                }
+                            }
+
+                            if (!insertedDeclarationAtArrayInit)
+                            {
+                                //ex[dstSlot] = b;
+                                expList.Add(b);
+                            }
                         }
                         else if (ex.ContainsKey(dstSlot))
                         {
@@ -811,8 +874,7 @@ namespace Furikiri.Echo.Pass
                         var paramCount = ins.GetRegisterSlot(2);
                         if (paramCount == -1)
                         {
-                            //...
-                            //do nothing
+                            call.HasOmittedArguments = true;
                         }
                         else if (paramCount == -2)
                         {
@@ -852,8 +914,7 @@ namespace Furikiri.Echo.Pass
                         var paramCount = ins.GetRegisterSlot(3);
                         if (paramCount == -1)
                         {
-                            //...
-                            //do nothing
+                            call.HasOmittedArguments = true;
                         }
                         else if (paramCount == -2)
                         {
@@ -914,8 +975,7 @@ namespace Furikiri.Echo.Pass
                         var paramCount = ins.GetRegisterSlot(3);
                         if (paramCount == -1)
                         {
-                            //...
-                            //do nothing
+                            call.HasOmittedArguments = true;
                         }
                         else if (paramCount == -2)
                         {
@@ -955,8 +1015,7 @@ namespace Furikiri.Echo.Pass
                         var paramCount = ins.GetRegisterSlot(2);
                         if (paramCount == -1)
                         {
-                            //...
-                            //do nothing
+                            call.HasOmittedArguments = true;
                         }
                         else if (paramCount == -2)
                         {
@@ -988,7 +1047,6 @@ namespace Furikiri.Echo.Pass
                     }
                         break;
                     case OpCode.GPD:
-                    case OpCode.GPDS:
                     {
                         var dst = ins.GetRegisterSlot(0);
                         var slot = ins.GetRegisterSlot(1);
@@ -998,8 +1056,17 @@ namespace Furikiri.Echo.Pass
                         ex[dst] = newId;
                     }
                         break;
+                    case OpCode.GPDS:
+                    {
+                        var dst = ins.GetRegisterSlot(0);
+                        var slot = ins.GetRegisterSlot(1);
+                        var instance = ex[slot];
+                        var name = ins.Data.AsString();
+                        var property = new IdentifierExpression(name) {Instance = instance};
+                        ex[dst] = new UnaryExpression(property, UnaryOp.PropertyRef);
+                    }
+                        break;
                     case OpCode.GPI:
-                    case OpCode.GPIS:
                     {
                         var dst = ins.GetRegisterSlot(0);
                         var obj = ins.GetRegisterSlot(1);
@@ -1007,6 +1074,15 @@ namespace Furikiri.Echo.Pass
 
                         PropertyAccessExpression p = new PropertyAccessExpression(ex[name], ex[obj]);
                         ex[dst] = p;
+                    }
+                        break;
+                    case OpCode.GPIS:
+                    {
+                        var dst = ins.GetRegisterSlot(0);
+                        var obj = ins.GetRegisterSlot(1);
+                        var name = ins.GetRegisterSlot(2);
+                        var access = new PropertyAccessExpression(ex[name], ex[obj]);
+                        ex[dst] = new UnaryExpression(access, UnaryOp.PropertyRef);
                     }
                         break;
                     case OpCode.SPI:
@@ -1057,6 +1133,12 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.GETP:
                     {
+                        var dst = ins.GetRegisterSlot(0);
+                        var src = ins.GetRegisterSlot(1);
+                        if (ex.TryGetValue(src, out var srcExpr))
+                        {
+                            ex[dst] = new UnaryExpression(srcExpr, UnaryOp.PropertyObject);
+                        }
                     }
                         break;
                     //Delete

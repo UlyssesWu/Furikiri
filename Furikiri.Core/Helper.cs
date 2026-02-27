@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using Furikiri.AST.Statements;
@@ -482,6 +482,7 @@ namespace Furikiri
                 case UnaryOp.ToNumber:
                 case UnaryOp.ToReal:
                 case UnaryOp.ToString:
+                case UnaryOp.PropertyRef:
                 case UnaryOp.PropertyObject:
                     return 1;
                 default:
@@ -570,6 +571,10 @@ namespace Furikiri
                     return "invalidate";
                 case UnaryOp.TypeOf:
                     return "typeof";
+                case UnaryOp.PropertyRef:
+                    return "&";
+                case UnaryOp.PropertyObject:
+                    return "*";
                 default:
                     break;
             }
