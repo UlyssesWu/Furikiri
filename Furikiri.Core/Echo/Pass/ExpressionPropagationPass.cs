@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
@@ -125,6 +125,12 @@ namespace Furikiri.Echo.Pass
         private void TryResolveConditionalPhi(Block block, PhiExpression phi)
         {
             if (phi.PossibleExpressions.Count != 2)
+            {
+                return;
+            }
+            
+            // 保留前一阶段已经推导出的条件（例如短路与/或组合）
+            if (phi.IsConditional)
             {
                 return;
             }

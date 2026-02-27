@@ -20,6 +20,7 @@ namespace Furikiri.Echo.Language
         private IndentedTextWriter _writer;
         private readonly HashSet<string> _declaredLocals = new HashSet<string>();
         private bool _inForInitializer;
+        private bool _inTopLevelBody;
         private CodeObject _currentClass;
         private string _currentClassSuperFullName;
         public Dictionary<Method, BlockStatement> MethodRefs = new Dictionary<Method, BlockStatement>();
@@ -292,6 +293,8 @@ namespace Furikiri.Echo.Language
         /// <param name="braces"></param>
         private void WriteMethodBody(BlockStatement block, bool braces)
         {
+            var prevInTopLevelBody = _inTopLevelBody;
+            _inTopLevelBody = !braces;
             _declaredLocals.Clear();
             if (braces)
             {
@@ -309,6 +312,8 @@ namespace Furikiri.Echo.Language
                 //_formatter.WriteLine();
                 _formatter.WriteToken("}");
             }
+
+            _inTopLevelBody = prevInTopLevelBody;
         }
 
         public void WriteLine(string line = null)
@@ -987,6 +992,22 @@ namespace Furikiri.Echo.Language
                         Visit(unary.Target);
                     }
                     break;
+                case UnaryOp.Eval:
+                    var targetOp = unary.Target as IOperation;
+                    var oldSelfAssign = targetOp?.IsSelfAssignment ?? false;
+                    if (targetOp != null)
+                    {
+                        targetOp.IsSelfAssignment = false;
+                    }
+                    _formatter.WriteToken("(");
+                    Visit(unary.Target);
+                    _formatter.WriteToken(")");
+                    _formatter.WriteToken("!");
+                    if (targetOp != null)
+                    {
+                        targetOp.IsSelfAssignment = oldSelfAssign;
+                    }
+                    break;
                 default:
                     Visit(unary.Target);
                     break;
@@ -1029,6 +1050,18 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitIfStmt(IfStatement ifStmt)
         {
+            if (TryRewriteNoOpIfWithoutElse(ifStmt))
+            {
+                AddNewLineAfterStructCtrlStmt();
+                return;
+            }
+
+            if (TryWriteNoOpThenElseRewrite(ifStmt))
+            {
+                AddNewLineAfterStructCtrlStmt();
+                return;
+            }
+
             if (TryWriteContinueGuardIf(ifStmt))
             {
                 AddNewLineAfterStructCtrlStmt();
@@ -1063,6 +1096,263 @@ namespace Furikiri.Echo.Language
             }
 
             AddNewLineAfterStructCtrlStmt();
+        }
+
+        private bool TryRewriteNoOpIfWithoutElse(IfStatement ifStmt)
+        {
+            if (ifStmt == null || ifStmt.IsElseIf || ifStmt.Else != null || !IsNoSideEffectBlock(ifStmt.Then))
+            {
+                return false;
+            }
+
+            var rawCond = ifStmt.Condition is ConditionExpression condWrap ? condWrap.Condition : ifStmt.Condition;
+            if (ContainsShortCircuit(rawCond))
+            {
+                return false;
+            }
+
+            var effects = new List<Expression>();
+            CollectSideEffects(rawCond, effects);
+            if (effects.Count == 0)
+            {
+                // 条件与 then 都无副作用，整句可安全删除
+                return true;
+            }
+
+            foreach (var effect in effects)
+            {
+                Visit(effect);
+                _formatter.WriteToken(";");
+                _formatter.WriteLine();
+            }
+
+            return true;
+        }
+
+        private bool TryWriteNoOpThenElseRewrite(IfStatement ifStmt)
+        {
+            if (ifStmt?.Else == null || !IsNoSideEffectBlock(ifStmt.Then))
+            {
+                return false;
+            }
+
+            if (ifStmt.Else is not BlockStatement elseBlock || elseBlock.Statements == null || elseBlock.Statements.Count == 0)
+            {
+                return false;
+            }
+
+            var evalStatements = new List<IAstNode>();
+            foreach (var statement in elseBlock.Statements)
+            {
+                if (statement is IfStatement nestedIf && IsPureNoOpIfStatement(nestedIf))
+                {
+                    continue;
+                }
+
+                if (statement is ExpressionStatement exprStmt && exprStmt.Expression != null && !HasSideEffect(exprStmt.Expression))
+                {
+                    continue;
+                }
+
+                if (IsPropertyEvalStatement(statement))
+                {
+                    evalStatements.Add(statement);
+                    continue;
+                }
+
+                return false;
+            }
+
+            if (evalStatements.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (var statement in evalStatements)
+            {
+                Visit(statement);
+            }
+
+            return true;
+        }
+
+        private static bool IsPureNoOpIfStatement(IfStatement ifStmt)
+        {
+            if (ifStmt == null || ifStmt.Else != null || !IsNoSideEffectBlock(ifStmt.Then))
+            {
+                return false;
+            }
+
+            var rawCond = ifStmt.Condition is ConditionExpression condWrap ? condWrap.Condition : ifStmt.Condition;
+            return IsSideEffectFreeExpression(rawCond);
+        }
+
+        private static bool IsNoSideEffectBlock(Statement statement)
+        {
+            if (statement is not BlockStatement block || block.Statements == null || block.Statements.Count == 0)
+            {
+                return true;
+            }
+
+            foreach (var st in block.Statements)
+            {
+                if (st is not ExpressionStatement exprStmt || exprStmt.Expression == null)
+                {
+                    return false;
+                }
+
+                if (HasSideEffect(exprStmt.Expression))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool HasSideEffect(Expression expression)
+        {
+            return expression switch
+            {
+                InvokeExpression => true,
+                BinaryExpression bin when bin.Op == BinaryOp.Assign => true,
+                UnaryExpression unary when unary.Op is UnaryOp.Inc or UnaryOp.Dec or UnaryOp.Invalidate or UnaryOp.Eval => true,
+                _ => false
+            };
+        }
+
+        private static bool IsSideEffectFreeExpression(Expression expression)
+        {
+            if (expression == null)
+            {
+                return true;
+            }
+
+            return expression switch
+            {
+                ConstantExpression => true,
+                IdentifierExpression => true,
+                LocalExpression => true,
+                UnaryExpression unary when unary.Op is UnaryOp.Not or UnaryOp.InvertSign or UnaryOp.ToInt or UnaryOp.ToReal or UnaryOp.ToString or UnaryOp.ToNumber or UnaryOp.ToByteArray
+                    => IsSideEffectFreeExpression(unary.Target),
+                BinaryExpression bin when bin.Op != BinaryOp.Assign
+                    => IsSideEffectFreeExpression(bin.Left) && IsSideEffectFreeExpression(bin.Right),
+                ConditionExpression cond => IsSideEffectFreeExpression(cond.Condition),
+                _ => false
+            };
+        }
+
+        private static bool ContainsShortCircuit(Expression expression)
+        {
+            if (expression == null)
+            {
+                return false;
+            }
+
+            return expression switch
+            {
+                BinaryExpression bin when bin.Op is BinaryOp.LogicAnd or BinaryOp.LogicOr => true,
+                BinaryExpression bin => ContainsShortCircuit(bin.Left) || ContainsShortCircuit(bin.Right),
+                UnaryExpression unary => ContainsShortCircuit(unary.Target),
+                ConditionExpression cond => ContainsShortCircuit(cond.Condition),
+                InvokeExpression invoke =>
+                    ContainsShortCircuit(invoke.Instance) ||
+                    ContainsShortCircuit(invoke.MethodExpression) ||
+                    invoke.Parameters.Any(ContainsShortCircuit),
+                PropertyAccessExpression prop =>
+                    ContainsShortCircuit(prop.Instance) || ContainsShortCircuit(prop.Property),
+                _ => false
+            };
+        }
+
+        private static void CollectSideEffects(Expression expression, List<Expression> effects)
+        {
+            if (expression == null)
+            {
+                return;
+            }
+
+            switch (expression)
+            {
+                case InvokeExpression invoke:
+                    effects.Add(invoke);
+                    return;
+                case UnaryExpression unary when unary.Op is UnaryOp.Inc or UnaryOp.Dec or UnaryOp.Invalidate or UnaryOp.Eval:
+                    effects.Add(unary);
+                    return;
+                case BinaryExpression bin when bin.Op == BinaryOp.Assign:
+                    effects.Add(bin);
+                    return;
+                case BinaryExpression bin:
+                    CollectSideEffects(bin.Left, effects);
+                    CollectSideEffects(bin.Right, effects);
+                    return;
+                case UnaryExpression unary:
+                    CollectSideEffects(unary.Target, effects);
+                    return;
+                case ConditionExpression cond:
+                    CollectSideEffects(cond.Condition, effects);
+                    return;
+                case PropertyAccessExpression prop:
+                    CollectSideEffects(prop.Instance, effects);
+                    CollectSideEffects(prop.Property, effects);
+                    return;
+            }
+        }
+
+        private static bool IsPropertyEvalStatement(IAstNode statement)
+        {
+            if (statement is not ExpressionStatement exprStmt ||
+                exprStmt.Expression is not UnaryExpression unary ||
+                unary.Op != UnaryOp.Eval)
+            {
+                return false;
+            }
+
+            return ContainsPropertyMarker(unary.Target);
+        }
+
+        private static bool ContainsPropertyMarker(Expression expression)
+        {
+            if (expression == null)
+            {
+                return false;
+            }
+
+            if (expression is ConstantExpression constant &&
+                constant.Variant is TjsString str &&
+                str.StringValue.Contains("property ", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (expression is BinaryExpression bin)
+            {
+                return ContainsPropertyMarker(bin.Left) || ContainsPropertyMarker(bin.Right);
+            }
+
+            if (expression is UnaryExpression unary)
+            {
+                return ContainsPropertyMarker(unary.Target);
+            }
+
+            if (expression is InvokeExpression invoke)
+            {
+                if (ContainsPropertyMarker(invoke.MethodExpression))
+                {
+                    return true;
+                }
+
+                foreach (var parameter in invoke.Parameters)
+                {
+                    if (ContainsPropertyMarker(parameter))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static bool IsEmptyStatement(Statement statement)
@@ -1222,7 +1512,31 @@ namespace Furikiri.Echo.Language
                 }
 
                 _formatter.WriteToken("(");
-                Visit(phi.Condition.Condition);
+                var ternaryCond = phi.Condition?.Condition;
+                if (ternaryCond == null)
+                {
+                    _formatter.WriteKeyword("void");
+                    _formatter.WriteSpace();
+                    _formatter.WriteToken("?");
+                    _formatter.WriteSpace();
+                    Visit(phi.ThenBranch);
+                    _formatter.WriteSpace();
+                    _formatter.WriteToken(":");
+                    _formatter.WriteSpace();
+                    Visit(phi.ElseBranch);
+                    _formatter.WriteToken(")");
+                    return;
+                }
+                if (ternaryCond is BinaryExpression)
+                {
+                    _formatter.WriteToken("(");
+                    Visit(ternaryCond);
+                    _formatter.WriteToken(")");
+                }
+                else
+                {
+                    Visit(ternaryCond);
+                }
                 _formatter.WriteSpace();
                 _formatter.WriteToken("?");
                 _formatter.WriteSpace();

@@ -176,6 +176,12 @@ namespace Furikiri.Echo.Pass
                         {
                             continue;
                         }
+                        
+                        // 已经从前驱块归并出结果时，不要被占位 Phi 覆盖
+                        if (exps.ContainsKey(inSlot))
+                        {
+                            continue;
+                        }
 
                         if (context.Vars.ContainsKey((short)inSlot))
                         {
@@ -183,8 +189,8 @@ namespace Furikiri.Echo.Pass
                             continue;
                         }
 
-                        var phi = new PhiExpression(inSlot);
-                        exps[inSlot] = phi;
+                        // 对于仅由活跃输入推导出的槽位，优先使用局部引用占位，避免生成空 Phi
+                        exps[inSlot] = new LocalExpression(context.Object, (short)inSlot);
                     }
                 }
                 ////get from.Output && from.Def
@@ -857,6 +863,14 @@ namespace Furikiri.Echo.Pass
                     case OpCode.EVAL:
                         break;
                     case OpCode.EEXP:
+                    {
+                        var srcSlot = ins.GetRegisterSlot(0);
+                        if (ex.TryGetValue(srcSlot, out var evalTarget))
+                        {
+                            var evalExpr = new UnaryExpression(evalTarget, UnaryOp.Eval);
+                            expList.Add(evalExpr);
+                        }
+                    }
                         break;
                     case OpCode.ASC:
                         break;
@@ -1256,27 +1270,184 @@ namespace Furikiri.Echo.Pass
                 return;
             }
 
-            var condPred = froms.FirstOrDefault(b => b.Statements?.LastOrDefault() is ConditionExpression);
-            if (condPred == null)
+            static bool TryAssignFromCondition(ConditionExpression cond, List<Block> preds, PhiExpression targetPhi, Block targetMerge)
+            {
+                if (cond?.Condition == null)
+                {
+                    return false;
+                }
+
+                // 直接跳到 merge：沿用原有逻辑
+                if (cond.TrueBranch == targetMerge.Start || cond.FalseBranch == targetMerge.Start)
+                {
+                    return false;
+                }
+
+                var trueIdx = preds.FindIndex(b => b.Start == cond.TrueBranch);
+                var falseIdx = preds.FindIndex(b => b.Start == cond.FalseBranch);
+                if (trueIdx < 0 || falseIdx < 0 || trueIdx == falseIdx)
+                {
+                    return false;
+                }
+
+                targetPhi.Condition = cond;
+                targetPhi.ThenBranch = targetPhi.PossibleExpressions[trueIdx];
+                targetPhi.ElseBranch = targetPhi.PossibleExpressions[falseIdx];
+                return true;
+            }
+            
+            static bool TryBuildShortCircuitAndCondition(Block condBlock, Block elsePred, Expression innerCond, out Expression combined)
+            {
+                static bool CanReach(Block current, Block target, int depth, HashSet<Block> visited)
+                {
+                    if (current == null || target == null || depth < 0 || !visited.Add(current))
+                    {
+                        return false;
+                    }
+
+                    if (current.Start == target.Start)
+                    {
+                        return true;
+                    }
+
+                    if (depth == 0)
+                    {
+                        return false;
+                    }
+
+                    foreach (var next in current.To)
+                    {
+                        if (CanReach(next, target, depth - 1, visited))
+                        {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+
+                static bool BranchFlowsTo(Block conditionBlock, int branchStart, Block target)
+                {
+                    if (conditionBlock == null || target == null)
+                    {
+                        return false;
+                    }
+
+                    if (branchStart == target.Start)
+                    {
+                        return true;
+                    }
+
+                    var branchHead = conditionBlock.To.FirstOrDefault(b => b.Start == branchStart);
+                    if (branchHead == null)
+                    {
+                        return false;
+                    }
+
+                    return CanReach(branchHead, target, 6, new HashSet<Block>());
+                }
+
+                combined = null;
+                if (condBlock == null || elsePred == null || innerCond == null)
+                {
+                    return false;
+                }
+
+                var candidates = elsePred.From
+                    .Concat(elsePred.From.SelectMany(b => b.From))
+                    .Distinct();
+                foreach (var parent in candidates)
+                {
+                    if (parent == null || ReferenceEquals(parent, condBlock) ||
+                        parent.Statements?.Any(s => s is ConditionExpression) != true)
+                    {
+                        continue;
+                    }
+
+                    var parentCond = (ConditionExpression)parent.Statements.Last(s => s is ConditionExpression);
+                    var trueToCond = BranchFlowsTo(parent, parentCond.TrueBranch, condBlock);
+                    var falseToCond = BranchFlowsTo(parent, parentCond.FalseBranch, condBlock);
+                    var trueToElse = BranchFlowsTo(parent, parentCond.TrueBranch, elsePred);
+                    var falseToElse = BranchFlowsTo(parent, parentCond.FalseBranch, elsePred);
+                    if (!(trueToCond && falseToElse) && !(falseToCond && trueToElse))
+                    {
+                        continue;
+                    }
+
+                    var outerCond = parentCond.Condition;
+                    if (falseToCond)
+                    {
+                        outerCond = new UnaryExpression(outerCond, UnaryOp.Not);
+                    }
+
+                    combined = new BinaryExpression(outerCond, innerCond, BinaryOp.LogicAnd);
+                    return true;
+                }
+
+                return false;
+            }
+
+            var condPred = froms.FirstOrDefault(b => b.Statements?.Any(s => s is ConditionExpression) == true);
+            if (condPred != null)
+            {
+                var cond = (ConditionExpression)condPred.Statements.Last(s => s is ConditionExpression);
+                if (TryAssignFromCondition(cond, froms, phi, mergeBlock))
+                {
+                    var falsePred = froms.FirstOrDefault(b => b.Start == cond.FalseBranch);
+                    if (TryBuildShortCircuitAndCondition(condPred, falsePred, cond.Condition, out var combinedCond))
+                    {
+                        phi.Condition = new ConditionExpression(combinedCond, cond.JumpIf)
+                        {
+                            JumpTo = cond.JumpTo,
+                            ElseTo = cond.ElseTo
+                        };
+                    }
+                    return;
+                }
+
+                // 兼容旧路径：条件块直接跳到 merge
+                if (cond.TrueBranch != mergeBlock.Start && cond.FalseBranch != mergeBlock.Start)
+                {
+                    return;
+                }
+
+                var condPredIdx = froms.IndexOf(condPred);
+                var otherIdx = condPredIdx == 0 ? 1 : 0;
+                var condPredValue = phi.PossibleExpressions[condPredIdx];
+                var otherValue = phi.PossibleExpressions[otherIdx];
+                var trueToMerge = cond.TrueBranch == mergeBlock.Start;
+
+                phi.Condition = cond;
+                phi.ThenBranch = trueToMerge ? condPredValue : otherValue;
+                phi.ElseBranch = trueToMerge ? otherValue : condPredValue;
+                return;
+            }
+
+            // 菱形分支：merge 的前驱不带条件，条件位于共同上游块
+            var parentCond = froms
+                .SelectMany(b => b.From)
+                .Distinct()
+                .FirstOrDefault(b => b.Statements?.Any(s => s is ConditionExpression) == true);
+            if (parentCond == null)
             {
                 return;
             }
 
-            var cond = (ConditionExpression)condPred.Statements.Last(s => s is ConditionExpression);
-            if (cond.TrueBranch != mergeBlock.Start && cond.FalseBranch != mergeBlock.Start)
+            var parentCondition = (ConditionExpression)parentCond.Statements.Last(s => s is ConditionExpression);
+            if (!TryAssignFromCondition(parentCondition, froms, phi, mergeBlock))
             {
                 return;
             }
 
-            var condPredIdx = froms.IndexOf(condPred);
-            var otherIdx = condPredIdx == 0 ? 1 : 0;
-            var condPredValue = phi.PossibleExpressions[condPredIdx];
-            var otherValue = phi.PossibleExpressions[otherIdx];
-            var trueToMerge = cond.TrueBranch == mergeBlock.Start;
-
-            phi.Condition = cond;
-            phi.ThenBranch = trueToMerge ? condPredValue : otherValue;
-            phi.ElseBranch = trueToMerge ? otherValue : condPredValue;
+            var parentFalsePred = froms.FirstOrDefault(b => b.Start == parentCondition.FalseBranch);
+            if (TryBuildShortCircuitAndCondition(parentCond, parentFalsePred, parentCondition.Condition, out var parentCombinedCond))
+            {
+                phi.Condition = new ConditionExpression(parentCombinedCond, parentCondition.JumpIf)
+                {
+                    JumpTo = parentCondition.JumpTo,
+                    ElseTo = parentCondition.ElseTo
+                };
+            }
         }
     }
 }

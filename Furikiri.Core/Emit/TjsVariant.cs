@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Linq;
 
@@ -134,7 +134,13 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            return $"\"{StringValue.Flatten()}\"";
+            var escaped = (StringValue ?? string.Empty)
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"")
+                .Replace("\r", "\\r")
+                .Replace("\n", "\\n")
+                .Replace("\t", "\\t");
+            return $"\"{escaped}\"";
         }
     }
 

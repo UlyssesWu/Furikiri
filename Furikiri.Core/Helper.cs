@@ -403,6 +403,7 @@ namespace Furikiri
             {
                 case UnaryOp.Inc:
                 case UnaryOp.Dec:
+                case UnaryOp.Eval:
                     return true;
                 default:
                     return false;
@@ -484,6 +485,7 @@ namespace Furikiri
                 case UnaryOp.ToString:
                 case UnaryOp.PropertyRef:
                 case UnaryOp.PropertyObject:
+                case UnaryOp.Eval:
                     return 1;
                 default:
                     return 2;
@@ -571,6 +573,8 @@ namespace Furikiri
                     return "invalidate";
                 case UnaryOp.TypeOf:
                     return "typeof";
+                case UnaryOp.Eval:
+                    return "!";
                 case UnaryOp.PropertyRef:
                     return "&";
                 case UnaryOp.PropertyObject:
