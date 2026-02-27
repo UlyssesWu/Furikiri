@@ -814,6 +814,17 @@ namespace Furikiri.Echo.Pass
                             //...
                             //do nothing
                         }
+                        else if (paramCount == -2)
+                        {
+                            foreach (var reg in ins.Registers.Skip(3).OfType<RegisterParameter>())
+                            {
+                                var pSlot = reg.GetSlot();
+                                if (ex.TryGetValue(pSlot, out var arg))
+                                {
+                                    call.Parameters.Add(arg);
+                                }
+                            }
+                        }
                         else
                         {
                             for (int j = 0; j < paramCount; j++)
@@ -843,6 +854,18 @@ namespace Furikiri.Echo.Pass
                         {
                             //...
                             //do nothing
+                        }
+                        else if (paramCount == -2)
+                        {
+                            foreach (var reg in ins.Registers.Skip(4).OfType<RegisterParameter>())
+                            {
+                                var pSlot = reg.GetSlot();
+                                if (ex.TryGetValue(pSlot, out var arg))
+                                {
+                                    arg.Parent = call;
+                                    call.Parameters.Add(arg);
+                                }
+                            }
                         }
                         else
                         {
@@ -894,6 +917,18 @@ namespace Furikiri.Echo.Pass
                             //...
                             //do nothing
                         }
+                        else if (paramCount == -2)
+                        {
+                            foreach (var reg in ins.Registers.Skip(4).OfType<RegisterParameter>())
+                            {
+                                var pSlot = reg.GetSlot();
+                                if (ex.TryGetValue(pSlot, out var arg))
+                                {
+                                    arg.Parent = call;
+                                    call.Parameters.Add(arg);
+                                }
+                            }
+                        }
                         else
                         {
                             for (int j = 0; j < paramCount; j++)
@@ -922,6 +957,18 @@ namespace Furikiri.Echo.Pass
                         {
                             //...
                             //do nothing
+                        }
+                        else if (paramCount == -2)
+                        {
+                            foreach (var reg in ins.Registers.Skip(3).OfType<RegisterParameter>())
+                            {
+                                var pSlot = reg.GetSlot();
+                                if (ex.TryGetValue(pSlot, out var arg))
+                                {
+                                    arg.Parent = call;
+                                    call.Parameters.Add(arg);
+                                }
+                            }
                         }
                         else
                         {
@@ -1035,7 +1082,17 @@ namespace Furikiri.Echo.Pass
                     case OpCode.SRV:
                     {
                         var srv = ins.GetRegisterSlot(0);
-                        retExp = srv == 0 ? null : ex[srv];
+                        if (srv == 0)
+                        {
+                            retExp = null;
+                        }
+                        else
+                        {
+                            // Some scripts can carry SRV with a register that is not materialized
+                            // in the current block state (e.g. path-dependent temp). Treat as void
+                            // instead of crashing decompilation.
+                            retExp = ex.TryGetValue(srv, out var resolved) ? resolved : null;
+                        }
                     }
                         break;
                     case OpCode.RET:

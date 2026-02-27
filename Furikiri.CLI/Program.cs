@@ -72,9 +72,9 @@ namespace Furikiri.CLI
 
             app.Execute(args);
             Console.WriteLine("All done!");
-#if DEBUG
-            Console.ReadLine();
-#endif
+//#if DEBUG
+//            Console.ReadLine();
+//#endif
         }
 
         private static void Decompile(string path, bool print = false)

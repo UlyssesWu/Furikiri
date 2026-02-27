@@ -338,3 +338,4 @@ ASALocalRun/
 /.cursor
 /RunTest/decompile-debug
 /RunTest/decompiled.tjs
+/decompile-debug

@@ -74,6 +74,8 @@ namespace Furikiri.Echo
             Script.Resolve();
 
             Dictionary<Method, BlockStatement> methods = new Dictionary<Method, BlockStatement>();
+            Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)> propertyBlocks =
+                new Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)>();
 
             methods.Add(Script.Methods[Script.TopLevel], DecompileObject(Script.TopLevel));
             foreach (var method in Script.Methods)
@@ -87,6 +89,8 @@ namespace Furikiri.Echo
                 {
                     case TjsContextType.PropertyGetter:
                     case TjsContextType.PropertySetter:
+                        var propMethodBlock = DecompileObject(method.Key);
+                        methods.Add(method.Value, propMethodBlock);
                         break;
                     case TjsContextType.Function:
                     case TjsContextType.ExprFunction:
@@ -101,9 +105,17 @@ namespace Furikiri.Echo
             var tjs = new TjsWriter(writer){MethodRefs = methods};
             tjs.WriteLicense();
 
+            // Write normal function declarations first so top-level `delete foo` statements
+            // always appear after `function foo(...)` declarations.
+            var topLevelMethod = Script.Methods[Script.TopLevel];
             foreach (var m in methods)
             {
-                if (m.Key.IsLambda)
+                if (m.Key == topLevelMethod || m.Key.IsLambda)
+                {
+                    continue;
+                }
+
+                if (m.Key.Object.ContextType is TjsContextType.PropertyGetter or TjsContextType.PropertySetter)
                 {
                     continue;
                 }
@@ -112,6 +124,37 @@ namespace Furikiri.Echo
                 tjs.WriteFunction(m.Key, m.Value);
                 tjs.WriteLine();
             }
+
+            tjs.WriteLine();
+
+            // Then output properties with associated getter/setter bodies.
+            foreach (var property in Script.Properties.Values)
+            {
+                BlockStatement getterBlock = null;
+                BlockStatement setterBlock = null;
+                if (property.Getter != null)
+                {
+                    methods.TryGetValue(property.Getter, out getterBlock);
+                }
+
+                if (property.Setter != null)
+                {
+                    methods.TryGetValue(property.Setter, out setterBlock);
+                }
+
+                propertyBlocks[property] = (getterBlock, setterBlock);
+            }
+
+            foreach (var propertyBlock in propertyBlocks)
+            {
+                tjs.WriteProperty(propertyBlock.Key, propertyBlock.Value.Getter, propertyBlock.Value.Setter);
+                tjs.WriteLine();
+            }
+
+            // Finally write top-level body.
+            tjs.WriteLine();
+            tjs.WriteFunction(topLevelMethod, methods[topLevelMethod]);
+            tjs.WriteLine();
 
             writer.Flush();
             var result = writer.ToString();

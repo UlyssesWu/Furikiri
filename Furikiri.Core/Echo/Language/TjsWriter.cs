@@ -63,8 +63,7 @@ namespace Furikiri.Echo.Language
 
             _formatter.WriteToken("(");
             //parameters
-            var paramList = method.Vars.Where(kv => kv.Value.IsParameter).OrderByDescending(kv => kv.Key)
-                .Select(kv => kv.Value).ToList();
+            var paramList = GetParameterList(method);
             if (paramList.Count > 0)
             {
                 for (int i = 0; i < paramList.Count - 1; i++)
@@ -81,6 +80,14 @@ namespace Furikiri.Echo.Language
             _formatter.WriteLine();
         }
 
+        private static List<Variable> GetParameterList(Method method)
+        {
+            return method.Vars.Where(kv => kv.Value.IsParameter)
+                .OrderByDescending(kv => kv.Key)
+                .Select(kv => kv.Value)
+                .ToList();
+        }
+
         /// <summary>
         /// Write Function
         /// </summary>
@@ -89,16 +96,62 @@ namespace Furikiri.Echo.Language
         public void WriteFunction(Method method, BlockStatement block)
         {
             WriteSignature(method);
-            WriteMethodBody(method, block, method.Object.ContextType != TjsContextType.TopLevel);
+            WriteMethodBody(block, method.Object.ContextType != TjsContextType.TopLevel);
+        }
+
+        public void WriteProperty(Property property, BlockStatement getterBlock, BlockStatement setterBlock)
+        {
+            _formatter.WriteKeyword("property");
+            _formatter.WriteSpace();
+            _formatter.WriteIdentifier(property.Name);
+            _formatter.WriteLine();
+            _formatter.WriteToken("{");
+            _formatter.WriteLine();
+            _formatter.Indent();
+
+            if (property.Setter != null && setterBlock != null)
+            {
+                _formatter.WriteKeyword("setter");
+                _formatter.WriteToken("(");
+                var setterParams = GetParameterList(property.Setter);
+                for (var i = 0; i < setterParams.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        _formatter.WriteToken(",");
+                        _formatter.WriteSpace();
+                    }
+
+                    _formatter.WriteIdentifier(setterParams[i].ToString());
+                }
+
+                _formatter.WriteToken(")");
+                _formatter.WriteLine();
+                WriteMethodBody(setterBlock, true);
+                _formatter.WriteLine();
+            }
+
+            if (property.Getter != null && getterBlock != null)
+            {
+                _formatter.WriteKeyword("getter");
+                _formatter.WriteToken("()");
+                _formatter.WriteLine();
+                WriteMethodBody(getterBlock, true);
+                _formatter.WriteLine();
+            }
+
+            _formatter.Outdent();
+            _formatter.WriteToken("}");
+            _formatter.WriteLine();
         }
 
         /// <summary>
         /// Write Method Body
         /// <para>Method can be function, property getter/setter etc.</para>
         /// </summary>
-        /// <param name="method"></param>
         /// <param name="block"></param>
-        private void WriteMethodBody(Method method, BlockStatement block, bool braces = true)
+        /// <param name="braces"></param>
+        private void WriteMethodBody(BlockStatement block, bool braces)
         {
             _declaredLocals.Clear();
             if (braces)
@@ -139,6 +192,32 @@ namespace Furikiri.Echo.Language
         public void WriteBlock(BlockStatement st)
         {
             Visit(st);
+        }
+
+        private void WriteLoopBody(BlockStatement body)
+        {
+            if (body?.Statements == null || body.Statements.Count == 0)
+            {
+                return;
+            }
+
+            var count = body.Statements.Count;
+            if (body.Statements[count - 1] is ContinueStatement)
+            {
+                count--;
+            }
+
+            for (var i = 0; i < count; i++)
+            {
+                if (body.Statements[i] is ContinueStatement && i < count - 1)
+                {
+                    // Drop unreachable continue statements that appear before
+                    // additional statements in the same loop body sequence.
+                    continue;
+                }
+
+                Visit(body.Statements[i]);
+            }
         }
 
         internal override void VisitIdentifierExpr(IdentifierExpression id)
@@ -236,6 +315,77 @@ namespace Furikiri.Echo.Language
             }
         }
 
+        private static bool IsGlobalCtor(InvokeExpression invoke, string typeName)
+        {
+            if (invoke?.InvokeType != InvokeType.Ctor)
+            {
+                return false;
+            }
+
+            if (invoke.MethodExpression is IdentifierExpression id)
+            {
+                return id.FullName == $"global.{typeName}";
+            }
+
+            return false;
+        }
+
+        private bool TryWriteCollectionLiteralCtor(InvokeExpression invoke)
+        {
+            if (!Config.UseCollectionLiteralWhenPossible || invoke?.InvokeType != InvokeType.Ctor)
+            {
+                return false;
+            }
+
+            var isDictionary = IsGlobalCtor(invoke, "Dictionary");
+            var isArray = IsGlobalCtor(invoke, "Array");
+            if (!isDictionary && !isArray)
+            {
+                return false;
+            }
+
+            _formatter.WriteToken(isDictionary ? "%[" : "[");
+            if (invoke.Parameters.Count <= 0)
+            {
+                _formatter.WriteToken("]");
+                return true;
+            }
+
+            // TJS dictionary literal allows `=>` as readability-friendly pair separator.
+            if (isDictionary && invoke.Parameters.Count % 2 == 0)
+            {
+                for (var i = 0; i < invoke.Parameters.Count; i += 2)
+                {
+                    Visit(invoke.Parameters[i]);
+                    _formatter.WriteSpace();
+                    _formatter.WriteToken("=>");
+                    _formatter.WriteSpace();
+                    Visit(invoke.Parameters[i + 1]);
+                    if (i + 2 < invoke.Parameters.Count)
+                    {
+                        _formatter.WriteToken(",");
+                        _formatter.WriteSpace();
+                    }
+                }
+
+                _formatter.WriteToken("]");
+                return true;
+            }
+
+            for (var i = 0; i < invoke.Parameters.Count; i++)
+            {
+                Visit(invoke.Parameters[i]);
+                if (i < invoke.Parameters.Count - 1)
+                {
+                    _formatter.WriteToken(",");
+                    _formatter.WriteSpace();
+                }
+            }
+
+            _formatter.WriteToken("]");
+            return true;
+        }
+
         internal override void VisitInvokeExpr(InvokeExpression invoke)
         {
             if (invoke.InvokeType == InvokeType.RegExpCompile)
@@ -244,9 +394,13 @@ namespace Furikiri.Echo.Language
                 return;
             }
 
+            if (TryWriteCollectionLiteralCtor(invoke))
+            {
+                return;
+            }
+
             if (invoke.InvokeType == InvokeType.Ctor)
             {
-                //TODO: quick ctor syntax for Dictionary, Array
                 _formatter.WriteKeyword("new");
                 _formatter.WriteSpace();
             }
@@ -476,6 +630,12 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitIfStmt(IfStatement ifStmt)
         {
+            if (TryWriteContinueGuardIf(ifStmt))
+            {
+                AddNewLineAfterStructCtrlStmt();
+                return;
+            }
+
             _formatter.WriteKeyword("if");
             _formatter.WriteSpace();
             _formatter.WriteToken("(");
@@ -506,6 +666,57 @@ namespace Furikiri.Echo.Language
             AddNewLineAfterStructCtrlStmt();
         }
 
+        private static bool IsEmptyStatement(Statement statement)
+        {
+            return statement switch
+            {
+                null => true,
+                BlockStatement block => block.Statements == null || block.Statements.Count == 0,
+                _ => false
+            };
+        }
+
+        private static bool IsContinueStatement(Statement statement)
+        {
+            return statement switch
+            {
+                ContinueStatement => true,
+                BlockStatement block when block.Statements?.Count == 1 && block.Statements[0] is ContinueStatement => true,
+                _ => false
+            };
+        }
+
+        private bool TryWriteContinueGuardIf(IfStatement ifStmt)
+        {
+            if (!IsEmptyStatement(ifStmt.Then) || ifStmt.Else is not IfStatement elseIf)
+            {
+                return false;
+            }
+
+            if (!IsContinueStatement(elseIf.Then) || elseIf.Else == null)
+            {
+                return false;
+            }
+
+            var mergedCondition = new BinaryExpression(ifStmt.Condition, elseIf.Condition, BinaryOp.LogicOr);
+            _formatter.WriteKeyword("if");
+            _formatter.WriteSpace();
+            _formatter.WriteToken("(");
+            Visit(mergedCondition);
+            _formatter.WriteToken(")");
+            _formatter.WriteLine();
+            _formatter.WriteStartBlock();
+            Visit(new ContinueStatement());
+            _formatter.WriteEndBlock();
+            _formatter.WriteKeyword("else");
+            _formatter.WriteSpace();
+            _formatter.WriteLine();
+            _formatter.WriteStartBlock();
+            Visit(elseIf.Else);
+            _formatter.WriteEndBlock();
+            return true;
+        }
+
         internal override void VisitForStmt(ForStatement forStmt)
         {
             _formatter.WriteKeyword("for");
@@ -528,7 +739,7 @@ namespace Furikiri.Echo.Language
             _formatter.WriteToken(")");
             _formatter.WriteLine();
             _formatter.WriteStartBlock();
-            Visit(forStmt.Body);
+            WriteLoopBody(forStmt.Body);
             _formatter.WriteEndBlock();
             AddNewLineAfterStructCtrlStmt();
         }
@@ -538,7 +749,7 @@ namespace Furikiri.Echo.Language
             _formatter.WriteKeyword("do");
             _formatter.WriteLine();
             _formatter.WriteStartBlock();
-            Visit(doWhile.Body);
+            WriteLoopBody(doWhile.Body);
             _formatter.WriteEndBlock();
             _formatter.WriteKeyword("while");
             _formatter.WriteSpace();
@@ -577,7 +788,7 @@ namespace Furikiri.Echo.Language
             _formatter.WriteLine();
 
             _formatter.WriteStartBlock();
-            Visit(whileStmt.Body);
+            WriteLoopBody(whileStmt.Body);
             _formatter.WriteEndBlock();
             AddNewLineAfterStructCtrlStmt();
         }

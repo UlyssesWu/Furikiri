@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
@@ -54,6 +54,35 @@ namespace Furikiri.Echo.Logical
             if (ParentIf != null && ParentIf.PostDominator == PostDominator)
             {
                 i.IsElseIf = true;
+            }
+
+            // Nested if-condition blocks may contain preparation expressions before the
+            // condition itself (e.g. temp assignments). If the block is folded into an
+            // else-if chain, keep those expressions immediately before the nested if.
+            if (ParentIf != null && ConditionBlock != null && Condition != null)
+            {
+                var prefix = ConditionBlock.Statements
+                    .TakeWhile(stmt => !ReferenceEquals(stmt, Condition))
+                    .ToList();
+                if (prefix.Count > 0)
+                {
+                    var block = new BlockStatement();
+                    foreach (var node in prefix)
+                    {
+                        if (node is Statement st)
+                        {
+                            block.Statements.Add(st);
+                        }
+                        else if (node is Expression exp)
+                        {
+                            block.Statements.Add(new ExpressionStatement(exp));
+                        }
+                    }
+
+                    block.Statements.Add(i);
+                    HideBlocks();
+                    return block;
+                }
             }
 
             HideBlocks();

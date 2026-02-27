@@ -1,4 +1,4 @@
-﻿using Furikiri.Echo;
+using Furikiri.Echo;
 
 namespace RunTest
 {
@@ -6,7 +6,8 @@ namespace RunTest
     {
         static void Main(string[] args)
         {
-            var testPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Furikiri.Tests", "Res", "unittest.tjs.comp"));
+            var defaultPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Furikiri.Tests", "Res", "unittest.tjs.comp"));
+            var testPath = args.Length > 0 ? Path.GetFullPath(args[0]) : defaultPath;
 
             TestDecompile(testPath);
         }
