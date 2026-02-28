@@ -718,13 +718,10 @@ namespace Furikiri
 
         internal static void SafeHide(this List<Block> blocks)
         {
+            // 被 IfLogic.HideBlocks 调用时，块的内容已被外层 IfStatement 捕获，
+            // 必须无条件隐藏以防止重复输出
             foreach (var block in blocks)
             {
-                if (block.Statements.Count == 1 && block.Statements[0] is Statement)
-                {
-                    continue;
-                }
-
                 block.Hidden = true;
             }
         }

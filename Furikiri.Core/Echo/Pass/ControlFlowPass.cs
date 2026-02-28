@@ -200,6 +200,12 @@ namespace Furikiri.Echo.Pass
                     t.CatchBody = SelectBlocksInRange(catchOrExitTry.Start, tryEnd.Start);
                 }
 
+                // 在 try/catch 体内结构化 if-else（需在 ToStatement 之前，
+                // 因为 ToStatement 会隐藏体内块并过滤掉未结构化的 ConditionExpression）
+                StructureLoopBodyIfElse(t.Body);
+                if (t.CatchBody != null)
+                    StructureLoopBodyIfElse(t.CatchBody);
+
                 var tryStatement = t.ToStatement();
                 if (t.CatchClause != null && block.Statements.Contains(t.CatchClause))
                 {
@@ -831,6 +837,25 @@ namespace Furikiri.Echo.Pass
             if (thenBlock.To[0] == elseBlock)
             {
                 logic.Else.Type = LogicalBlockType.None;
+            }
+            else if (postDominator != null && elseBlock == postDominator
+                     && thenBlock.Statements.Any(s => s is not ConditionExpression && s is not GotoExpression))
+            {
+                // else 块就是后支配节点（所有路径的汇合点），
+                // 不是真正的 else 分支而是公共后继代码。
+                // 额外要求 then 块有实质性语句（排除仅含 ConditionExpression/GotoExpression 的块），
+                // 避免将短路 && / || 表达式模式误识别为 if 语句。
+                logic.Else.Type = LogicalBlockType.None;
+
+                // 若 then 块内部有嵌套条件，递归结构化为 if 语句
+                var nestedCond = thenBlock.Statements.GetCondition();
+                if (nestedCond != null)
+                {
+                    if (StructureIfElse(thenBlock, out IfLogic nestedIf))
+                    {
+                        thenBlock.Statements.Replace(nestedIf.Condition, nestedIf.Simplify().ToStatement());
+                    }
+                }
             }
             else if (thenBlock.Statements.Any(s => s is ReturnExpression) &&
                      !(elseBlock.To.Count > 0 && elseBlock.To[0] == thenBlock))
