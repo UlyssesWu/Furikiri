@@ -1107,7 +1107,8 @@ namespace Furikiri.Echo.Pass
                         var name = ins.GetRegisterSlot(1);
                         var src = ins.GetRegisterSlot(2);
 
-                        BinaryExpression b = new BinaryExpression(new PropertyAccessExpression(ex[name], ex[obj]),
+                        Expression left = new PropertyAccessExpression(ex[name], ex[obj]);
+                        BinaryExpression b = new BinaryExpression(left,
                             ex[src], BinaryOp.Assign);
                         expList.Add(b); //there is no other way to find this expression
                     }
@@ -1118,14 +1119,21 @@ namespace Furikiri.Echo.Pass
                     case OpCode.SPDEH:
                     case OpCode.SPDS:
                     {
-                        var left = new IdentifierExpression(ins.Data.AsString())
-                            {Instance = ex[ins.GetRegisterSlot(0)]};
+                        var objSlot = ins.GetRegisterSlot(0);
+                        var ident = new IdentifierExpression(ins.Data.AsString())
+                            {Instance = ex[objSlot]};
+                        Expression left = ident;
+                        bool isPropertyRef = ins.OpCode == OpCode.SPDS && objSlot != Const.ThisReg && objSlot != Const.ThisProxyReg;
+                        if (isPropertyRef)
+                        {
+                            left = new UnaryExpression(ident, UnaryOp.PropertyRef);
+                        }
                         var right = ex[ins.GetRegisterSlot(2)];
                         BinaryExpression b = new BinaryExpression(left, right, BinaryOp.Assign);
-                        //check declare
-                        if (context.Object.ContextType == TjsContextType.TopLevel)
+                        //check declare (SPDS with PropertyRef is never a declaration)
+                        if (!isPropertyRef && context.Object.ContextType == TjsContextType.TopLevel)
                         {
-                            if (!context.RegisteredMembers.ContainsKey(left.Name))
+                            if (!context.RegisteredMembers.ContainsKey(ident.Name))
                             {
                                 b.IsDeclaration = true;
                                 var stub = new TjsStub();
@@ -1134,7 +1142,7 @@ namespace Furikiri.Echo.Pass
                                     stub.Type = con.DataType;
                                 }
 
-                                context.RegisteredMembers[left.Name] = stub;
+                                context.RegisteredMembers[ident.Name] = stub;
                             }
                         }
 

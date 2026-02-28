@@ -1111,6 +1111,11 @@ namespace Furikiri.Echo.Language
                 return false;
             }
 
+            if (IsLikelyPureExpression(rawCond))
+            {
+                return true;
+            }
+
             var effects = new List<Expression>();
             CollectSideEffects(rawCond, effects);
             if (effects.Count == 0)
@@ -1119,14 +1124,42 @@ namespace Furikiri.Echo.Language
                 return true;
             }
 
-            foreach (var effect in effects)
-            {
-                Visit(effect);
-                _formatter.WriteToken(";");
-                _formatter.WriteLine();
-            }
+            // 对于空 then 的 if，输出完整条件表达式，保持原有求值顺序与比较结构，
+            // 避免把 `if (a() != "") {}` 退化成仅有 `a();` 的不直观形式。
+            Visit(rawCond);
+            _formatter.WriteToken(";");
+            _formatter.WriteLine();
 
             return true;
+        }
+
+        private static bool IsLikelyPureExpression(Expression expression)
+        {
+            if (expression == null)
+            {
+                return true;
+            }
+
+            switch (expression)
+            {
+                case ConstantExpression:
+                case IdentifierExpression:
+                case LocalExpression:
+                    return true;
+                case UnaryExpression unary:
+                    return IsLikelyPureExpression(unary.Target);
+                case BinaryExpression bin when bin.Op != BinaryOp.Assign:
+                    return IsLikelyPureExpression(bin.Left) && IsLikelyPureExpression(bin.Right);
+                case ConditionExpression cond:
+                    return IsLikelyPureExpression(cond.Condition);
+                case PropertyAccessExpression prop:
+                    return IsLikelyPureExpression(prop.Instance) && IsLikelyPureExpression(prop.Property);
+                case InvokeExpression:
+                    // Any function call may have side effects; never assume purity.
+                    return false;
+                default:
+                    return false;
+            }
         }
 
         private bool TryWriteNoOpThenElseRewrite(IfStatement ifStmt)
@@ -1492,21 +1525,25 @@ namespace Furikiri.Echo.Language
                     var cond = phi.Condition.Condition;
                     if (phi.ElseBranch != null && IsSameExpression(phi.ThenBranch, cond))
                     {
+                        _formatter.WriteToken("(");
                         Visit(cond);
                         _formatter.WriteSpace();
                         _formatter.WriteToken("||");
                         _formatter.WriteSpace();
                         Visit(phi.ElseBranch);
+                        _formatter.WriteToken(")");
                         return;
                     }
 
                     if (phi.ThenBranch != null && IsSameExpression(phi.ElseBranch, cond))
                     {
+                        _formatter.WriteToken("(");
                         Visit(cond);
                         _formatter.WriteSpace();
                         _formatter.WriteToken("&&");
                         _formatter.WriteSpace();
                         Visit(phi.ThenBranch);
+                        _formatter.WriteToken(")");
                         return;
                     }
                 }

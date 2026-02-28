@@ -453,6 +453,14 @@ namespace Furikiri.Echo.Pass
             MergeIfCondition(condition, logic.ConditionBlock, logic.PostDominator, ref exp, ref trueBlock, ref falseBlock);
             if (exp != null)
             {
+                // Unwrap any ConditionExpression wrapper to prevent self-referential cycles.
+                // merge/exp may be a ConditionExpression from the base case; unwrap to its
+                // inner condition to avoid setting condi.Condition = condi.
+                while (exp is ConditionExpression unwrap)
+                {
+                    exp = unwrap.Condition;
+                }
+
                 if (logic.Condition is ConditionExpression condi)
                 {
                     condi.Condition = exp;
@@ -464,6 +472,31 @@ namespace Furikiri.Echo.Pass
 
                 logic.Then.Blocks = new List<Block> {trueBlock};
                 logic.Else.Blocks = new List<Block> {falseBlock};
+
+                // Remove standalone expression from the condition block that is now
+                // part of the merged condition (e.g., a CALL result used as || operand).
+                // Only the first operand (leftmost leaf of the || chain) can be in the
+                // condition block as a standalone expression; others are in hidden blocks.
+                if (logic.ConditionBlock != null)
+                {
+                    var mergedExpr = (logic.Condition is ConditionExpression ce) ? ce.Condition : exp;
+                    var leftmost = mergedExpr;
+                    while (leftmost is BinaryExpression bin &&
+                           (bin.Op == BinaryOp.LogicOr || bin.Op == BinaryOp.LogicAnd))
+                    {
+                        leftmost = bin.Left;
+                    }
+
+                    var condIdx = logic.ConditionBlock.Statements.IndexOf(condition);
+                    if (condIdx > 0)
+                    {
+                        var prev = logic.ConditionBlock.Statements[condIdx - 1];
+                        if (prev is Expression prevExpr && ReferenceEquals(prevExpr, leftmost))
+                        {
+                            logic.ConditionBlock.Statements.RemoveAt(condIdx - 1);
+                        }
+                    }
+                }
             }
         }
 
@@ -504,11 +537,12 @@ namespace Furikiri.Echo.Pass
         /// <param name="merge">merged if condition expression</param>
         /// <param name="then">assumed if true block</param>
         /// <param name="else">actual else block</param>
+        /// <param name="isOrChain">true when called from an || merge path (not the initial call)</param>
         /// <returns></returns>
         private bool MergeIfCondition(ConditionExpression condition, Block conditionBlock, Block dominator, ref Expression merge,
-            ref Block then, ref Block @else)
+            ref Block then, ref Block @else, bool isOrChain = false)
         {
-            if (condition.TrueBranch == dominator.Start)
+            if (dominator != null && condition.TrueBranch == dominator.Start)
             {
                 condition = (ConditionExpression) condition.Invert();
             }
@@ -529,23 +563,60 @@ namespace Furikiri.Echo.Pass
             if (!trueIsContent && dominator == falseBlock)
             {
                 var trueCondition = trueBlock.Statements.GetCondition();
+                var savedThen = then;
+                var savedElse = @else;
                 if (MergeIfCondition(trueCondition, trueBlock, dominator, ref merge, ref then, ref @else))
                 {
                     trueBlock.Hidden = true;
                     merge = condition.Condition.And(merge);
                     return true;
                 }
+                then = savedThen;
+                @else = savedElse;
             }
 
-            if (!falseIsContent && then == trueBlock)
+            // || merge path: check if falseBlock continues the || chain.
+            // Use direct check: falseBlock has a condition whose TrueBranch matches
+            // the current trueBlock — this works even when IsBranchContent considers
+            // falseBlock as "content" due to non-condition predecessors.
             {
-                var falseCondition = falseBlock.Statements.GetCondition();
-                if (falseCondition != null && MergeIfCondition(falseCondition, falseBlock, dominator, ref merge, ref then, ref @else))
+                var falseCondition2 = falseBlock.Statements.GetCondition();
+                bool isOrCandidate = falseCondition2 != null && then == trueBlock &&
+                                     _context.BlockTable.ContainsKey(falseCondition2.TrueBranch) &&
+                                     _context.BlockTable[falseCondition2.TrueBranch] == trueBlock;
+
+                if (isOrCandidate || (!falseIsContent && then == trueBlock))
                 {
-                    falseBlock.Hidden = true;
-                    merge = condition.Condition.Or(merge);
-                    return true;
+                    if (falseCondition2 == null)
+                    {
+                        falseCondition2 = falseBlock.Statements.GetCondition();
+                    }
+
+                    if (falseCondition2 != null)
+                    {
+                        var savedThen = then;
+                        var savedElse = @else;
+                        if (MergeIfCondition(falseCondition2, falseBlock, dominator, ref merge, ref then, ref @else, isOrChain: true))
+                        {
+                            falseBlock.Hidden = true;
+                            merge = condition.Condition.Or(merge);
+                            return true;
+                        }
+                        then = savedThen;
+                        @else = savedElse;
+                    }
                 }
+            }
+
+            // Fallback: this is the final condition in a || chain.
+            // When we're inside a recursive || merge and the falseBlock doesn't continue
+            // the chain (different TrueBranch or not a condition block), this condition
+            // is the last in the || chain, and falseBlock is the "else" code.
+            if (isOrChain && then == trueBlock)
+            {
+                @else = falseBlock;
+                merge = condition;
+                return true;
             }
 
             if (trueBlock == then && falseBlock == dominator) //final condition
@@ -630,7 +701,21 @@ namespace Furikiri.Echo.Pass
             }
 
             //if (thenBlock.To.Count == 2) //TODO: can be 2 - inner If
-            if (!IsBranchContent(thenBlock) || (!IsBranchContent(elseBlock) && !elseIsBreak)) //|| !IsBranchContent(elseBlock)
+            // Also try merging when elseBlock has a condition sharing the same TrueBranch
+            // as the current thenBlock — this indicates a potential || chain, even if
+            // IsBranchContent considers elseBlock as "content" because the condition block
+            // has extra statements (e.g., variable assignments before the condition).
+            bool potentialOrChain = false;
+            if (IsBranchContent(elseBlock))
+            {
+                var elseCond = elseBlock.Statements.GetCondition();
+                if (elseCond != null)
+                {
+                    potentialOrChain = thenBlock.Start == elseCond.TrueBranch;
+                }
+            }
+
+            if (!IsBranchContent(thenBlock) || (!IsBranchContent(elseBlock) && !elseIsBreak) || potentialOrChain) //|| !IsBranchContent(elseBlock)
             {
                 MergeIfCondition(logic, cond);
                 //if (thenBlock.Statements.IsCondition())
@@ -663,6 +748,15 @@ namespace Furikiri.Echo.Pass
 
             if (thenBlock.To[0] == elseBlock)
             {
+                logic.Else.Type = LogicalBlockType.None;
+            }
+            else if (thenBlock.Statements.Any(s => s is ReturnExpression) &&
+                     !(elseBlock.To.Count > 0 && elseBlock.To[0] == thenBlock))
+            {
+                // Then block returns from function and else block does NOT flow into
+                // the then block. This means there's no fall-through; the else block is
+                // just sequential code after the if, not an explicit else.
+                // (When else flows into then, it's a short-circuit pattern like &&, not a simple if.)
                 logic.Else.Type = LogicalBlockType.None;
             }
             else
