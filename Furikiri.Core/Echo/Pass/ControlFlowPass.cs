@@ -810,6 +810,24 @@ namespace Furikiri.Echo.Pass
                 elseBlock = logic.Else.Blocks[0];
             }
 
+            // 当 then 块的后继中有被隐藏的块（如 try 体）时，查找其可见且位于
+            // then 和 else 之间的延续块，将其加入 then 分支。
+            // 这处理了 try-catch 后续代码被错误放置在 if 作用域外的问题。
+            if (thenBlock.To.Any(b => b.Hidden))
+            {
+                var visibleContinuation = thenBlock.To
+                    .Where(b => !b.Hidden && b != elseBlock
+                                          && b.Start > thenBlock.Start
+                                          && b.Start < elseBlock.Start)
+                    .OrderBy(b => b.Start)
+                    .FirstOrDefault();
+
+                if (visibleContinuation != null)
+                {
+                    logic.Then.Blocks.Add(visibleContinuation);
+                }
+            }
+
             if (thenBlock.To[0] == elseBlock)
             {
                 logic.Else.Type = LogicalBlockType.None;
