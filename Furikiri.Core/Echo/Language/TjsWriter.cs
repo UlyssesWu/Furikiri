@@ -75,11 +75,19 @@ namespace Furikiri.Echo.Language
                 for (int i = 0; i < paramList.Count - 1; i++)
                 {
                     _formatter.WriteIdentifier(paramList[i].ToString());
+                    if (paramList[i].IsNamedArray)
+                    {
+                        _formatter.WriteToken("*");
+                    }
                     _formatter.WriteToken(",");
                     _formatter.WriteSpace();
                 }
 
                 _formatter.WriteIdentifier(paramList[paramList.Count - 1].ToString());
+                if (paramList[paramList.Count - 1].IsNamedArray)
+                {
+                    _formatter.WriteToken("*");
+                }
             }
 
             _formatter.WriteToken(")");
@@ -226,11 +234,19 @@ namespace Furikiri.Echo.Language
                 for (int i = 0; i < paramList.Count - 1; i++)
                 {
                     _formatter.WriteIdentifier(paramList[i].ToString());
+                    if (paramList[i].IsNamedArray)
+                    {
+                        _formatter.WriteToken("*");
+                    }
                     _formatter.WriteToken(",");
                     _formatter.WriteSpace();
                 }
 
                 _formatter.WriteIdentifier(paramList[paramList.Count - 1].ToString());
+                if (paramList[paramList.Count - 1].IsNamedArray)
+                {
+                    _formatter.WriteToken("*");
+                }
             }
 
             _formatter.WriteToken(")");

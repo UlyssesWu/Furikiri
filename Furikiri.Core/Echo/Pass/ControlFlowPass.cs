@@ -353,7 +353,8 @@ namespace Furikiri.Echo.Pass
             var operationExp = dw.Continue.Statements
                 .LastOrDefault(n => (n is IOperation));
 
-            if (operationExp is UnaryExpression step1 && step1.Op.CanSelfAssign() && step1.Target == l)
+            if (operationExp is UnaryExpression step1 && step1.Op.CanSelfAssign() &&
+                (step1.Target == l || (step1.Target is LocalExpression le1 && l is LocalExpression le2 && le1.Slot == le2.Slot)))
             {
                 step = step1;
             }
@@ -585,7 +586,7 @@ namespace Furikiri.Echo.Pass
                                      _context.BlockTable.ContainsKey(falseCondition2.TrueBranch) &&
                                      _context.BlockTable[falseCondition2.TrueBranch] == trueBlock;
 
-                if (isOrCandidate || (!falseIsContent && then == trueBlock))
+                if (isOrCandidate)
                 {
                     if (falseCondition2 == null)
                     {
