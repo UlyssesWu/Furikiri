@@ -615,6 +615,12 @@ namespace Furikiri.Echo.Language
             {
                 var para = invoke.Parameters[i];
                 Visit(para);
+                // 输出展开运算符
+                if (invoke.SpreadParameterIndices != null && invoke.SpreadParameterIndices.Contains(i))
+                {
+                    _formatter.WriteToken("*");
+                }
+
                 if (i < invoke.Parameters.Count - 1)
                 {
                     _formatter.Write(", ");

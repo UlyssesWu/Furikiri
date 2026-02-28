@@ -46,6 +46,11 @@ namespace Furikiri.AST.Expressions
         public List<Expression> Parameters { get; set; } = new List<Expression>();
         public bool HasOmittedArguments { get; set; }
 
+        /// <summary>
+        /// 需要展开（*）的参数索引集合
+        /// </summary>
+        public HashSet<int> SpreadParameterIndices { get; set; }
+
         public InvokeExpression(string name)
         {
             MethodName = name;

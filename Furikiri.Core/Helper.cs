@@ -457,6 +457,8 @@ namespace Furikiri
                 BinaryOp.NotCongruent => "!==",
                 BinaryOp.LessThan => "<",
                 BinaryOp.GreaterThan => ">",
+                BinaryOp.LessOrEqual => "<=",
+                BinaryOp.GreaterOrEqual => ">=",
                 BinaryOp.InstanceOf => "instanceof",
                 BinaryOp.BitXor => "^",
                 BinaryOp.BitAnd => "&",

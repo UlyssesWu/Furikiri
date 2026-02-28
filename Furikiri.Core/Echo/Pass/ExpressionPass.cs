@@ -903,6 +903,13 @@ namespace Furikiri.Echo.Pass
                                 var pSlot = reg.GetSlot();
                                 if (ex.TryGetValue(pSlot, out var arg))
                                 {
+                                    // 检测展开参数标记
+                                    if (reg.ParameterExpand == FuncParameterExpand.FatExpand)
+                                    {
+                                        call.SpreadParameterIndices ??= new HashSet<int>();
+                                        call.SpreadParameterIndices.Add(call.Parameters.Count);
+                                    }
+
                                     call.Parameters.Add(arg);
                                 }
                             }
@@ -943,6 +950,13 @@ namespace Furikiri.Echo.Pass
                                 var pSlot = reg.GetSlot();
                                 if (ex.TryGetValue(pSlot, out var arg))
                                 {
+                                    // 检测展开参数标记
+                                    if (reg.ParameterExpand == FuncParameterExpand.FatExpand)
+                                    {
+                                        call.SpreadParameterIndices ??= new HashSet<int>();
+                                        call.SpreadParameterIndices.Add(call.Parameters.Count);
+                                    }
+
                                     arg.Parent = call;
                                     call.Parameters.Add(arg);
                                 }
@@ -1004,6 +1018,13 @@ namespace Furikiri.Echo.Pass
                                 var pSlot = reg.GetSlot();
                                 if (ex.TryGetValue(pSlot, out var arg))
                                 {
+                                    // 检测展开参数标记
+                                    if (reg.ParameterExpand == FuncParameterExpand.FatExpand)
+                                    {
+                                        call.SpreadParameterIndices ??= new HashSet<int>();
+                                        call.SpreadParameterIndices.Add(call.Parameters.Count);
+                                    }
+
                                     arg.Parent = call;
                                     call.Parameters.Add(arg);
                                 }
