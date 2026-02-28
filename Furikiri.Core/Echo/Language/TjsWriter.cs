@@ -1270,6 +1270,12 @@ namespace Furikiri.Echo.Language
 
         private static bool IsNoSideEffectBlock(Statement statement)
         {
+            // ContinueStatement、BreakStatement 等控制流语句有实际作用，不视为无副作用
+            if (statement is ContinueStatement or BreakStatement)
+            {
+                return false;
+            }
+
             if (statement is not BlockStatement block || block.Statements == null || block.Statements.Count == 0)
             {
                 return true;

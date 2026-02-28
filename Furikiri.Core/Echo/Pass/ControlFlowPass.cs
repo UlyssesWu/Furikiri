@@ -638,6 +638,32 @@ namespace Furikiri.Echo.Pass
                    block.From.Any(b => !b.Statements.IsCondition());
         }
 
+        /// <summary>
+        /// 检查目标块是否是循环的 continue 路径（最终跳转回循环头部）
+        /// </summary>
+        private bool IsContinueTarget(Block target, Loop loop)
+        {
+            if (target == null) return false;
+
+            // 直接是循环闩锁块（无语句，仅跳转回循环头部）
+            if (target.Statements.Count == 0 && target.To.Count == 1 && target.To[0] == loop.Header)
+                return true;
+
+            // 块只包含 ContinueStatement
+            if (target.Statements.Count == 1 && target.Statements[0] is ContinueStatement)
+                return true;
+
+            // 空块且后继为 continue 目标（处理连续跳转链）
+            if (target.Statements.Count == 0 && target.To.Count == 1)
+            {
+                var jumpTarget = target.To[0];
+                if (jumpTarget != target && IsContinueTarget(jumpTarget, loop))
+                    return true;
+            }
+
+            return false;
+        }
+
         private void RemoveLastGoto(Block from, Block to)
         {
             var gt = from.Statements.LastOrDefault(st =>
@@ -698,6 +724,43 @@ namespace Furikiri.Echo.Pass
                 {
                     elseIsBreak = true;
                 }
+            }
+
+            // 连续 continue 守卫合并：在循环体内，如果 if 的 true 分支是 continue
+            // （跳转到循环闩锁块），则将连续的 continue 守卫合并为 || 条件
+            if (loop != null && !elseIsBreak && IsContinueTarget(thenBlock, loop))
+            {
+                Expression mergedCondition = cond.Condition;
+                Block currentElse = elseBlock;
+
+                // 遍历后续块，将连续的 continue 守卫用 || 合并
+                while (currentElse.Statements.IsCondition() && currentElse.To.Count == 2)
+                {
+                    var nextCond = currentElse.Statements.GetCondition();
+                    var nextThenBlock = _context.BlockTable[nextCond.TrueBranch];
+                    var nextElseBlock = _context.BlockTable[nextCond.FalseBranch];
+
+                    if (IsContinueTarget(nextThenBlock, loop))
+                    {
+                        mergedCondition = mergedCondition.Or(nextCond.Condition);
+                        nextThenBlock.Hidden = true;
+                        currentElse.Hidden = true;
+                        currentElse = nextElseBlock;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                cond.Condition = mergedCondition;
+                logic.Then.Type = LogicalBlockType.Statement;
+                logic.Then.Statement = new ContinueStatement();
+                logic.Else.Type = LogicalBlockType.None;
+                thenBlock.Hidden = true;
+
+                outIf = logic;
+                return true;
             }
 
             //if (thenBlock.To.Count == 2) //TODO: can be 2 - inner If
