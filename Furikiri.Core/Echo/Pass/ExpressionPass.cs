@@ -527,6 +527,12 @@ namespace Furikiri.Echo.Pass
                             dst = l;
                             ex[dstSlot] = l; //assignment -> statements, local -> expressions
 
+                            // 当局部变量从已知属性/方法赋值时，使用属性名+'_'命名
+                            if (declare && l.VariableDef.Name == null && src is IdentifierExpression srcId && srcId.Instance != null && !string.IsNullOrEmpty(srcId.Name))
+                            {
+                                l.VariableDef.Name = srcId.Name + "_";
+                            }
+
                             BinaryExpression b = new BinaryExpression(dst, src, BinaryOp.Assign) {IsDeclaration = declare };
                             var insertedDeclarationAtArrayInit = false;
                             // Keep temp collection constructor aliases stable so subsequent

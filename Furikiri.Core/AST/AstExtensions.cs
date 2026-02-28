@@ -75,6 +75,17 @@ namespace Furikiri.AST
                     case BinaryOp.GreaterThan:
                         binary.Op = BinaryOp.LessThan;
                         break;
+                    // De Morgan 定律: !(A || B) => !A && !B, !(A && B) => !A || !B
+                    case BinaryOp.LogicOr:
+                        binary.Op = BinaryOp.LogicAnd;
+                        binary.Left = binary.Left.Invert();
+                        binary.Right = binary.Right.Invert();
+                        break;
+                    case BinaryOp.LogicAnd:
+                        binary.Op = BinaryOp.LogicOr;
+                        binary.Left = binary.Left.Invert();
+                        binary.Right = binary.Right.Invert();
+                        break;
                 }
 
                 return binary;

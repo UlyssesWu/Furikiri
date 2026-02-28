@@ -941,7 +941,42 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteToken(unary.Op.ToSymbol());
                     break;
                 case UnaryOp.InvertSign:
+                    _formatter.WriteToken(unary.Op.ToSymbol());
+                    Visit(unary.Target);
+                    break;
                 case UnaryOp.Not:
+                    // De Morgan 定律: 对条件标志 Phi 取反时，展开为 && 或 || 形式
+                    if (unary.Target is PhiExpression notPhi && notPhi.IsConditional
+                        && notPhi.Slot == Const.FlagReg && notPhi.Condition?.Condition != null)
+                    {
+                        var cond = notPhi.Condition.Condition;
+                        // !(cond || elseBranch) => !cond && !elseBranch
+                        if (notPhi.ElseBranch != null && IsSameExpression(notPhi.ThenBranch, cond))
+                        {
+                            _formatter.WriteToken("(");
+                            VisitInverted(cond);
+                            _formatter.WriteSpace();
+                            _formatter.WriteToken("&&");
+                            _formatter.WriteSpace();
+                            VisitInverted(notPhi.ElseBranch);
+                            _formatter.WriteToken(")");
+                            break;
+                        }
+
+                        // !(cond && thenBranch) => !cond || !thenBranch
+                        if (notPhi.ThenBranch != null && IsSameExpression(notPhi.ElseBranch, cond))
+                        {
+                            _formatter.WriteToken("(");
+                            VisitInverted(cond);
+                            _formatter.WriteSpace();
+                            _formatter.WriteToken("||");
+                            _formatter.WriteSpace();
+                            VisitInverted(notPhi.ThenBranch);
+                            _formatter.WriteToken(")");
+                            break;
+                        }
+                    }
+
                     _formatter.WriteToken(unary.Op.ToSymbol());
                     // Check if target is an unresolved Phi - if so, just use a placeholder
                     if (unary.Target is PhiExpression phi && !phi.CanSimplify && !phi.IsConditional)
@@ -1103,6 +1138,13 @@ namespace Furikiri.Echo.Language
             if (ifStmt == null || ifStmt.IsElseIf || ifStmt.Else != null || !IsNoSideEffectBlock(ifStmt.Then))
             {
                 return false;
+            }
+
+            // 当 then 和 else 都为空时，分支已被表达式传播阶段消耗（如三元表达式），
+            // 条件中的副作用已在下游表达式中体现，无需重复输出
+            if (ifStmt.Then == null)
+            {
+                return true;
             }
 
             var rawCond = ifStmt.Condition is ConditionExpression condWrap ? condWrap.Condition : ifStmt.Condition;
@@ -1634,6 +1676,60 @@ namespace Furikiri.Echo.Language
             }
 
             return a.ToString() == b.ToString();
+        }
+
+        /// <summary>
+        /// 输出表达式的逻辑取反形式，不修改原始 AST。
+        /// 用于 De Morgan 变换时避免 mutate 共享节点。
+        /// </summary>
+        private void VisitInverted(Expression expr)
+        {
+            switch (expr)
+            {
+                case BinaryExpression binary:
+                {
+                    var invertedOp = binary.Op switch
+                    {
+                        BinaryOp.Equal => BinaryOp.NotEqual,
+                        BinaryOp.NotEqual => BinaryOp.Equal,
+                        BinaryOp.Congruent => BinaryOp.NotCongruent,
+                        BinaryOp.NotCongruent => BinaryOp.Congruent,
+                        BinaryOp.LessThan => BinaryOp.GreaterOrEqual,
+                        BinaryOp.GreaterThan => BinaryOp.LessOrEqual,
+                        BinaryOp.GreaterOrEqual => BinaryOp.LessThan,
+                        BinaryOp.LessOrEqual => BinaryOp.GreaterThan,
+                        _ => (BinaryOp?)null
+                    };
+
+                    if (invertedOp != null)
+                    {
+                        bool needBrackets = binary.NeedBrackets();
+                        if (needBrackets) _formatter.WriteToken("(");
+                        Visit(binary.Left);
+                        _formatter.WriteSpace();
+                        _formatter.WriteToken(invertedOp.Value.ToSymbol());
+                        _formatter.WriteSpace();
+                        Visit(binary.Right);
+                        if (needBrackets) _formatter.WriteToken(")");
+                    }
+                    else
+                    {
+                        // 无法简单取反的二元运算，用 ! 包裹
+                        _formatter.WriteToken("!");
+                        Visit(binary);
+                    }
+
+                    break;
+                }
+                case UnaryExpression { Op: UnaryOp.Not } unary:
+                    // 双重否定消除: !(!x) => x
+                    Visit(unary.Target);
+                    break;
+                default:
+                    _formatter.WriteToken("!");
+                    Visit(expr);
+                    break;
+            }
         }
 
         internal override void VisitTryStmt(TryStatement tryStmt)
