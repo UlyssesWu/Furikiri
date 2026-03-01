@@ -1133,6 +1133,8 @@ namespace Furikiri.Echo.Language
             _formatter.WriteLine();
 
             _formatter.WriteStartBlock();
+            var savedHideVoidReturn = HideVoidReturn;
+            HideVoidReturn = false;
             Visit(ifStmt.Then);
             _formatter.WriteEndBlock();
             if (ifStmt.Else != null)
@@ -1151,6 +1153,7 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteEndBlock();
                 }
             }
+            HideVoidReturn = savedHideVoidReturn;
 
             AddNewLineAfterStructCtrlStmt();
         }
@@ -1318,6 +1321,8 @@ namespace Furikiri.Echo.Language
             return expression switch
             {
                 InvokeExpression => true,
+                ReturnExpression => true,
+                ThrowExpression => true,
                 BinaryExpression bin when bin.Op == BinaryOp.Assign => true,
                 UnaryExpression unary when unary.Op is UnaryOp.Inc or UnaryOp.Dec or UnaryOp.Invalidate or UnaryOp.Eval => true,
                 _ => false

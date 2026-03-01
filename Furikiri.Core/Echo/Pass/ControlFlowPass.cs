@@ -582,6 +582,30 @@ namespace Furikiri.Echo.Pass
                 @else = savedElse;
             }
 
+            // && 合并路径补充：当 dominator 不等于 falseBlock（如 try 块内部），
+            // 但 true 块的条件的 false 分支指向同一个 falseBlock 时，
+            // 仍可构成 && 短路模式。
+            if (!trueIsContent && dominator != falseBlock)
+            {
+                var trueCondition = trueBlock.Statements.GetCondition();
+                if (trueCondition != null &&
+                    _context.BlockTable.TryGetValue(trueCondition.FalseBranch, out var trueFalseTarget) &&
+                    trueFalseTarget == falseBlock)
+                {
+                    var savedThen = then;
+                    var savedElse = @else;
+                    // 使用共享的 falseBlock 作为递归的 dominator
+                    if (MergeIfCondition(trueCondition, trueBlock, falseBlock, ref merge, ref then, ref @else))
+                    {
+                        trueBlock.Hidden = true;
+                        merge = condition.Condition.And(merge);
+                        return true;
+                    }
+                    then = savedThen;
+                    @else = savedElse;
+                }
+            }
+
             // || merge path: check if falseBlock continues the || chain.
             // Use direct check: falseBlock has a condition whose TrueBranch matches
             // the current trueBlock — this works even when IsBranchContent considers
@@ -639,10 +663,20 @@ namespace Furikiri.Echo.Pass
 
         private bool IsBranchContent(Block block)
         {
-            return block.To.Count < 2 ||
-                   (block.From.Count > 1 &&
-                    block.From.All(b => b.Statements.IsCondition())) || //it's hard to merge sth. like A & (B || C)
-                   block.From.Any(b => !b.Statements.IsCondition());
+            // 非分支块（单出口）→ 内容块
+            if (block.To.Count < 2) return true;
+
+            // 多个前驱且全为纯条件块 → 内容（如 A & (B || C) 模式，难以合并）
+            if (block.From.Count > 1 &&
+                block.From.All(b => b.Statements.IsCondition()))
+                return true;
+
+            // 纯条件块（仅含一个 ConditionExpression）→ 条件链节点，不视为内容
+            if (block.Statements.IsCondition())
+                return false;
+
+            // 有非条件内容（条件之前或之后有其他语句）→ 内容块，不应被合并进条件链
+            return true;
         }
 
         /// <summary>
@@ -785,22 +819,13 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
-            if (!IsBranchContent(thenBlock) || (!IsBranchContent(elseBlock) && !elseIsBreak) || potentialOrChain) //|| !IsBranchContent(elseBlock)
+            // 当 thenBlock 等于后支配节点时，也需要尝试合并条件（即使两个分支
+            // 都是 "content"）。这处理了 JF 跳过 body 块直达汇合点的 if-then 模式。
+            if (!IsBranchContent(thenBlock) || (!IsBranchContent(elseBlock) && !elseIsBreak) || potentialOrChain
+                || (postDominator != null && thenBlock == postDominator))
             {
                 MergeIfCondition(logic, cond);
-                //if (thenBlock.Statements.IsCondition())
-                //{
-                //}
-                //else
-                //{
-                //    return false;
-                //}
             }
-
-            //if (thenBlock.To.Count != 1)
-            //{
-            //    return false;
-            //}
 
             if (logic.Then.Blocks.Count > 0)
             {
@@ -816,21 +841,51 @@ namespace Furikiri.Echo.Pass
                 elseBlock = logic.Else.Blocks[0];
             }
 
-            // 当 then 块的后继中有被隐藏的块（如 try 体）时，查找其可见且位于
-            // then 和 else 之间的延续块，将其加入 then 分支。
-            // 这处理了 try-catch 后续代码被错误放置在 if 作用域外的问题。
+            // 若 thenBlock 本身是条件块（包含嵌套 if），递归结构化。
+            // 当 MergeIfCondition 未处理（非 && / || 链）且 thenBlock 仍为条件块时，
+            // 其内部条件需要被结构化为嵌套 IfStatement，否则会作为独立表达式输出。
+            if (thenBlock.To.Count == 2 && thenBlock.Statements.GetCondition() != null)
+            {
+                if (StructureIfElse(thenBlock, out IfLogic nestedThenIf))
+                {
+                    thenBlock.Statements.Replace(nestedThenIf.Condition, nestedThenIf.Simplify().ToStatement());
+                }
+            }
+
+            // 当 then 块的后继中有被隐藏的块（如 try 体或已结构化的嵌套 if）时，
+            // 迭代查找可见延续块，将它们全部加入 then 分支。
+            // 如果延续块本身包含嵌套条件，同时进行递归结构化。
             if (thenBlock.To.Any(b => b.Hidden))
             {
-                var visibleContinuation = thenBlock.To
-                    .Where(b => !b.Hidden && b != elseBlock
-                                          && b.Start > thenBlock.Start
-                                          && b.Start < elseBlock.Start)
-                    .OrderBy(b => b.Start)
-                    .FirstOrDefault();
-
-                if (visibleContinuation != null)
+                var currentBlock = thenBlock;
+                var visited = new HashSet<int> { thenBlock.Start };
+                while (true)
                 {
+                    var visibleContinuation = currentBlock.To
+                        .Where(b => !b.Hidden && b != elseBlock
+                                              && !visited.Contains(b.Start)
+                                              && b.Start > thenBlock.Start
+                                              && b.Start < elseBlock.Start)
+                        .OrderBy(b => b.Start)
+                        .FirstOrDefault();
+
+                    if (visibleContinuation == null)
+                        break;
+
                     logic.Then.Blocks.Add(visibleContinuation);
+                    visited.Add(visibleContinuation.Start);
+
+                    // 结构化新添加块中的嵌套条件
+                    if (visibleContinuation.To.Count == 2 && visibleContinuation.Statements.GetCondition() != null)
+                    {
+                        if (StructureIfElse(visibleContinuation, out IfLogic nestedContIf))
+                        {
+                            visibleContinuation.Statements.Replace(nestedContIf.Condition,
+                                nestedContIf.Simplify().ToStatement());
+                        }
+                    }
+
+                    currentBlock = visibleContinuation;
                 }
             }
 

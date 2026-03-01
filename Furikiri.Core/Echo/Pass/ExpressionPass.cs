@@ -910,6 +910,7 @@ namespace Furikiri.Echo.Pass
                                         call.SpreadParameterIndices.Add(call.Parameters.Count);
                                     }
 
+                                    arg.Parent = call;
                                     call.Parameters.Add(arg);
                                 }
                             }
@@ -919,6 +920,7 @@ namespace Furikiri.Echo.Pass
                             for (int j = 0; j < paramCount; j++)
                             {
                                 var pSlot = ins.GetRegisterSlot(3 + j);
+                                ex[pSlot].Parent = call;
                                 call.Parameters.Add(ex[pSlot]);
                             }
                         }
