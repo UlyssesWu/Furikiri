@@ -19,6 +19,8 @@ namespace Furikiri.Echo.Language
         private IFormatter _formatter;
         private IndentedTextWriter _writer;
         private readonly HashSet<string> _declaredLocals = new HashSet<string>();
+        // 活跃性分析预计算的有效声明节点集合（null 表示未运行分析，使用旧的 _declaredLocals 兜底）
+        private HashSet<BinaryExpression> _validDeclarations;
         private bool _inForInitializer;
         private bool _inTopLevelBody;
         private CodeObject _currentClass;
@@ -311,8 +313,13 @@ namespace Furikiri.Echo.Language
         {
             var prevInTopLevelBody = _inTopLevelBody;
             var prevDeclaredLocals = new HashSet<string>(_declaredLocals);
+            var prevValidDeclarations = _validDeclarations;
             _inTopLevelBody = !braces;
             _declaredLocals.Clear();
+
+            // 预分析：通过活跃性启发式确定哪些声明节点真正需要 var
+            _validDeclarations = block != null ? new DeclarationAnalyzer().Analyze(block) : null;
+
             if (braces)
             {
                 _formatter.WriteToken("{");
@@ -331,6 +338,7 @@ namespace Furikiri.Echo.Language
             }
 
             _inTopLevelBody = prevInTopLevelBody;
+            _validDeclarations = prevValidDeclarations;
             _declaredLocals.Clear();
             foreach (var declaredLocal in prevDeclaredLocals)
             {
@@ -413,8 +421,15 @@ namespace Furikiri.Echo.Language
             {
                 var declaredName = TryGetDeclaredName(bin.Left);
                 var shouldEmitVar = true;
-                if (!string.IsNullOrEmpty(declaredName) && _declaredLocals.Contains(declaredName) && !_inForInitializer)
+
+                if (_validDeclarations != null)
                 {
+                    // 使用活跃性预分析结果；for 初始化器中始终强制输出 var
+                    shouldEmitVar = _validDeclarations.Contains(bin) || (_inForInitializer && bin.IsDeclaration);
+                }
+                else if (!string.IsNullOrEmpty(declaredName) && _declaredLocals.Contains(declaredName) && !_inForInitializer)
+                {
+                    // 兜底：旧的基于集合追踪的逻辑
                     shouldEmitVar = false;
                 }
 
@@ -424,9 +439,6 @@ namespace Furikiri.Echo.Language
                     //this is to prevent adding `var` before `System.var = a;`
                     //do nothing
                     shouldEmitVar = false;
-                }
-                else
-                {
                 }
 
                 if (shouldEmitVar)
@@ -1875,12 +1887,8 @@ namespace Furikiri.Echo.Language
             _formatter.WriteKeyword("try");
             _formatter.WriteLine();
             _formatter.WriteStartBlock();
-            // try 块中的变量声明使用独立作用域，避免外部 _declaredLocals 抑制 var 关键字
-            var savedDeclaredLocalsForTry = new HashSet<string>(_declaredLocals);
-            _declaredLocals.Clear();
+            // 活跃性预分析已正确处理 try 块中的变量声明，无需重置 _declaredLocals
             Visit(tryStmt.Try);
-            _declaredLocals.Clear();
-            foreach (var local in savedDeclaredLocalsForTry) _declaredLocals.Add(local);
             _formatter.WriteEndBlock();
 
             if (tryStmt.Catch != null)
@@ -1968,6 +1976,180 @@ namespace Furikiri.Echo.Language
                     AstNodeReferencesExpression(tryInner.Try, target),
                 _ => false
             };
+        }
+
+        /// <summary>
+        /// 基于活跃性启发式分析，确定哪些 IsDeclaration=true 的赋值节点需要输出 var。
+        /// 规则：同名变量的后续定义，仅当上一次定义之后发生过读取时（表明旧值已被消费，
+        /// 新赋值属于新的逻辑变量），才视为新声明；否则视为对同一变量的重新赋值，不再加 var。
+        /// </summary>
+        private sealed class DeclarationAnalyzer
+        {
+            // 需要输出 var 的节点集合（按引用相等）
+            private readonly HashSet<BinaryExpression> _validDeclarations =
+                new HashSet<BinaryExpression>(ReferenceEqualityComparer.Instance);
+
+            // liveAfterDef[name] == true：该变量自上次定义后已被读取（旧值仍活跃）
+            private readonly Dictionary<string, bool> _liveAfterDef =
+                new Dictionary<string, bool>();
+
+            internal HashSet<BinaryExpression> Analyze(BlockStatement body)
+            {
+                Walk(body);
+                return _validDeclarations;
+            }
+
+            private void MarkRead(string name)
+            {
+                if (name != null)
+                    _liveAfterDef[name] = true;
+            }
+
+            private void ProcessDefinition(BinaryExpression bin, string name)
+            {
+                if (!_liveAfterDef.TryGetValue(name, out bool live))
+                {
+                    // 首次定义：加入有效声明集合
+                    _validDeclarations.Add(bin);
+                }
+                else if (live)
+                {
+                    // 上次定义后曾被读取过：视为新逻辑变量，加入集合
+                    _validDeclarations.Add(bin);
+                }
+                // else：无中间读取，属于对同一变量的重新赋值，不加 var
+
+                // 重置：新值刚写入，尚未被读取
+                _liveAfterDef[name] = false;
+            }
+
+            private void Walk(IAstNode node)
+            {
+                switch (node)
+                {
+                    case null:
+                        return;
+                    case BlockStatement block:
+                        if (block.Statements != null)
+                            foreach (var stmt in block.Statements)
+                                Walk(stmt);
+                        break;
+                    case ExpressionStatement exprStmt:
+                        Walk(exprStmt.Expression);
+                        break;
+                    case BinaryExpression bin:
+                        WalkBinary(bin);
+                        break;
+                    case LocalExpression local:
+                        // 读取上下文：标记为活跃
+                        MarkRead(local.ToString());
+                        break;
+                    case IdentifierExpression idExpr:
+                        // 简单标识符读取
+                        if (!string.IsNullOrEmpty(idExpr.Name))
+                        {
+                            if (idExpr.Instance == null || !idExpr.FullName.Contains("."))
+                                MarkRead(idExpr.Name);
+                        }
+                        break;
+                    case IfStatement ifStmt:
+                        Walk(ifStmt.Condition);
+                        Walk(ifStmt.Then);
+                        Walk(ifStmt.Else);
+                        break;
+                    case ForStatement forStmt:
+                        Walk(forStmt.Initializer);
+                        Walk(forStmt.Condition);
+                        Walk(forStmt.Body);
+                        Walk(forStmt.Increment);
+                        break;
+                    case WhileStatement whileStmt:
+                        Walk(whileStmt.Condition);
+                        Walk(whileStmt.Body);
+                        break;
+                    case DoWhileStatement doWhile:
+                        Walk(doWhile.Body);
+                        Walk(doWhile.Condition);
+                        break;
+                    case TryStatement tryStmt:
+                        Walk(tryStmt.Try);
+                        Walk(tryStmt.Finally); // catch 块内容存于 Finally
+                        break;
+                    case ReturnExpression ret:
+                        Walk(ret.Return);
+                        break;
+                    case UnaryExpression unary:
+                        // INC/DEC 等自赋值：读取目标（标记活跃），不作为新声明
+                        Walk(unary.Target);
+                        break;
+                    case InvokeExpression invoke:
+                        Walk(invoke.Instance);
+                        Walk(invoke.MethodExpression);
+                        if (invoke.Parameters != null)
+                            foreach (var p in invoke.Parameters)
+                                Walk(p);
+                        break;
+                    case ConditionExpression cond:
+                        Walk(cond.Condition);
+                        break;
+                    case PhiExpression phi:
+                        Walk(phi.Condition?.Condition);
+                        Walk(phi.ThenBranch);
+                        Walk(phi.ElseBranch);
+                        if (phi.PossibleExpressions != null)
+                            foreach (var e in phi.PossibleExpressions)
+                                Walk(e);
+                        break;
+                    case PropertyAccessExpression prop:
+                        Walk(prop.Instance);
+                        break;
+                    case ThrowExpression throwExpr:
+                        Walk(throwExpr.Target);
+                        break;
+                    case DeleteExpression del:
+                        Walk(del.Instance);
+                        break;
+                    case ConstantExpression _:
+                        // Lambda/闭包拥有独立作用域，不向下分析
+                        break;
+                    case CatchExpression _:
+                        // catch 变量属于写入目标，不作为读取处理
+                        break;
+                    // BreakStatement、ContinueStatement 无子节点，不处理
+                }
+            }
+
+            private void WalkBinary(BinaryExpression bin)
+            {
+                if (bin.IsDeclaration && !bin.IsSelfAssignment)
+                {
+                    // 右侧为读取上下文
+                    Walk(bin.Right);
+                    // 左侧为定义目标
+                    var name = TryGetDeclaredName(bin.Left);
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        ProcessDefinition(bin, name);
+                    }
+                    else
+                    {
+                        // 非简单局部变量目标（如 arr[0] = ...），左侧按读取处理
+                        Walk(bin.Left);
+                    }
+                }
+                else if (bin.IsSelfAssignment)
+                {
+                    // 自赋值（v4 += x 等）：双侧均读取，但不产生新声明
+                    Walk(bin.Left);
+                    Walk(bin.Right);
+                }
+                else
+                {
+                    // 普通二元运算：双侧均为读取
+                    Walk(bin.Left);
+                    Walk(bin.Right);
+                }
+            }
         }
     }
 }
