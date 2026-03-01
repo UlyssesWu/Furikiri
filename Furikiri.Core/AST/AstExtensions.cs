@@ -40,9 +40,12 @@ namespace Furikiri.AST
         {
             if (exp is ConditionExpression condition)
             {
-                condition.JumpIf = !condition.JumpIf;
-                condition.Condition = condition.Condition.Invert();
-                return condition;
+                // 返回新实例，避免原地修改共享 ConditionExpression 影响 phi 的 ThenBranch/ElseBranch 关联
+                return new ConditionExpression(condition.Condition.Invert(), !condition.JumpIf)
+                {
+                    JumpTo = condition.JumpTo,
+                    ElseTo = condition.ElseTo
+                };
             }
 
             if (exp is UnaryExpression unary)
@@ -57,30 +60,23 @@ namespace Furikiri.AST
             {
                 switch (binary.Op)
                 {
+                    // 比较运算符：返回新实例，避免原地修改共享引用对象导致双重反转
                     case BinaryOp.Equal:
-                        binary.Op = BinaryOp.NotEqual;
-                        break;
+                        return new BinaryExpression(binary.Left, binary.Right, BinaryOp.NotEqual);
                     case BinaryOp.NotEqual:
-                        binary.Op = BinaryOp.Equal;
-                        break;
+                        return new BinaryExpression(binary.Left, binary.Right, BinaryOp.Equal);
                     case BinaryOp.Congruent:
-                        binary.Op = BinaryOp.NotCongruent;
-                        break;
+                        return new BinaryExpression(binary.Left, binary.Right, BinaryOp.NotCongruent);
                     case BinaryOp.NotCongruent:
-                        binary.Op = BinaryOp.Congruent;
-                        break;
+                        return new BinaryExpression(binary.Left, binary.Right, BinaryOp.Congruent);
                     case BinaryOp.LessThan:
-                        binary.Op = BinaryOp.GreaterOrEqual;
-                        break;
+                        return new BinaryExpression(binary.Left, binary.Right, BinaryOp.GreaterOrEqual);
                     case BinaryOp.GreaterThan:
-                        binary.Op = BinaryOp.LessOrEqual;
-                        break;
+                        return new BinaryExpression(binary.Left, binary.Right, BinaryOp.LessOrEqual);
                     case BinaryOp.GreaterOrEqual:
-                        binary.Op = BinaryOp.LessThan;
-                        break;
+                        return new BinaryExpression(binary.Left, binary.Right, BinaryOp.LessThan);
                     case BinaryOp.LessOrEqual:
-                        binary.Op = BinaryOp.GreaterThan;
-                        break;
+                        return new BinaryExpression(binary.Left, binary.Right, BinaryOp.GreaterThan);
                     // De Morgan 定律: !(A || B) => !A && !B, !(A && B) => !A || !B
                     case BinaryOp.LogicOr:
                         binary.Op = BinaryOp.LogicAnd;

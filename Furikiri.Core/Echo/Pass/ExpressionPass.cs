@@ -1176,9 +1176,9 @@ namespace Furikiri.Echo.Pass
                         //check declare (SPDS with PropertyRef is never a declaration)
                         if (!isPropertyRef && context.Object.ContextType == TjsContextType.TopLevel)
                         {
+                            b.IsDeclaration = true;
                             if (!context.RegisteredMembers.ContainsKey(ident.Name))
                             {
-                                b.IsDeclaration = true;
                                 var stub = new TjsStub();
                                 if (right is ConstantExpression con) //TODO: better type check
                                 {
@@ -1522,6 +1522,8 @@ namespace Furikiri.Echo.Pass
                 if (TryAssignFromCondition(cond, froms, phi, mergeBlock))
                 {
                     var falsePred = froms.FirstOrDefault(b => b.Start == cond.FalseBranch);
+                    // 对 FlagReg 和非 FlagReg（三元结果寄存器）均应用短路与条件合并，
+                    // 以确保形如 (outerCond && innerCond) ? A : B 的三元条件被完整重建
                     if (TryBuildShortCircuitAndCondition(condPred, falsePred, cond.Condition, out var combinedCond))
                     {
                         phi.Condition = new ConditionExpression(combinedCond, cond.JumpIf)
@@ -1545,7 +1547,13 @@ namespace Furikiri.Echo.Pass
                 var otherValue = phi.PossibleExpressions[otherIdx];
                 var trueToMerge = cond.TrueBranch == mergeBlock.Start;
 
-                phi.Condition = cond;
+                // 使用 cond 的浅拷贝，避免 ControlFlowPass 的 MergeIfCondition 修改原始
+                // ConditionExpression.Condition 时影响 phi 的短路语义判断（ThenBranch/cond 引用关系）
+                phi.Condition = new ConditionExpression(cond.Condition, cond.JumpIf)
+                {
+                    JumpTo = cond.JumpTo,
+                    ElseTo = cond.ElseTo
+                };
                 phi.ThenBranch = trueToMerge ? condPredValue : otherValue;
                 phi.ElseBranch = trueToMerge ? otherValue : condPredValue;
                 return;
@@ -1568,6 +1576,7 @@ namespace Furikiri.Echo.Pass
             }
 
             var parentFalsePred = froms.FirstOrDefault(b => b.Start == parentCondition.FalseBranch);
+            // 对所有寄存器均应用短路与条件合并，以完整重建菱形分支模式下的短路三元条件
             if (TryBuildShortCircuitAndCondition(parentCond, parentFalsePred, parentCondition.Condition, out var parentCombinedCond))
             {
                 phi.Condition = new ConditionExpression(parentCombinedCond, parentCondition.JumpIf)

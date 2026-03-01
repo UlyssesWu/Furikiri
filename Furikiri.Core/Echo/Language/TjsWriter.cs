@@ -310,6 +310,7 @@ namespace Furikiri.Echo.Language
         private void WriteMethodBody(BlockStatement block, bool braces)
         {
             var prevInTopLevelBody = _inTopLevelBody;
+            var prevDeclaredLocals = new HashSet<string>(_declaredLocals);
             _inTopLevelBody = !braces;
             _declaredLocals.Clear();
             if (braces)
@@ -330,6 +331,11 @@ namespace Furikiri.Echo.Language
             }
 
             _inTopLevelBody = prevInTopLevelBody;
+            _declaredLocals.Clear();
+            foreach (var declaredLocal in prevDeclaredLocals)
+            {
+                _declaredLocals.Add(declaredLocal);
+            }
         }
 
         public void WriteLine(string line = null)
@@ -401,10 +407,17 @@ namespace Furikiri.Echo.Language
                 return;
             }
 
-            if (bin.IsDeclaration)
+            var treatAsDeclaration = bin.IsDeclaration;
+
+            if (treatAsDeclaration)
             {
                 var declaredName = TryGetDeclaredName(bin.Left);
                 var shouldEmitVar = true;
+                if (!string.IsNullOrEmpty(declaredName) && _declaredLocals.Contains(declaredName) && !_inForInitializer)
+                {
+                    shouldEmitVar = false;
+                }
+
                 if (bin.Left is IdentifierExpression id && id.Instance is IdentifierExpression instance &&
                     !instance.HideInstance)
                 {
@@ -414,11 +427,6 @@ namespace Furikiri.Echo.Language
                 }
                 else
                 {
-                    if (_inForInitializer && !string.IsNullOrEmpty(declaredName) &&
-                        _declaredLocals.Contains(declaredName))
-                    {
-                        shouldEmitVar = false;
-                    }
                 }
 
                 if (shouldEmitVar)
@@ -466,7 +474,7 @@ namespace Furikiri.Echo.Language
                 _formatter.WriteToken(")");
             }
 
-            if (bin.IsDeclaration)
+            if (treatAsDeclaration)
             {
                 var declaredName = TryGetDeclaredName(bin.Left);
                 if (!string.IsNullOrEmpty(declaredName))
@@ -483,6 +491,8 @@ namespace Furikiri.Echo.Language
                 case LocalExpression local:
                     return local.ToString();
                 case IdentifierExpression id when id.Instance == null:
+                    return id.Name;
+                case IdentifierExpression id when !id.FullName.Contains("."):
                     return id.Name;
                 default:
                     return null;
@@ -625,7 +635,20 @@ namespace Furikiri.Echo.Language
 
             if (invoke.Instance != null && !invoke.HideInstance)
             {
+                // 当实例本身是二元表达式（如 a + b）时，需要加括号以正确绑定方法调用
+                // 例如: (System.exePath + lockKey).replace(...) 而非 System.exePath + lockKey.replace(...)
+                bool instanceNeedsParens = invoke.Instance is BinaryExpression or ConditionExpression;
+                if (instanceNeedsParens)
+                {
+                    _formatter.WriteToken("(");
+                }
+
                 Visit(invoke.Instance);
+                if (instanceNeedsParens)
+                {
+                    _formatter.WriteToken(")");
+                }
+
                 _formatter.WriteToken(".");
             }
 
@@ -1027,13 +1050,38 @@ namespace Furikiri.Echo.Language
                         Visit(unary.Target);
                     }
                     break;
-                case UnaryOp.ToInt:
-                case UnaryOp.ToReal:
-                case UnaryOp.ToString:
                 case UnaryOp.ToNumber:
-                case UnaryOp.ToByteArray:
-                    _formatter.WriteToken(unary.Op.ToSymbol());
+                    // TJS2 的一元 + 运算符：将值转换为数值类型
+                    _formatter.WriteToken("+");
                     Visit(unary.Target);
+                    break;
+                case UnaryOp.ToInt:
+                    // TJS2 的 int() 函数调用：转换为整数
+                    _formatter.WriteToken("int");
+                    _formatter.WriteToken("(");
+                    Visit(unary.Target);
+                    _formatter.WriteToken(")");
+                    break;
+                case UnaryOp.ToReal:
+                    // TJS2 的 real() 函数调用：转换为实数
+                    _formatter.WriteToken("real");
+                    _formatter.WriteToken("(");
+                    Visit(unary.Target);
+                    _formatter.WriteToken(")");
+                    break;
+                case UnaryOp.ToString:
+                    // TJS2 的 string() 函数调用：转换为字符串
+                    _formatter.WriteToken("string");
+                    _formatter.WriteToken("(");
+                    Visit(unary.Target);
+                    _formatter.WriteToken(")");
+                    break;
+                case UnaryOp.ToByteArray:
+                    // TJS2 的 octet() 函数调用：转换为字节数组
+                    _formatter.WriteToken("octet");
+                    _formatter.WriteToken("(");
+                    Visit(unary.Target);
+                    _formatter.WriteToken(")");
                     break;
                 case UnaryOp.IsTrue:
                     Visit(unary.Target);
@@ -1303,6 +1351,30 @@ namespace Furikiri.Echo.Language
             return IsSideEffectFreeExpression(rawCond);
         }
 
+        /// <summary>
+        /// 结构性 no-op 判断：只要 then/else 块均无副作用即可，不要求条件本身无副作用。
+        /// 用于识别短路条件产生的、结果已被内联消费的嵌套 IfStatement 占位结构。
+        /// </summary>
+        private static bool IsStructuralNoOpIfStatement(IfStatement ifStmt)
+        {
+            if (ifStmt == null)
+            {
+                return false;
+            }
+
+            if (!IsNoSideEffectBlock(ifStmt.Then))
+            {
+                return false;
+            }
+
+            if (ifStmt.Else != null && !IsNoSideEffectBlock(ifStmt.Else))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         private static bool IsNoSideEffectBlock(Statement statement)
         {
             // ContinueStatement、BreakStatement 等控制流语句有实际作用，不视为无副作用
@@ -1318,6 +1390,17 @@ namespace Furikiri.Echo.Language
 
             foreach (var st in block.Statements)
             {
+                // 嵌套 if 语句：只要 then/else 块均无副作用则视为无副作用（短路条件可能含函数调用，
+                // 但其结果已被内联到下游表达式，此处作为结构性占位，无需输出）
+                if (st is IfStatement nestedIf)
+                {
+                    if (!IsStructuralNoOpIfStatement(nestedIf))
+                    {
+                        return false;
+                    }
+                    continue;
+                }
+
                 if (st is not ExpressionStatement exprStmt || exprStmt.Expression == null)
                 {
                     return false;
@@ -1608,6 +1691,12 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitPhiExpr(PhiExpression phi)
         {
+            if (phi.IsConditional && IsSameExpression(phi.ThenBranch, phi.ElseBranch))
+            {
+                Visit(phi.ThenBranch);
+                return;
+            }
+
             // If this is a conditional Phi (from if-else), output as ternary expression
             if (phi.IsConditional)
             {
@@ -1786,7 +1875,12 @@ namespace Furikiri.Echo.Language
             _formatter.WriteKeyword("try");
             _formatter.WriteLine();
             _formatter.WriteStartBlock();
+            // try 块中的变量声明使用独立作用域，避免外部 _declaredLocals 抑制 var 关键字
+            var savedDeclaredLocalsForTry = new HashSet<string>(_declaredLocals);
+            _declaredLocals.Clear();
             Visit(tryStmt.Try);
+            _declaredLocals.Clear();
+            foreach (var local in savedDeclaredLocalsForTry) _declaredLocals.Add(local);
             _formatter.WriteEndBlock();
 
             if (tryStmt.Catch != null)
@@ -1794,21 +1888,86 @@ namespace Furikiri.Echo.Language
                 _formatter.WriteKeyword("catch");
                 if (tryStmt.Catch.Expression is CatchExpression catchClause && catchClause.Exception != null)
                 {
-                    _formatter.WriteToken("(");
-                    Visit(catchClause.Exception);
-                    _formatter.WriteToken(")");
+                    // 仅当 catch 块实际使用了异常变量时才输出异常参数
+                    var catchBody = tryStmt.Finally;
+                    bool exceptionIsUsed = catchBody != null && CatchBodyReferencesExpression(catchBody, catchClause.Exception);
+                    if (exceptionIsUsed)
+                    {
+                        _formatter.WriteToken("(");
+                        Visit(catchClause.Exception);
+                        _formatter.WriteToken(")");
+                    }
                 }
                 _formatter.WriteLine();
                 _formatter.WriteStartBlock();
                 // Catch body is temporarily stored in Finally
                 if (tryStmt.Finally != null)
                 {
-                    Visit(tryStmt.Finally);
+                    // 跳过平凡的 catch 变量拷贝语句（如 v3 = __e），这是字节码编译器为 catch(e) 生成的人工制品
+                    var catchVarExpr = (tryStmt.Catch.Expression is CatchExpression ce) ? ce.Exception : null;
+                    foreach (var node in tryStmt.Finally.Statements)
+                    {
+                        if (catchVarExpr != null && IsTrivialCatchVarCopy(node, catchVarExpr))
+                            continue;
+                        Visit(node);
+                    }
                 }
                 _formatter.WriteEndBlock();
             }
 
             AddNewLineAfterStructCtrlStmt();
+        }
+
+        /// <summary>
+        /// 检查 catch 块的语句中是否实际引用了指定的表达式对象（引用相等），忽略平凡拷贝
+        /// </summary>
+        private static bool CatchBodyReferencesExpression(BlockStatement block, Expression target)
+        {
+            if (block?.Statements == null || target == null) return false;
+            return block.Statements.Any(stmt =>
+                !IsTrivialCatchVarCopy(stmt, target) && AstNodeReferencesExpression(stmt, target));
+        }
+
+        /// <summary>
+        /// 判断是否为平凡的 catch 变量拷贝语句（如 v3 = __e），即 right-hand side 为 catch 变量本身
+        /// </summary>
+        private static bool IsTrivialCatchVarCopy(IAstNode node, Expression catchVar)
+        {
+            return node is ExpressionStatement exprStmt &&
+                   exprStmt.Expression is BinaryExpression bin &&
+                   bin.Op == BinaryOp.Assign &&
+                   ReferenceEquals(bin.Right, catchVar);
+        }
+
+        private static bool AstNodeReferencesExpression(IAstNode node, Expression target)
+        {
+            if (node == null) return false;
+            if (ReferenceEquals(node, target)) return true;
+            return node switch
+            {
+                BlockStatement block =>
+                    block.Statements?.Any(s => AstNodeReferencesExpression(s, target)) ?? false,
+                ExpressionStatement exprStmt =>
+                    AstNodeReferencesExpression(exprStmt.Expression, target),
+                IfStatement ifStmt =>
+                    AstNodeReferencesExpression(ifStmt.Condition, target) ||
+                    AstNodeReferencesExpression(ifStmt.Then, target) ||
+                    AstNodeReferencesExpression(ifStmt.Else, target),
+                BinaryExpression bin =>
+                    AstNodeReferencesExpression(bin.Left, target) ||
+                    AstNodeReferencesExpression(bin.Right, target),
+                UnaryExpression unary =>
+                    AstNodeReferencesExpression(unary.Target, target),
+                InvokeExpression invoke =>
+                    AstNodeReferencesExpression(invoke.Instance, target) ||
+                    AstNodeReferencesExpression(invoke.MethodExpression, target) ||
+                    (invoke.Parameters?.Any(p => AstNodeReferencesExpression(p, target)) ?? false),
+                ReturnExpression ret =>
+                    AstNodeReferencesExpression(ret.Return, target),
+                TryStatement tryInner =>
+                    AstNodeReferencesExpression(tryInner.Try, target),
+                _ => false
+            };
         }
     }
 }
