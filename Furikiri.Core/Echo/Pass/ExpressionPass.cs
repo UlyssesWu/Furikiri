@@ -458,7 +458,9 @@ namespace Furikiri.Echo.Pass
                         {
                             ex[dstSlot] = u;
                         }
-                        if (dstSlot <= Const.ArgBase)
+                        // INV (invalidate) 是必须作为语句输出的副作用操作，
+                        // 无论目标寄存器是参数槽还是临时寄存器，都应加入 expList。
+                        if (dstSlot <= Const.ArgBase || op == UnaryOp.Invalidate)
                         {
                             expList.Add(u);
                         }
@@ -474,10 +476,10 @@ namespace Furikiri.Echo.Pass
                         var op = UnaryOp.Unknown;
                         switch (ins.OpCode)
                         {
-                            case OpCode.INCPI:
+                            case OpCode.INCPD:
                                 op = UnaryOp.Inc;
                                 break;
-                            case OpCode.DECPI:
+                            case OpCode.DECPD:
                                 op = UnaryOp.Dec;
                                 break;
                             case OpCode.TYPEOFD:
@@ -489,10 +491,17 @@ namespace Furikiri.Echo.Pass
                         var u = new UnaryExpression(new IdentifierExpression(name) {Instance = ex[obj]}, op);
                         if (res != 0) //copy to %res
                         {
+                            u.IsPrefix = true; // INCPD/DECPD 存储操作后的新值，语义上为前置运算符
                             ex[res] = u;
                         }
 
-                        expList.Add(u);
+                        // 只有当结果被丢弃（res==0）时才作为独立语句输出；
+                        // 若 res!=0，结果将被下游指令（如 CEQ）内联使用，
+                        // 不应再作为单独语句输出以避免重复执行。
+                        if (res == 0)
+                        {
+                            expList.Add(u);
+                        }
                     }
                         break;
                     case OpCode.INCPI:
@@ -519,10 +528,14 @@ namespace Furikiri.Echo.Pass
                         var u = new UnaryExpression(new PropertyAccessExpression(ex[name], ex[obj]), op);
                         if (res != 0) //copy to %res
                         {
+                            u.IsPrefix = true; // INCPI/DECPI 存储操作后的新值，语义上为前置运算符
                             ex[res] = u;
                         }
 
-                        expList.Add(u);
+                        if (res == 0)
+                        {
+                            expList.Add(u);
+                        }
                     }
                         break;
                     case OpCode.INCP:

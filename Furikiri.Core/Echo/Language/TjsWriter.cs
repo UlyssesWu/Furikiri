@@ -1053,6 +1053,16 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitUnaryExpr(UnaryExpression unary)
         {
+            // Invalidate 是独立语句操作（invalidate target），
+            // 不应套用自赋值前缀（target = invalidate target 是语义错误）。
+            if (unary.Op == UnaryOp.Invalidate)
+            {
+                _formatter.WriteToken("invalidate");
+                _formatter.WriteSpace();
+                Visit(unary.Target);
+                return;
+            }
+
             if (unary.IsSelfAssignment && !unary.Op.CanSelfAssign())
             {
                 Visit(unary.Target);
@@ -1070,8 +1080,17 @@ namespace Furikiri.Echo.Language
                     //    Visit(unary.Instance);
                     //    _formatter.WriteToken(".");
                     //}
-                    Visit(unary.Target);
-                    _formatter.WriteToken(unary.Op.ToSymbol());
+                    if (unary.IsPrefix)
+                    {
+                        // 前置运算符：++x / --x（对应 INCPD/DECPD 结果寄存器被下游使用）
+                        _formatter.WriteToken(unary.Op.ToSymbol());
+                        Visit(unary.Target);
+                    }
+                    else
+                    {
+                        Visit(unary.Target);
+                        _formatter.WriteToken(unary.Op.ToSymbol());
+                    }
                     break;
                 case UnaryOp.InvertSign:
                     _formatter.WriteToken(unary.Op.ToSymbol());
@@ -1111,11 +1130,12 @@ namespace Furikiri.Echo.Language
                     }
 
                     _formatter.WriteToken(unary.Op.ToSymbol());
-                    // Check if target is an unresolved Phi - if so, just use a placeholder
+                    // 检查目标是否是无法化简的 Phi，若是则输出占位符标识符
                     if (unary.Target is PhiExpression phi && !phi.CanSimplify && !phi.IsConditional)
                     {
-                        // Output the target as a simple local reference instead of the phi
-                        _formatter.WriteIdentifier("p" + Math.Abs(phi.Slot));
+                        // FlagReg = Int32.MinValue，Math.Abs 会溢出，需做特殊处理
+                        var slotId = phi.Slot == Const.FlagReg ? "flag" : Math.Abs(phi.Slot).ToString();
+                        _formatter.WriteIdentifier("p" + slotId);
                     }
                     else
                     {
