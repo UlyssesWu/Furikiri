@@ -612,6 +612,17 @@ namespace Furikiri.Echo.Language
                 return;
             }
 
+            // 当调用目标是 incontextof 表达式时，需要加括号以确保正确的调用语义
+            // 例如: (func incontextof obj)(args) 而非 func incontextof obj(args)
+            bool needMethodParens = invoke.Instance == null &&
+                                    invoke.MethodExpression is BinaryExpression binMethod &&
+                                    binMethod.Op == BinaryOp.InContextOf;
+
+            if (needMethodParens)
+            {
+                _formatter.WriteToken("(");
+            }
+
             if (invoke.Instance != null && !invoke.HideInstance)
             {
                 Visit(invoke.Instance);
@@ -625,6 +636,11 @@ namespace Furikiri.Echo.Language
             else
             {
                 _formatter.WriteIdentifier(invoke.Method);
+            }
+
+            if (needMethodParens)
+            {
+                _formatter.WriteToken(")");
             }
             _formatter.WriteToken("(");
             for (var i = 0; i < invoke.Parameters.Count; i++)

@@ -1136,6 +1136,20 @@ namespace Furikiri.Echo.Pass
                         var name = ins.GetRegisterSlot(1);
                         var src = ins.GetRegisterSlot(2);
 
+                        // 如果目标是字典构造器，将键值对合并到构造器参数中
+                        // 这样 new Dict() + spis key, val 会变成 %[ key => val ]
+                        if (ins.OpCode == OpCode.SPIS &&
+                            ex[obj] is InvokeExpression dictCtor &&
+                            dictCtor.InvokeType == InvokeType.Ctor &&
+                            IsCollectionCtor(dictCtor) &&
+                            dictCtor.MethodExpression is IdentifierExpression dictId &&
+                            dictId.FullName == "global.Dictionary")
+                        {
+                            dictCtor.Parameters.Add(ex[name]);  // key
+                            dictCtor.Parameters.Add(ex[src]);   // value
+                            break;
+                        }
+
                         Expression left = new PropertyAccessExpression(ex[name], ex[obj]);
                         BinaryExpression b = new BinaryExpression(left,
                             ex[src], BinaryOp.Assign);
@@ -1286,6 +1300,12 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
+            // 后处理：将赋值内联到后续调用参数中。
+            // 检测模式：expList[i] = BinaryExpression(Assign, left, right)，
+            // 且 expList[j>i] 是 InvokeExpression，其某个参数与 right 是同一引用。
+            // 此时将该参数替换为赋值表达式本身，实现 foo(obj.prop = val) 的内联。
+            InlineAssignmentIntoCallArgs(expList);
+
             expList.RemoveAll(node => node is Expression exp && exp.Parent != null);
 
             //Save states
@@ -1298,6 +1318,77 @@ namespace Furikiri.Echo.Pass
                 //BlockProcess(context, succ, new Dictionary<int, Expression>(ex)); //TODO: validate if deep copy ex is correct
                 BlockProcess(context, succ);
             }
+        }
+
+        /// <summary>
+        /// 将赋值表达式内联到后续调用参数中。
+        /// 当赋值的右侧表达式被后续调用作为参数使用时，
+        /// 将参数替换为整个赋值表达式（如 foo(a = expr)）。
+        /// 同时处理 ConditionExpression 中的调用（包括被 NOT 包装的情况）。
+        /// </summary>
+        private static void InlineAssignmentIntoCallArgs(List<IAstNode> expList)
+        {
+            for (int i = expList.Count - 2; i >= 0; i--)
+            {
+                if (expList[i] is not BinaryExpression assign || assign.Op != BinaryOp.Assign)
+                    continue;
+
+                // 跳过真正的声明（不应内联 var a = x 到调用参数）
+                // 属性赋值（如 System.appLockKey = ...）虽可能被误标为声明，但仍可内联
+                if (assign.IsDeclaration &&
+                    assign.Left is IdentifierExpression leftId &&
+                    leftId.Instance == null)
+                    continue;
+
+                var right = assign.Right;
+                bool inlined = false;
+
+                // 向后查找使用同一引用的调用表达式
+                for (int j = i + 1; j < expList.Count && !inlined; j++)
+                {
+                    if (expList[j] is InvokeExpression invoke)
+                    {
+                        if (TryInlineIntoInvoke(invoke, right, assign))
+                        {
+                            inlined = true;
+                        }
+                    }
+
+                    // 也检查 ConditionExpression 内部的 InvokeExpression
+                    // TF 指令会对表达式调用 Invert()，产生 UnaryExpression(Not, InvokeExpression)
+                    if (!inlined && expList[j] is ConditionExpression condExpr)
+                    {
+                        // 从条件中提取 InvokeExpression（可能被 NOT 包装）
+                        var condTarget = condExpr.Condition;
+                        if (condTarget is UnaryExpression unary && unary.Op == UnaryOp.Not)
+                            condTarget = unary.Target;
+
+                        if (condTarget is InvokeExpression condInvoke &&
+                            TryInlineIntoInvoke(condInvoke, right, assign))
+                        {
+                            inlined = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 尝试将赋值表达式内联到调用的参数中。
+        /// </summary>
+        private static bool TryInlineIntoInvoke(InvokeExpression invoke, Expression right, BinaryExpression assign)
+        {
+            for (int k = 0; k < invoke.Parameters.Count; k++)
+            {
+                if (ReferenceEquals(invoke.Parameters[k], right))
+                {
+                    invoke.Parameters[k] = assign;
+                    assign.Parent = invoke;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void TryAnnotateConditionalPhi(Block mergeBlock, List<Block> froms, PhiExpression phi)
