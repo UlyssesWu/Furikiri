@@ -94,6 +94,58 @@ namespace Furikiri.Echo.Pass
             return false;
         }
 
+        private static string GetUniqueDerivedLocalName(
+            string baseName,
+            DecompileContext context,
+            Dictionary<int, Expression> ex,
+            List<IAstNode> expList)
+        {
+            if (string.IsNullOrEmpty(baseName))
+            {
+                return baseName;
+            }
+
+            var usedNames = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var variable in context.Vars.Values)
+            {
+                if (!string.IsNullOrEmpty(variable.Name))
+                {
+                    usedNames.Add(variable.Name);
+                }
+            }
+
+            foreach (var local in ex.Values.OfType<LocalExpression>())
+            {
+                if (!string.IsNullOrEmpty(local.VariableDef.Name))
+                {
+                    usedNames.Add(local.VariableDef.Name);
+                }
+            }
+
+            foreach (var assign in expList.OfType<BinaryExpression>())
+            {
+                if (assign.Left is LocalExpression local && !string.IsNullOrEmpty(local.VariableDef.Name))
+                {
+                    usedNames.Add(local.VariableDef.Name);
+                }
+            }
+
+            if (!usedNames.Contains(baseName))
+            {
+                return baseName;
+            }
+
+            for (var suffix = 2;; suffix++)
+            {
+                var candidate = $"{baseName}{suffix}";
+                if (!usedNames.Contains(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
         public void BlockProcess(DecompileContext context, Block block,
             Dictionary<int, Expression> exps = null)
         {
@@ -530,7 +582,8 @@ namespace Furikiri.Echo.Pass
                             // 当局部变量从已知属性/方法赋值时，使用属性名+'_'命名
                             if (declare && l.VariableDef.Name == null && src is IdentifierExpression srcId && srcId.Instance != null && !string.IsNullOrEmpty(srcId.Name))
                             {
-                                l.VariableDef.Name = srcId.Name + "_";
+                                var baseName = srcId.Name + "_";
+                                l.VariableDef.Name = GetUniqueDerivedLocalName(baseName, context, ex, expList);
                             }
 
                             BinaryExpression b = new BinaryExpression(dst, src, BinaryOp.Assign) {IsDeclaration = declare };

@@ -401,7 +401,7 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitBinaryExpr(BinaryExpression bin)
         {
-            if (IsClassAliasDeclaration(bin))
+            if (IsClassAliasDeclaration(bin) || IsTopLevelMemberBinding(bin))
             {
                 if (bin.IsDeclaration)
                 {
@@ -537,6 +537,66 @@ namespace Furikiri.Echo.Language
             // Only suppress aliases for classes that are already emitted explicitly.
             return string.Equals(declaredName, classObj.Object.Name, StringComparison.Ordinal) &&
                    MethodRefs.Any(m => m.Key.Object.Parent == classObj.Object);
+        }
+
+        /// <summary>
+        /// 检测顶层函数/属性成员绑定语句，即形如：
+        ///   var NAME = (function)NAME incontextof this;
+        ///   var NAME = (property)NAME incontextof this;
+        /// 这类语句是 TJS2 字节码在顶层注册成员时产生的冗余语句，
+        /// 对应的函数/属性在源码中已通过 function/property 关键字显式声明，无需重复输出。
+        /// </summary>
+        private bool IsTopLevelMemberBinding(BinaryExpression bin)
+        {
+            if (!_inTopLevelBody || bin?.Op != BinaryOp.Assign || !bin.IsDeclaration)
+            {
+                return false;
+            }
+
+            // 右侧必须是 xxx incontextof this
+            if (bin.Right is not BinaryExpression ico || ico.Op != BinaryOp.InContextOf)
+            {
+                return false;
+            }
+
+            // incontextof 右侧必须是 this
+            if (ico.Right is not IdentifierExpression thisId || thisId.IdentifierType != IdentifierType.This)
+            {
+                return false;
+            }
+
+            // incontextof 左侧必须是一个 TjsCodeObject 常量（函数或属性）
+            if (ico.Left is not ConstantExpression codeObjConst || codeObjConst.Variant is not TjsCodeObject codeObj)
+            {
+                return false;
+            }
+
+            var ctxType = codeObj.Object?.ContextType;
+            if (ctxType != TjsContextType.Function && ctxType != TjsContextType.Property)
+            {
+                return false;
+            }
+
+            // 被赋值的变量名必须与 CodeObject 名称一致
+            var declaredName = TryGetDeclaredName(bin.Left);
+            if (string.IsNullOrEmpty(declaredName) && bin.Left is IdentifierExpression idLeft)
+            {
+                declaredName = idLeft.Name;
+            }
+            if (string.IsNullOrEmpty(declaredName))
+            {
+                return false;
+            }
+
+            if (!string.Equals(declaredName, codeObj.Object.Name, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // 仅当对应函数或属性已在 MethodRefs/PropertyRefs 中登记时才隐藏
+            bool alreadyDefined = MethodRefs.Any(m => m.Key.Object == codeObj.Object) ||
+                                  PropertyRefs.Any(p => p.Key.Object == codeObj.Object);
+            return alreadyDefined;
         }
 
         private static bool IsGlobalCtor(InvokeExpression invoke, string typeName)
