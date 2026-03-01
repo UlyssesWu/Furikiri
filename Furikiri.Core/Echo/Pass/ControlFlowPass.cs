@@ -715,6 +715,106 @@ namespace Furikiri.Echo.Pass
             }
         }
 
+        /// <summary>
+        /// 将延续块的 "if (negated_cond) goto after_scope" 模式转换为正向条件的 then-only if。
+        /// 编译器将 if (COND) { body } 编译为 "if (!COND) skip; body"，
+        /// 导致 TrueBranch 指向 scope 外部（elseBlock）。
+        /// 此方法反转条件，将 FalseBranch（实际 body）作为 then，无 else。
+        /// </summary>
+        private void StructureContinuationAsInvertedIf(
+            Block block, ConditionExpression cond, Block outerElseBlock)
+        {
+            var invertedCond = (ConditionExpression)cond.Invert();
+            var bodyBlock = _context.BlockTable[invertedCond.TrueBranch];
+
+            var innerLogic = new IfLogic
+            {
+                ConditionBlock = block,
+                Condition = invertedCond,
+                PostDominator = outerElseBlock,
+                Then = { Blocks = new List<Block> { bodyBlock } },
+                Else = { Type = LogicalBlockType.None }
+            };
+
+            // 递归结构化 body 块
+            if (bodyBlock.To.Count == 2 && bodyBlock.Statements.GetCondition() != null)
+            {
+                if (StructureIfElse(bodyBlock, out IfLogic innerIf))
+                {
+                    bodyBlock.Statements.Replace(innerIf.Condition, innerIf.Simplify().ToStatement());
+                }
+            }
+
+            // 在 body 分支内查找延续块
+            if (bodyBlock.To.Any(b => b.Hidden))
+            {
+                var bodyVisited = new HashSet<int> { bodyBlock.Start };
+                var bodyCurrentBlock = bodyBlock;
+                while (true)
+                {
+                    var bodyCont = FindVisibleContinuation(
+                        bodyCurrentBlock, bodyVisited, bodyBlock, outerElseBlock);
+                    if (bodyCont == null) break;
+                    innerLogic.Then.Blocks.Add(bodyCont);
+                    bodyVisited.Add(bodyCont.Start);
+
+                    if (bodyCont.To.Count == 2 && bodyCont.Statements.GetCondition() != null)
+                    {
+                        if (StructureIfElse(bodyCont, out IfLogic nestedCont2))
+                        {
+                            bodyCont.Statements.Replace(nestedCont2.Condition,
+                                nestedCont2.Simplify().ToStatement());
+                        }
+                    }
+
+                    bodyCurrentBlock = bodyCont;
+                }
+            }
+
+            block.Statements.Replace(cond, innerLogic.Simplify().ToStatement());
+        }
+
+        /// <summary>
+        /// 通过 BFS 穿越隐藏块查找下一个可见延续块。
+        /// 当 if/try 等结构化操作隐藏了中间块后，直接后继可能全部不可见，
+        /// 需要沿着隐藏块的后继链传递，直到找到第一个可见的延续块。
+        /// </summary>
+        private Block FindVisibleContinuation(Block currentBlock, HashSet<int> visited, Block thenBlock, Block elseBlock)
+        {
+            var queue = new Queue<Block>();
+            var seen = new HashSet<int>(visited);
+
+            foreach (var t in currentBlock.To)
+            {
+                if (!seen.Contains(t.Start))
+                    queue.Enqueue(t);
+            }
+
+            while (queue.Count > 0)
+            {
+                var b = queue.Dequeue();
+                if (seen.Contains(b.Start))
+                    continue;
+                seen.Add(b.Start);
+
+                // 不越过 else 块或超出范围
+                if (b == elseBlock || b.Start >= elseBlock.Start || b.Start <= thenBlock.Start)
+                    continue;
+
+                if (!b.Hidden)
+                    return b;
+
+                // 隐藏块：继续沿其后继传递
+                foreach (var next in b.To)
+                {
+                    if (!seen.Contains(next.Start))
+                        queue.Enqueue(next);
+                }
+            }
+
+            return null;
+        }
+
         internal bool StructureIfElse(Block block, out IfLogic outIf)
         {
             outIf = null;
@@ -855,19 +955,15 @@ namespace Furikiri.Echo.Pass
             // 当 then 块的后继中有被隐藏的块（如 try 体或已结构化的嵌套 if）时，
             // 迭代查找可见延续块，将它们全部加入 then 分支。
             // 如果延续块本身包含嵌套条件，同时进行递归结构化。
+            // 通过 BFS 穿越隐藏块来查找可见延续块，处理多层嵌套结构。
             if (thenBlock.To.Any(b => b.Hidden))
             {
                 var currentBlock = thenBlock;
                 var visited = new HashSet<int> { thenBlock.Start };
                 while (true)
                 {
-                    var visibleContinuation = currentBlock.To
-                        .Where(b => !b.Hidden && b != elseBlock
-                                              && !visited.Contains(b.Start)
-                                              && b.Start > thenBlock.Start
-                                              && b.Start < elseBlock.Start)
-                        .OrderBy(b => b.Start)
-                        .FirstOrDefault();
+                    var visibleContinuation = FindVisibleContinuation(
+                        currentBlock, visited, thenBlock, elseBlock);
 
                     if (visibleContinuation == null)
                         break;
@@ -878,7 +974,18 @@ namespace Furikiri.Echo.Pass
                     // 结构化新添加块中的嵌套条件
                     if (visibleContinuation.To.Count == 2 && visibleContinuation.Statements.GetCondition() != null)
                     {
-                        if (StructureIfElse(visibleContinuation, out IfLogic nestedContIf))
+                        var contCond = visibleContinuation.Statements.GetCondition();
+
+                        // 检查延续块的 TrueBranch 是否指向外部 elseBlock（或超出范围）。
+                        // 这表示编译器生成的 "if (negated_cond) goto after_scope" 模式，
+                        // 需要反转条件并将实际 body 作为 then 分支，无 else。
+                        if (contCond != null &&
+                            contCond.TrueBranch >= elseBlock.Start)
+                        {
+                            StructureContinuationAsInvertedIf(
+                                visibleContinuation, contCond, elseBlock);
+                        }
+                        else if (StructureIfElse(visibleContinuation, out IfLogic nestedContIf))
                         {
                             visibleContinuation.Statements.Replace(nestedContIf.Condition,
                                 nestedContIf.Simplify().ToStatement());
@@ -889,8 +996,21 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
+            // 检查最后一个 then 块（可能是延续块）是否直接落入 elseBlock，
+            // 以确定 elseBlock 是后续代码而非真正的 else 分支。
+            var lastThenBlock = logic.Then.Blocks.Count > 0
+                ? logic.Then.Blocks[logic.Then.Blocks.Count - 1]
+                : thenBlock;
+
             if (thenBlock.To[0] == elseBlock)
             {
+                logic.Else.Type = LogicalBlockType.None;
+            }
+            else if (logic.Then.Blocks.Count > 1
+                     && logic.Then.Blocks.Any(b => b.To.Contains(elseBlock)))
+            {
+                // then 分支中存在延续块能直接落入 elseBlock，
+                // 说明 elseBlock 是 if 之后的顺序代码而非 else 分支。
                 logic.Else.Type = LogicalBlockType.None;
             }
             else if (postDominator != null && elseBlock == postDominator
