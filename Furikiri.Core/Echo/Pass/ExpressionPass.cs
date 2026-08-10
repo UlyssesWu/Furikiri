@@ -194,7 +194,10 @@ namespace Furikiri.Echo.Pass
                                 var phi = new PhiExpression(k);
                                 phi.PossibleExpressions.AddRange(expsList);
                                 TryAnnotateConditionalPhi(block, fromsExceptSelf, phi);
-                                finalStates[k] = phi;
+                                // 在构造后再次用语义相等性检测：Equals 依赖引用相等，
+                                // 但两个指向相同槽位的 LocalExpression 实例不是同一对象。
+                                // CanSimplify 使用 AreSemanticallyEqual（按槽位/值比较）更为准确。
+                                finalStates[k] = phi.CanSimplify ? phi.Simplify() : (Expression)phi;
                             }
                         }
                         else
@@ -627,6 +630,13 @@ namespace Furikiri.Echo.Pass
                                     expList.Insert(firstAssignIndex, b);
                                     insertedDeclarationAtArrayInit = true;
                                 }
+                            }
+                            else if (srcSlot > Const.ArgBase)
+                            {
+                                // 当临时寄存器被赋给命名局部变量后，将该临时寄存器重定向到局部变量。
+                                // 这样后续指令（如 CDEQ）对同一临时寄存器的引用会变成对命名局部变量的引用，
+                                // 而不是再次展开原始表达式（如重复函数调用）。
+                                ex[srcSlot] = l;
                             }
 
                             if (!insertedDeclarationAtArrayInit)

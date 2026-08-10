@@ -305,6 +305,11 @@ namespace Furikiri.Echo.Pass
                     {
                         phi.ThenBranch = ReplacePhi(phi.ThenBranch);
                         phi.ElseBranch = ReplacePhi(phi.ElseBranch);
+                        // 若两个分支化简后语义相同，直接返回分支值，避免生成多余的三元表达式
+                        if (AreBranchesEqual(phi.ThenBranch, phi.ElseBranch))
+                        {
+                            return phi.ThenBranch;
+                        }
                         return phi;
                     }
 
@@ -337,6 +342,22 @@ namespace Furikiri.Echo.Pass
                 }
 
                 return expr;
+            }
+
+            /// <summary>
+            /// 判断两个分支表达式在语义上是否相同，用于简化分支相同的条件 Phi 节点。
+            /// 保守实现：仅对局部变量（同槽位）和常量进行比较。
+            /// </summary>
+            private static bool AreBranchesEqual(Expression a, Expression b)
+            {
+                if (a == null && b == null) return true;
+                if (a == null || b == null) return false;
+                if (ReferenceEquals(a, b)) return true;
+                if (a is LocalExpression la && b is LocalExpression lb)
+                    return la.Slot == lb.Slot;
+                if (a is ConstantExpression ca && b is ConstantExpression cb)
+                    return ca.Variant?.Equals(cb.Variant) ?? cb.Variant == null;
+                return false;
             }
         }
 

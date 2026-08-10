@@ -23,6 +23,8 @@ namespace Furikiri.Echo.Language
         private HashSet<BinaryExpression> _validDeclarations;
         private bool _inForInitializer;
         private bool _inTopLevelBody;
+        // 已识别为默认参数的 if 语句集合，写函数体时跳过这些语句
+        private readonly HashSet<IAstNode> _defaultParamStmtsToSkip = new HashSet<IAstNode>();
         private CodeObject _currentClass;
         private string _currentClassSuperFullName;
         public Dictionary<Method, BlockStatement> MethodRefs = new Dictionary<Method, BlockStatement>();
@@ -54,7 +56,7 @@ namespace Furikiri.Echo.Language
             }
         }
 
-        private void WriteSignature(Method method)
+        private void WriteSignature(Method method, Dictionary<string, Expression> defaults = null)
         {
             if (method.Object.ContextType == TjsContextType.TopLevel)
             {
@@ -70,28 +72,8 @@ namespace Furikiri.Echo.Language
             }
 
             _formatter.WriteToken("(");
-            //parameters
             var paramList = GetParameterList(method);
-            if (paramList.Count > 0)
-            {
-                for (int i = 0; i < paramList.Count - 1; i++)
-                {
-                    _formatter.WriteIdentifier(paramList[i].ToString());
-                    if (paramList[i].IsNamedArray)
-                    {
-                        _formatter.WriteToken("*");
-                    }
-                    _formatter.WriteToken(",");
-                    _formatter.WriteSpace();
-                }
-
-                _formatter.WriteIdentifier(paramList[paramList.Count - 1].ToString());
-                if (paramList[paramList.Count - 1].IsNamedArray)
-                {
-                    _formatter.WriteToken("*");
-                }
-            }
-
+            WriteParamList(paramList, defaults ?? new Dictionary<string, Expression>());
             _formatter.WriteToken(")");
             _formatter.WriteLine();
         }
@@ -105,13 +87,120 @@ namespace Furikiri.Echo.Language
         }
 
         /// <summary>
+        /// 从函数体开头提取形如 if (param === void) { param = defaultValue; } 的默认参数语句。
+        /// 将识别出的语句加入 _defaultParamStmtsToSkip，返回参数名到默认值表达式的映射。
+        /// </summary>
+        private Dictionary<string, Expression> ExtractDefaultParams(List<Variable> paramList, BlockStatement block)
+        {
+            var defaults = new Dictionary<string, Expression>();
+            _defaultParamStmtsToSkip.Clear();
+            if (block?.Statements == null || paramList.Count == 0) return defaults;
+
+            var paramNames = new HashSet<string>(paramList.Select(p => p.ToString()));
+
+            foreach (var stmt in block.Statements)
+            {
+                if (stmt is IfStatement ifs && ifs.Else == null)
+                {
+                    // 解包 ConditionExpression（IfStatement.Condition 通常是 ConditionExpression 包装）
+                    BinaryExpression cond = null;
+                    if (ifs.Condition is ConditionExpression condExpr && condExpr.Condition is BinaryExpression condBin)
+                        cond = condBin;
+                    else if (ifs.Condition is BinaryExpression directBin)
+                        cond = directBin;
+
+                    if (cond == null || cond.Op != BinaryOp.Congruent) break;
+
+                    // 检查条件左侧是否为参数变量
+                    string paramName = null;
+                    if (cond.Left is LocalExpression localLeft && paramNames.Contains(localLeft.Name))
+                        paramName = localLeft.Name;
+                    else if (cond.Left is IdentifierExpression idLeft && paramNames.Contains(idLeft.Name))
+                        paramName = idLeft.Name;
+
+                    if (paramName == null) break;
+
+                    // 检查条件右侧是否为 void
+                    if (!(cond.Right is ConstantExpression constRight && constRight.DataType == TjsVarType.Void))
+                        break;
+
+                    // 检查 then 分支是否为单条赋值：param = defaultValue
+                    Expression defaultExpr = null;
+                    if (ifs.Then is BlockStatement thenBlock && thenBlock.Statements?.Count == 1)
+                        defaultExpr = TryExtractParamAssignment(thenBlock.Statements[0], paramName);
+                    else if (ifs.Then is ExpressionStatement)
+                        defaultExpr = TryExtractParamAssignment(ifs.Then, paramName);
+
+                    if (defaultExpr == null) break;
+
+                    defaults[paramName] = defaultExpr;
+                    _defaultParamStmtsToSkip.Add(stmt);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return defaults;
+        }
+
+        /// <summary>
+        /// 尝试从节点中提取 param = value 赋值的右值，若匹配给定参数名则返回，否则返回 null。
+        /// </summary>
+        private static Expression TryExtractParamAssignment(IAstNode node, string paramName)
+        {
+            if (node is not ExpressionStatement es) return null;
+            if (es.Expression is BinaryExpression assign && assign.Op == BinaryOp.Assign)
+            {
+                string lhsName = null;
+                if (assign.Left is LocalExpression local) lhsName = local.Name;
+                else if (assign.Left is IdentifierExpression id) lhsName = id.Name;
+                if (lhsName == paramName) return assign.Right;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 将参数列表写入输出，支持默认值（param=value 语法）。
+        /// </summary>
+        private void WriteParamList(List<Variable> paramList, Dictionary<string, Expression> defaults)
+        {
+            if (paramList.Count == 0) return;
+            for (int i = 0; i < paramList.Count - 1; i++)
+            {
+                _formatter.WriteIdentifier(paramList[i].ToString());
+                if (paramList[i].IsNamedArray)
+                    _formatter.WriteToken("*");
+                if (defaults.TryGetValue(paramList[i].ToString(), out var defVal))
+                {
+                    _formatter.WriteToken("=");
+                    Visit(defVal);
+                }
+                _formatter.WriteToken(",");
+                _formatter.WriteSpace();
+            }
+            var last = paramList[paramList.Count - 1];
+            _formatter.WriteIdentifier(last.ToString());
+            if (last.IsNamedArray)
+                _formatter.WriteToken("*");
+            if (defaults.TryGetValue(last.ToString(), out var lastDef))
+            {
+                _formatter.WriteToken("=");
+                Visit(lastDef);
+            }
+        }
+
+        /// <summary>
         /// Write Function
         /// </summary>
         /// <param name="method"></param>
         /// <param name="block"></param>
         public void WriteFunction(Method method, BlockStatement block)
         {
-            WriteSignature(method);
+            var paramList = GetParameterList(method);
+            var defaults = ExtractDefaultParams(paramList, block);
+            WriteSignature(method, defaults);
             WriteMethodBody(block, method.Object.ContextType != TjsContextType.TopLevel);
         }
 
@@ -127,20 +216,11 @@ namespace Furikiri.Echo.Language
 
             if (property.Setter != null && setterBlock != null)
             {
+                var setterParams = GetParameterList(property.Setter);
+                var setterDefaults = ExtractDefaultParams(setterParams, setterBlock);
                 _formatter.WriteKeyword("setter");
                 _formatter.WriteToken("(");
-                var setterParams = GetParameterList(property.Setter);
-                for (var i = 0; i < setterParams.Count; i++)
-                {
-                    if (i > 0)
-                    {
-                        _formatter.WriteToken(",");
-                        _formatter.WriteSpace();
-                    }
-
-                    _formatter.WriteIdentifier(setterParams[i].ToString());
-                }
-
+                WriteParamList(setterParams, setterDefaults);
                 _formatter.WriteToken(")");
                 _formatter.WriteLine();
                 WriteMethodBody(setterBlock, true);
@@ -226,31 +306,13 @@ namespace Furikiri.Echo.Language
 
         private void WriteClassMethod(Method method, BlockStatement block)
         {
+            var paramList = GetParameterList(method);
+            var defaults = ExtractDefaultParams(paramList, block);
             _formatter.WriteKeyword("function");
             _formatter.WriteSpace();
             _formatter.WriteIdentifier(method.Name);
             _formatter.WriteToken("(");
-            var paramList = GetParameterList(method);
-            if (paramList.Count > 0)
-            {
-                for (int i = 0; i < paramList.Count - 1; i++)
-                {
-                    _formatter.WriteIdentifier(paramList[i].ToString());
-                    if (paramList[i].IsNamedArray)
-                    {
-                        _formatter.WriteToken("*");
-                    }
-                    _formatter.WriteToken(",");
-                    _formatter.WriteSpace();
-                }
-
-                _formatter.WriteIdentifier(paramList[paramList.Count - 1].ToString());
-                if (paramList[paramList.Count - 1].IsNamedArray)
-                {
-                    _formatter.WriteToken("*");
-                }
-            }
-
+            WriteParamList(paramList, defaults);
             _formatter.WriteToken(")");
             _formatter.WriteLine();
             WriteMethodBody(block, true);
@@ -269,20 +331,11 @@ namespace Furikiri.Echo.Language
 
             if (property.Setter != null && setterBlock != null)
             {
+                var setterParams = GetParameterList(property.Setter);
+                var setterDefaults = ExtractDefaultParams(setterParams, setterBlock);
                 _formatter.WriteKeyword("setter");
                 _formatter.WriteToken("(");
-                var setterParams = GetParameterList(property.Setter);
-                for (var i = 0; i < setterParams.Count; i++)
-                {
-                    if (i > 0)
-                    {
-                        _formatter.WriteToken(",");
-                        _formatter.WriteSpace();
-                    }
-
-                    _formatter.WriteIdentifier(setterParams[i].ToString());
-                }
-
+                WriteParamList(setterParams, setterDefaults);
                 _formatter.WriteToken(")");
                 _formatter.WriteLine();
                 WriteMethodBody(setterBlock, true);
@@ -1004,6 +1057,10 @@ namespace Furikiri.Echo.Language
 
             for (var i = 0; i < block.Statements.Count; i++)
             {
+                // 跳过已识别为默认参数的 if 语句（已写入函数签名）
+                if (_defaultParamStmtsToSkip.Contains(block.Statements[i]))
+                    continue;
+
                 var statement = block.Statements[i] as Statement;
                 if (Config.UseCollectionLiteralWhenPossible &&
                     statement != null &&
