@@ -80,6 +80,212 @@ namespace Furikiri.Tests
         }
 
         [TestMethod]
+        public void TestSemanticControlFlowRecovery()
+        {
+            var path = "..\\..\\..\\Res\\SemanticControlFlow.tjs.comp";
+            var result = new Decompiler(path).Decompile();
+
+            StringAssert.Contains(result, "var owner;");
+            StringAssert.Contains(result, "var number;");
+            StringAssert.Contains(result,
+                "if (p4 === void || typeof p3.isBitmap == \"Object\" && !p3.isBitmap())");
+            StringAssert.Contains(result, "if (p3 !== void && p3.pos !== void)");
+            StringAssert.Contains(result,
+                "if (p3.mode == \"\" || p3.mode == \"pile\" || p3.mode == \"alpha\")");
+            StringAssert.Contains(result, "else if (p3.mode == \"addalpha\")");
+            StringAssert.Contains(result, "face = dfAddAlpha;");
+            StringAssert.Contains(result, "face = dfOpaque;");
+            StringAssert.Contains(result, "done = 1;");
+            StringAssert.Contains(result, "p4 !== void && isvalid p3");
+            StringAssert.Contains(result, "p3.removeHook(p4);");
+            StringAssert.Contains(result, "term();");
+            StringAssert.Contains(result, "finish();");
+            StringAssert.Contains(result,
+                "p3 !== void && p3.charAt(0) == \";\" && p3.charAt(1) == \"!\"");
+            StringAssert.Contains(result, "for (var v5 = 0; v5 < p4.count; v5++)");
+            StringAssert.Contains(result,
+                "p4[v5] = \".\" + p4[v5] + ((p4[v5].indexOf(\"=\") < 0) ? \"=true\" : \"\");");
+            var optionsBody = SliceBetween(result, "function options", "function position");
+            Assert.IsFalse(optionsBody.Contains("continue;", StringComparison.Ordinal),
+                "三元表达式的取值分支不应被误恢复为 continue");
+            StringAssert.Contains(result, "if (p3 !== void && +p3)");
+            StringAssert.Contains(result, "act();");
+            StringAssert.Contains(result, "return -4;");
+            StringAssert.Contains(result,
+                "angle = ((p4 === void) ? (p3 ? 2700 : 0) : +p4);");
+            StringAssert.Contains(result,
+                "selected = (p3 ? p4 : ((p5 > p6) ? p6 : p5));");
+            StringAssert.Contains(result, "return (p3 || (p4 && p5));");
+            StringAssert.Contains(result, "if (p3 == null)");
+            Assert.IsFalse(result.Contains("Furikiri.Emit.TjsObject", StringComparison.Ordinal),
+                "TJS2 的 null 对象常量不应泄漏为 CLR 类型名");
+            StringAssert.Contains(result, "p4 == KEY_LEFT || p4 == KEY_PRIOR");
+            StringAssert.Contains(result, "p4 == KEY_RIGHT || p4 == KEY_NEXT");
+            var nestedEqualityBody = SliceBetween(
+                result, "function nestedEqualityDispatch", "function nestedReverseLoops");
+            StringAssert.Contains(nestedEqualityBody, "if (p3 == \"click\")");
+            StringAssert.Contains(nestedEqualityBody, "if (p4 == TARGET_YES)");
+            StringAssert.Contains(nestedEqualityBody, "else if (p4 == TARGET_NO)");
+            Assert.AreEqual(1, CountOccurrences(nestedEqualityBody, "first();"),
+                "嵌套相等比较的首个分支副作用不能被提升或重复输出");
+            StringAssert.Contains(result, "if (p3 == 1 || p3 == 2)");
+            StringAssert.Contains(result, "second();");
+            StringAssert.Contains(result, "third();");
+            StringAssert.Contains(result, "afterSwitch();");
+            StringAssert.Contains(result, "if (v9)");
+            StringAssert.Contains(result, "v7 += p6[v9 >> 2];");
+            StringAssert.Contains(result,
+                "if (v12 == 1 && (v11 != 3 || v9 <= 4))");
+            StringAssert.Contains(result, "v7 += p4[v12] + p5[v11];");
+            StringAssert.Contains(result, "v7 += p5[v11];");
+            var switchLoopBody = result[result.IndexOf("function switchLoop", StringComparison.Ordinal)..];
+            Assert.AreEqual(1, CountOccurrences(switchLoopBody, "var v8 = 0;"),
+                "循环内重置已有标志变量时不应重复输出 var 声明");
+            StringAssert.Contains(result, "if (v9 >= \"0\" && v9 <= \"9\")");
+            StringAssert.Contains(result, "v7 += p4[+v9];");
+            StringAssert.Contains(result, "v7 += v9;");
+            var delayedForBody = SliceBetween(result, "function delayedForInitializer", "function rangeBreak");
+            StringAssert.Contains(delayedForBody, "for (var v5 = 0; v5 < count_; v5++)");
+            StringAssert.Contains(delayedForBody, "continue;");
+            Assert.IsFalse(delayedForBody.Contains("if (p3[v5] == \"\")\r\n        {\r\n        }", StringComparison.Ordinal),
+                "循环前还有缓存赋值时，也应按步进变量找到初始化并恢复 continue");
+            var assignmentLoopBody = SliceBetween(result, "function assignmentConditionLoop", "function callOnce");
+            StringAssert.Contains(assignmentLoopBody, "while ((v5 = p3[v4++]) !== void)");
+            StringAssert.Contains(assignmentLoopBody, "touch();");
+            StringAssert.Contains(assignmentLoopBody, "break;");
+            StringAssert.Contains(assignmentLoopBody, "continue;");
+            var conditionalLatchBody = SliceBetween(
+                result, "function conditionalLatchLoop", "function delayedForInitializer");
+            StringAssert.Contains(conditionalLatchBody, "while (v4 < count_)");
+            StringAssert.Contains(conditionalLatchBody, "count_--;");
+            StringAssert.Contains(conditionalLatchBody, "else\r\n            {");
+            StringAssert.Contains(conditionalLatchBody, "v4++;");
+            Assert.IsFalse(conditionalLatchBody.Contains("for (", StringComparison.Ordinal),
+                "多个条件化回边不能被提升成带无条件步进的 for");
+            var shortCircuitLoopBody = SliceBetween(
+                result, "function loopShortCircuitBody", "function mode");
+            StringAssert.Contains(shortCircuitLoopBody, "if (p5 || p4 === void");
+            StringAssert.Contains(shortCircuitLoopBody, "v7.run === void");
+            StringAssert.Contains(shortCircuitLoopBody, "p4 === void && !v7.done");
+            StringAssert.Contains(shortCircuitLoopBody, "mark(v7);");
+            StringAssert.Contains(shortCircuitLoopBody, "if (!interrupted)");
+            StringAssert.Contains(shortCircuitLoopBody, "if (timerEnabled)");
+            StringAssert.Contains(shortCircuitLoopBody, "queued(v7);");
+            StringAssert.Contains(shortCircuitLoopBody, "direct(v7);");
+            var initializedSideEffectBody = SliceBetween(
+                result, "function initializedSideEffectGuard", "function loopShortCircuitBody");
+            StringAssert.Contains(initializedSideEffectBody,
+                "if (off_ && setVisible(0) || on_ && setVisible(1))");
+            StringAssert.Contains(initializedSideEffectBody, "return -3;");
+            StringAssert.Contains(initializedSideEffectBody, "afterVisibility();");
+            var sideEffectGuardBody = SliceBetween(
+                result, "function sideEffectGuard", "function sideEffectWithGuard");
+            StringAssert.Contains(sideEffectGuardBody,
+                "if (p3 && setVisible(0) || p4 && setVisible(1))");
+            Assert.IsTrue(sideEffectGuardBody.IndexOf("setVisible(0)", StringComparison.Ordinal) <
+                          sideEffectGuardBody.IndexOf("setVisible(1)", StringComparison.Ordinal),
+                "短路链中的调用顺序必须与 CFG 一致");
+            StringAssert.Contains(sideEffectGuardBody, "afterVisibility();");
+            var sideEffectWithGuardBody = SliceBetween(
+                result, "function sideEffectWithGuard", "function switchLoop");
+            StringAssert.Contains(sideEffectWithGuardBody,
+                "if (p4 && setVisible(0) || p5 && setVisible(1))");
+            StringAssert.Contains(sideEffectWithGuardBody, "afterVisibility();");
+            var gatedMultiWayBody = SliceBetween(
+                result, "function gatedMultiWay", "function groupedSwitch");
+            StringAssert.Contains(gatedMultiWayBody, "if (p3)");
+            StringAssert.Contains(gatedMultiWayBody, "if (p4 == 1)");
+            StringAssert.Contains(gatedMultiWayBody, "else if (p4 == 2)");
+            Assert.IsTrue(gatedMultiWayBody.LastIndexOf("afterChoice();", StringComparison.Ordinal) >
+                          gatedMultiWayBody.LastIndexOf("else if (p4 == 2)", StringComparison.Ordinal),
+                "外围 gate 结束后才应执行公共继续语句");
+            var multiWayNoDefaultBody = SliceBetween(
+                result, "function multiWayNoDefault", "function nestedEqualityDispatch");
+            StringAssert.Contains(multiWayNoDefaultBody, "if (p3 == 1)");
+            StringAssert.Contains(multiWayNoDefaultBody, "else if (p3 == 2)");
+            StringAssert.Contains(multiWayNoDefaultBody, "afterChoice();");
+            var tryChoiceStart = result.IndexOf("function tryThenElseChoice", StringComparison.Ordinal);
+            Assert.IsTrue(tryChoiceStart >= 0, "找不到 try/catch 分支回归函数");
+            var tryChoiceBody = result[tryChoiceStart..];
+            StringAssert.Contains(tryChoiceBody, "catch(v4)");
+            StringAssert.Contains(tryChoiceBody, "failed(v4);");
+            StringAssert.Contains(tryChoiceBody, "else if (p3 == 2)");
+            StringAssert.Contains(tryChoiceBody, "afterChoice();");
+            var nestedLoopsBody = SliceBetween(result, "function nestedReverseLoops", "function nullGuard");
+            StringAssert.Contains(nestedLoopsBody, "for (var v5 = p3.count - 1; v5 >= 0; v5--)");
+            StringAssert.Contains(nestedLoopsBody, "for (var v7 = v6.count - 1; v7 >= 0; v7--)");
+            StringAssert.Contains(nestedLoopsBody, "if (v6[v7] != \"\")");
+            StringAssert.Contains(nestedLoopsBody, "v4++;");
+            StringAssert.Contains(result, "if (v6 == \".\" || v6 == \"e\")");
+            StringAssert.Contains(result, "break;");
+            StringAssert.Contains(result, "p3 = p3 & ~(p4 | p5);");
+            StringAssert.Contains(result, "if (p3.top === void)");
+            StringAssert.Contains(result, "if (p3.left === void)");
+            StringAssert.Contains(result, "if (p3.right === void)");
+            StringAssert.Contains(result,
+                "handlers = %[\r\n            \"pimage\" => SemanticControlFlow.loadPartialImage,");
+            StringAssert.Contains(result,
+                "\r\n            \"ptext\" => SemanticControlFlow.drawReconstructibleText\r\n        ];");
+            StringAssert.Contains(result,
+                "if (p3 === void || p3 == \"\" || p3.substr(0, 3) == \"eye\" && +p3.substr(3) == p4 || p3.substr(0, 3) == \"lip\" && +p3.substr(3) == p5)");
+            StringAssert.Contains(result, "var object_ = p3[p4].object;");
+            StringAssert.Contains(result,
+                "if (object_ === void || !isvalid object_ || object_.visible && object_.enabled)");
+            StringAssert.Contains(result, "consume((new PSBFile(p3)).root);");
+            StringAssert.Contains(result,
+                "if (p3 != \"\" && p4 == p3 || p3 == \"\" && probe(p5) != \"\")");
+            Assert.IsFalse(result.Contains("/*phi:", StringComparison.Ordinal),
+                "可结构化的嵌套三元表达式不应退化为 Phi 占位符");
+            Assert.AreEqual(1, CountOccurrences(result, "p3(p4)"),
+                "有返回值的动态调用不应同时作为独立语句重复输出");
+        }
+
+        [TestMethod]
+        public void TestSameLineOpeningBraceStyle()
+        {
+            var path = "..\\..\\..\\Res\\SemanticControlFlow.tjs.comp";
+            var originalStyle = Config.OpeningBraceOnNewLine;
+            try
+            {
+                Config.OpeningBraceOnNewLine = false;
+                var result = new Decompiler(path).Decompile();
+
+                StringAssert.Contains(result, "class SemanticControlFlow {");
+                StringAssert.Contains(result, "function guard(p3, p4) {");
+                StringAssert.Contains(result,
+                    "if (p4 === void || typeof p3.isBitmap == \"Object\" && !p3.isBitmap()) {");
+                StringAssert.Contains(result, "else if (p3.mode == \"addalpha\") {");
+                StringAssert.Contains(result, "try {");
+                StringAssert.Contains(result, "catch(v4) {");
+            }
+            finally
+            {
+                Config.OpeningBraceOnNewLine = originalStyle;
+            }
+        }
+
+        private static int CountOccurrences(string text, string value)
+        {
+            var count = 0;
+            var offset = 0;
+            while ((offset = text.IndexOf(value, offset, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                offset += value.Length;
+            }
+
+            return count;
+        }
+
+        private static string SliceBetween(string text, string startMarker, string endMarker)
+        {
+            var start = text.IndexOf(startMarker, StringComparison.Ordinal);
+            var end = text.IndexOf(endMarker, start + startMarker.Length, StringComparison.Ordinal);
+            Assert.IsTrue(start >= 0 && end > start, $"找不到函数片段：{startMarker}");
+            return text[start..end];
+        }
+
+        [TestMethod]
         public void TestDecompileTjs()
         {
             var path = "..\\..\\..\\Res\\Initialize.tjs.comp";

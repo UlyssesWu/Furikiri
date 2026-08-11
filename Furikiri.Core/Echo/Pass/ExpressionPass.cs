@@ -49,20 +49,29 @@ namespace Furikiri.Echo.Pass
             // create array params if needed
             var hasUnnamedArray = context.Object.FuncDeclUnnamedArgArrayBase > 0; //not sure
             var hasCollapseArray = context.Object.FuncDeclCollapseBase >= 0;
-            if (hasCollapseArray || hasUnnamedArray)
+            if (hasCollapseArray)
             {
-                short slot = (short) ((hasCollapseArray? - context.Object.FuncDeclCollapseBase : - context.Object.FuncDeclUnnamedArgArrayBase) + Const.ArgBase);
-                var array = new Variable(slot) { IsParameter = true, VarType = TjsVarType.Object};
-                if (hasCollapseArray)
+                short slot = (short)(-context.Object.FuncDeclCollapseBase + Const.ArgBase);
+                var array = new Variable(slot)
                 {
-                    array.IsNamedArray = true;
-                }
-                else
-                {
-                    array.IsUnnamedArray = true;
-                }
+                    IsParameter = true,
+                    IsNamedArray = true,
+                    VarType = TjsVarType.Object
+                };
                 context.Vars.Add(slot, array);
                 exps.Add(slot, new LocalExpression(array));
+            }
+            else if (hasUnnamedArray)
+            {
+                // 匿名展开参数 `*` 只存在于函数签名和调用语法中，没有可读取的 VM
+                // 寄存器。使用不可能出现的虚拟槽保存签名信息，避免与首个局部变量重叠。
+                var unnamed = new Variable(short.MinValue)
+                {
+                    IsParameter = true,
+                    IsUnnamedArray = true,
+                    VarType = TjsVarType.Object
+                };
+                context.Vars[short.MinValue] = unnamed;
             }
 
             BlockProcess(context, entry, exps);
@@ -146,6 +155,22 @@ namespace Furikiri.Echo.Pass
             }
         }
 
+        /// <summary>
+        /// 调用结果寄存器仍然活跃时，调用会在 return、条件或赋值中被消费，
+        /// 不能再额外生成一条独立调用语句，否则会把有副作用的函数执行两次。
+        /// </summary>
+        private static bool ShouldEmitStandaloneCall(Block block, Instruction instruction, int resultSlot)
+        {
+            if (resultSlot == Const.ResourceReg)
+            {
+                return true;
+            }
+
+            var data = block.InstructionDatas?.FirstOrDefault(item =>
+                ReferenceEquals(item.Instruction, instruction));
+            return data?.LiveOut != null && !data.LiveOut.Contains(resultSlot);
+        }
+
         public void BlockProcess(DecompileContext context, Block block,
             Dictionary<int, Expression> exps = null)
         {
@@ -220,9 +245,23 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
+            // 从前驱递归恢复状态时，可能没有沿入口块传入两个特殊寄存器。
+            // 它们是 VM 固有寄存器而非普通局部变量，任何基本块都应能直接引用。
+            exps.TryAdd(Const.ThisReg, This);
+            exps.TryAdd(Const.ThisProxyReg, ThisProxy);
+            foreach (var parameter in context.Vars.Values.Where(variable => variable.IsParameter))
+            {
+                exps.TryAdd(parameter.Slot, new LocalExpression(parameter));
+            }
+
             if (block.From.Count > 1)
             {
-                var commonInput = block.From.Select(b => b.Def).Append(block.Input).GetIntersection();
+                var inputSets = block.From.Select(b => b.Def).Append(block.Input)
+                    .Where(set => set != null)
+                    .ToList();
+                var commonInput = inputSets.Count > 0
+                    ? inputSets.GetIntersection()
+                    : new HashSet<int>();
                 if (commonInput.Count > 0)
                 {
                     foreach (var inSlot in commonInput)
@@ -245,7 +284,7 @@ namespace Furikiri.Echo.Pass
                         }
 
                         // 对于仅由活跃输入推导出的槽位，优先使用局部引用占位，避免生成空 Phi
-                        exps[inSlot] = new LocalExpression(context.Object, (short)inSlot);
+                        exps[inSlot] = GetLocalExpression(context, (short)inSlot);
                     }
                 }
                 ////get from.Output && from.Def
@@ -286,12 +325,21 @@ namespace Furikiri.Echo.Pass
 
             var expList = new List<IAstNode>();
             block.Statements = expList;
-            InstructionData insData = null;
             for (var i = 0; i < block.Instructions.Count; i++)
             {
                 ex[0] = Void;
                 var ins = block.Instructions[i];
-                insData = block.InstructionDatas[i];
+
+                // 某些合流块会在数据流分析尚未带入状态时直接读取寄存器。
+                // 为所有显式寄存器准备稳定的局部引用；目标寄存器稍后会被对应指令覆盖。
+                foreach (var register in ins.Registers.OfType<RegisterRef>())
+                {
+                    var slot = register.GetSlot();
+                    if (slot != Const.ResourceReg && !ex.ContainsKey(slot))
+                    {
+                        ex[slot] = GetLocalExpression(context, slot);
+                    }
+                }
 
                 switch (ins.OpCode)
                 {
@@ -306,13 +354,53 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.CL:
                     {
-                        ex[ins.GetRegisterSlot(0)] = new ConstantExpression(TjsVoid.Void);
+                        var slot = ins.GetRegisterSlot(0);
+                        if (slot <= Const.ArgBase)
+                        {
+                            var variable = context.Vars.TryGetValue(slot, out var knownVariable)
+                                ? knownVariable
+                                : new Variable(slot, context.Object);
+                            context.Vars.TryAdd(slot, variable);
+                            var local = new LocalExpression(variable);
+                            ex[slot] = local;
+                            if (!variable.IsParameter)
+                            {
+                                expList.Add(new BinaryExpression(local, new ConstantExpression(TjsVoid.Void), BinaryOp.Assign)
+                                {
+                                    IsDeclaration = true
+                                });
+                            }
+                        }
+                        else
+                        {
+                            ex[slot] = new ConstantExpression(TjsVoid.Void);
+                        }
                     }
                         break;
                     case OpCode.CCL:
                         for (int j = ins.GetRegisterSlot(0); j < ins.GetRegisterSlot(1); j++)
                         {
-                            ex[j] = new ConstantExpression(TjsVoid.Void);
+                            if (j <= Const.ArgBase)
+                            {
+                                var slot = (short)j;
+                                var variable = context.Vars.TryGetValue(slot, out var knownVariable)
+                                    ? knownVariable
+                                    : new Variable(slot, context.Object);
+                                context.Vars.TryAdd(slot, variable);
+                                var local = new LocalExpression(variable);
+                                ex[slot] = local;
+                                if (!variable.IsParameter)
+                                {
+                                    expList.Add(new BinaryExpression(local, new ConstantExpression(TjsVoid.Void), BinaryOp.Assign)
+                                    {
+                                        IsDeclaration = true
+                                    });
+                                }
+                            }
+                            else
+                            {
+                                ex[j] = new ConstantExpression(TjsVoid.Void);
+                            }
                         }
                         break;
                     case OpCode.CEQ:
@@ -371,6 +459,10 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.NF:
                     {
+                        if (flag is PhiExpression phi)
+                        {
+                            flag = phi.SimplifyBoolean();
+                        }
                         flag = flag.Invert();
                     }
                         break;
@@ -399,6 +491,7 @@ namespace Furikiri.Echo.Pass
                     case OpCode.BNOT:
                     case OpCode.TYPEOF:
                     case OpCode.INV:
+                    case OpCode.CHKINV:
                     {
                         var dstSlot = ins.GetRegisterSlot(0);
                         var dst = ex[dstSlot];
@@ -441,6 +534,9 @@ namespace Furikiri.Echo.Pass
                             case OpCode.INV:
                                 op = UnaryOp.Invalidate;
                                 break;
+                            case OpCode.CHKINV:
+                                op = UnaryOp.IsValid;
+                                break;
                         }
 
                         // INC/DEC on VM temp registers often model numeric index stepping.
@@ -454,6 +550,25 @@ namespace Furikiri.Echo.Pass
                             var folded = new ConstantExpression(new TjsInt(nextValue));
                             ex[dstSlot] = folded;
                             break;
+                        }
+
+                        // 后置自增/自减会先用 CP 把旧值保存到临时寄存器，再修改局部变量。
+                        // 若把两条指令分别写成 `++i` 和随后使用 `i`，不仅形式错误，传给
+                        // 函数/索引的值也会提前一位。把临时快照改写成 `i++/i--`，并由该
+                        // 表达式承担唯一一次副作用。
+                        if ((op == UnaryOp.Inc || op == UnaryOp.Dec) &&
+                            dstSlot <= Const.ArgBase && i > 0 &&
+                            block.Instructions[i - 1].OpCode == OpCode.CP)
+                        {
+                            var copy = block.Instructions[i - 1];
+                            var snapshotSlot = copy.GetRegisterSlot(0);
+                            var sourceSlot = copy.GetRegisterSlot(1);
+                            if (snapshotSlot > Const.ArgBase && sourceSlot == dstSlot)
+                            {
+                                ex[snapshotSlot] = new UnaryExpression(dst, op) {IsPrefix = false};
+                                ex[dstSlot] = dst;
+                                break;
+                            }
                         }
 
                         var u = new UnaryExpression(dst, op);
@@ -572,14 +687,14 @@ namespace Furikiri.Echo.Pass
                         }
                         else
                         {
-                            src = new LocalExpression(context.Object, srcSlot);
+                            src = GetLocalExpression(context, srcSlot);
                         }
 
                         Expression dst = null;
                         if (dstSlot <= Const.ArgBase)
                         {
                             var declare = !context.IsArg(dstSlot);
-                            var l = new LocalExpression(context.Object, dstSlot);
+                            var l = GetLocalExpression(context, dstSlot);
 
                             //This is wrong. todo: phi
                             //if ((src is LocalExpression localExp && localExp.VariableDef.Slot == dstSlot) || (src is BinaryExpression binaryExp && binaryExp.Left is LocalExpression le && le.Slot == dstSlot))
@@ -686,7 +801,7 @@ namespace Furikiri.Echo.Pass
                         }
                         else if (dstSlot <= Const.ArgBase)
                         {
-                            var l = new LocalExpression(context.Object, dstSlot);
+                            var l = GetLocalExpression(context, dstSlot);
                             //if (!l.IsParameter)
                             //{
                             //    expList.Add(l);
@@ -704,7 +819,7 @@ namespace Furikiri.Echo.Pass
                         }
                         else
                         {
-                            src = new LocalExpression(context.Object, srcSlot);
+                            src = GetLocalExpression(context, srcSlot);
                         }
 
                         var op = BinaryOp.Unknown;
@@ -770,7 +885,12 @@ namespace Furikiri.Echo.Pass
 
                         if (appendToExpList)
                         {
-                            expList.Add(b); //TODO: need add?
+                            expList.Add(b);
+
+                            // 参数/局部寄存器上的运算已经作为副作用语句输出（如 p3 += x）。
+                            // 后续读取必须仍是 p3，而不能把整棵赋值表达式再次内联，否则在
+                            // 分支合流时会生成带重复副作用的三元表达式。
+                            ex[dstSlot] = GetLocalExpression(context, (short)dstSlot);
                         }
                     }
                         break;
@@ -842,7 +962,11 @@ namespace Furikiri.Echo.Pass
                         }
 
                         BinaryExpression b = new BinaryExpression(new IdentifierExpression(name) {Instance = ex[obj]},
-                            src, op);
+                            src, op)
+                        {
+                            // *PD 指令会把运算结果写回对象属性，语义是 obj.name op= src。
+                            IsSelfAssignment = true
+                        };
 
                         if (res != 0)
                         {
@@ -920,7 +1044,11 @@ namespace Furikiri.Echo.Pass
                         }
 
                         BinaryExpression b =
-                            new BinaryExpression(new PropertyAccessExpression(ex[name], ex[obj]), src, op);
+                            new BinaryExpression(new PropertyAccessExpression(ex[name], ex[obj]), src, op)
+                            {
+                                // *PI 与 *PD 相同，只是属性名由寄存器动态给出。
+                                IsSelfAssignment = true
+                            };
 
                         if (res != 0)
                         {
@@ -957,8 +1085,6 @@ namespace Furikiri.Echo.Pass
                     case OpCode.ASC:
                         break;
                     case OpCode.CHR:
-                        break;
-                    case OpCode.CHKINV:
                         break;
                     //Invoke
                     case OpCode.CALL:
@@ -1002,11 +1128,10 @@ namespace Furikiri.Echo.Pass
                         }
 
                         ex[dst] = call;
-                        //if (dst == 0) //just execute and discard result
-                        //{
-                        //    expList.Add(call);
-                        //}
-                        expList.Add(call);
+                        if (ShouldEmitStandaloneCall(block, ins, dst))
+                        {
+                            expList.Add(call);
+                        }
                     }
                         break;
                     case OpCode.CALLD:
@@ -1051,7 +1176,7 @@ namespace Furikiri.Echo.Pass
                         }
 
                         ex[dst] = call;
-                        if (dst == 0) //just execute and discard result
+                        if (ShouldEmitStandaloneCall(block, ins, dst))
                         {
                             //Handle RegExp()._compile("//g/[^A-Za-z]")
                             if (callMethodName == Const.RegExpCompile)
@@ -1119,11 +1244,10 @@ namespace Furikiri.Echo.Pass
                         }
 
                         ex[dst] = call;
-                        //if (dst == 0) //just execute and discard result
-                        //{
-                        //    expList.Add(call);
-                        //}
-                        expList.Add(call);
+                        if (ShouldEmitStandaloneCall(block, ins, dst))
+                        {
+                            expList.Add(call);
+                        }
                     }
                         break;
                     case OpCode.NEW:
@@ -1159,7 +1283,7 @@ namespace Furikiri.Echo.Pass
                         }
 
                         ex[dst] = call;
-                        if (dst == 0) //just execute and discard result
+                        if (ShouldEmitStandaloneCall(block, ins, dst))
                         {
                             expList.Add(call);
                         }
@@ -1239,8 +1363,11 @@ namespace Furikiri.Echo.Pass
                     case OpCode.SPDS:
                     {
                         var objSlot = ins.GetRegisterSlot(0);
+                        var isClassMemberDeclaration =
+                            context.Object.ContextType == TjsContextType.Class &&
+                            ins.OpCode == OpCode.SPDS && objSlot == Const.ThisReg;
                         var ident = new IdentifierExpression(ins.Data.AsString())
-                            {Instance = ex[objSlot]};
+                            {Instance = isClassMemberDeclaration ? null : ex[objSlot]};
                         Expression left = ident;
                         bool isPropertyRef = ins.OpCode == OpCode.SPDS && objSlot != Const.ThisReg && objSlot != Const.ThisProxyReg;
                         if (isPropertyRef)
@@ -1249,6 +1376,10 @@ namespace Furikiri.Echo.Pass
                         }
                         var right = ex[ins.GetRegisterSlot(2)];
                         BinaryExpression b = new BinaryExpression(left, right, BinaryOp.Assign);
+                        if (isClassMemberDeclaration)
+                        {
+                            b.IsDeclaration = true;
+                        }
                         //check declare (SPDS with PropertyRef is never a declaration)
                         if (!isPropertyRef && context.Object.ContextType == TjsContextType.TopLevel)
                         {
@@ -1467,9 +1598,45 @@ namespace Furikiri.Echo.Pass
             return false;
         }
 
+        private static LocalExpression GetLocalExpression(DecompileContext context, short slot)
+        {
+            if (slot <= Const.ArgBase)
+            {
+                if (!context.Vars.TryGetValue(slot, out var variable))
+                {
+                    variable = new Variable(slot, context.Object);
+                    context.Vars[slot] = variable;
+                }
+
+                return new LocalExpression(variable);
+            }
+
+            return new LocalExpression(context.Object, slot);
+        }
+
         private static void TryAnnotateConditionalPhi(Block mergeBlock, List<Block> froms, PhiExpression phi)
         {
-            if (phi == null || froms == null || froms.Count != 2 || phi.PossibleExpressions.Count != 2)
+            if (phi == null || froms == null || froms.Count != phi.PossibleExpressions.Count)
+            {
+                return;
+            }
+
+            if (froms.Count > 3 && TryAnnotateMultiValueDecisionPhi(mergeBlock, froms, phi))
+            {
+                return;
+            }
+
+            if (froms.Count == 3 && TryAnnotateNestedConditionalPhi(mergeBlock, froms, phi))
+            {
+                return;
+            }
+
+            if (froms.Count != 2)
+            {
+                return;
+            }
+
+            if (TryAnnotateDecisionChainPhi(mergeBlock, froms, phi))
             {
                 return;
             }
@@ -1499,10 +1666,78 @@ namespace Furikiri.Echo.Pass
                 targetPhi.ElseBranch = targetPhi.PossibleExpressions[falseIdx];
                 return true;
             }
+
+            static bool TryAssignFromReachability(
+                Block conditionBlock, List<Block> preds,
+                PhiExpression targetPhi, Block targetMerge)
+            {
+                var condition = conditionBlock?.Statements?.GetCondition();
+                if (condition == null || conditionBlock.To.Count != 2)
+                {
+                    return false;
+                }
+
+                bool CanReach(Block start, Block target)
+                {
+                    var pending = new Queue<Block>();
+                    var visited = new HashSet<Block>();
+                    pending.Enqueue(start);
+                    while (pending.Count > 0)
+                    {
+                        var current = pending.Dequeue();
+                        if (!visited.Add(current) || current == targetMerge)
+                        {
+                            continue;
+                        }
+
+                        if (current == target)
+                        {
+                            return true;
+                        }
+
+                        foreach (var next in current.To)
+                        {
+                            pending.Enqueue(next);
+                        }
+                    }
+
+                    return false;
+                }
+
+                var trueHead = conditionBlock.To.FirstOrDefault(block => block.Start == condition.TrueBranch);
+                var falseHead = conditionBlock.To.FirstOrDefault(block => block.Start == condition.FalseBranch);
+                if (trueHead == null || falseHead == null)
+                {
+                    return false;
+                }
+
+                var trueIndices = preds
+                    .Select((block, index) => (block, index))
+                    .Where(item => CanReach(trueHead, item.block))
+                    .Select(item => item.index)
+                    .ToList();
+                var falseIndices = preds
+                    .Select((block, index) => (block, index))
+                    .Where(item => CanReach(falseHead, item.block))
+                    .Select(item => item.index)
+                    .ToList();
+                if (trueIndices.Count != 1 || falseIndices.Count != 1 ||
+                    trueIndices[0] == falseIndices[0])
+                {
+                    return false;
+                }
+
+                targetPhi.Condition = new ConditionExpression(condition.Condition, condition.JumpIf);
+                targetPhi.ThenBranch = targetPhi.PossibleExpressions[trueIndices[0]];
+                targetPhi.ElseBranch = targetPhi.PossibleExpressions[falseIndices[0]];
+                return true;
+            }
             
             static bool TryBuildShortCircuitAndCondition(Block condBlock, Block elsePred, Expression innerCond, out Expression combined)
             {
-                static bool CanReach(Block current, Block target, int depth, HashSet<Block> visited)
+                static bool CanReach(
+                    Block current, Block target, Block blocked,
+                    int depth, HashSet<Block> visited)
                 {
                     if (current == null || target == null || depth < 0 || !visited.Add(current))
                     {
@@ -1514,6 +1749,11 @@ namespace Furikiri.Echo.Pass
                         return true;
                     }
 
+                    if (current == blocked)
+                    {
+                        return false;
+                    }
+
                     if (depth == 0)
                     {
                         return false;
@@ -1521,7 +1761,7 @@ namespace Furikiri.Echo.Pass
 
                     foreach (var next in current.To)
                     {
-                        if (CanReach(next, target, depth - 1, visited))
+                        if (CanReach(next, target, blocked, depth - 1, visited))
                         {
                             return true;
                         }
@@ -1530,7 +1770,9 @@ namespace Furikiri.Echo.Pass
                     return false;
                 }
 
-                static bool BranchFlowsTo(Block conditionBlock, int branchStart, Block target)
+                static bool BranchFlowsTo(
+                    Block conditionBlock, int branchStart, Block target,
+                    Block blocked = null)
                 {
                     if (conditionBlock == null || target == null)
                     {
@@ -1548,7 +1790,7 @@ namespace Furikiri.Echo.Pass
                         return false;
                     }
 
-                    return CanReach(branchHead, target, 6, new HashSet<Block>());
+                    return CanReach(branchHead, target, blocked, 6, new HashSet<Block>());
                 }
 
                 combined = null;
@@ -1571,8 +1813,12 @@ namespace Furikiri.Echo.Pass
                     var parentCond = (ConditionExpression)parent.Statements.Last(s => s is ConditionExpression);
                     var trueToCond = BranchFlowsTo(parent, parentCond.TrueBranch, condBlock);
                     var falseToCond = BranchFlowsTo(parent, parentCond.FalseBranch, condBlock);
-                    var trueToElse = BranchFlowsTo(parent, parentCond.TrueBranch, elsePred);
-                    var falseToElse = BranchFlowsTo(parent, parentCond.FalseBranch, elsePred);
+                    // 旁路必须在不经过内层条件块的情况下到达 else 前驱；若两条
+                    // 路径先汇合后才执行内层条件，它们只是顺序 if，不能合成 &&。
+                    var trueToElse = BranchFlowsTo(
+                        parent, parentCond.TrueBranch, elsePred, condBlock);
+                    var falseToElse = BranchFlowsTo(
+                        parent, parentCond.FalseBranch, elsePred, condBlock);
                     if (!(trueToCond && falseToElse) && !(falseToCond && trueToElse))
                     {
                         continue;
@@ -1648,7 +1894,10 @@ namespace Furikiri.Echo.Pass
             var parentCondition = (ConditionExpression)parentCond.Statements.Last(s => s is ConditionExpression);
             if (!TryAssignFromCondition(parentCondition, froms, phi, mergeBlock))
             {
-                return;
+                if (!TryAssignFromReachability(parentCond, froms, phi, mergeBlock))
+                {
+                    return;
+                }
             }
 
             var parentFalsePred = froms.FirstOrDefault(b => b.Start == parentCondition.FalseBranch);
@@ -1661,6 +1910,411 @@ namespace Furikiri.Echo.Pass
                     ElseTo = parentCondition.ElseTo
                 };
             }
+        }
+
+        /// <summary>
+        /// 恢复三路 Phi 的常见嵌套三元形态：外层条件的一侧直接给值，
+        /// 另一侧再由内层条件二选一，例如 a ? (b ? x : y) : z。
+        /// </summary>
+        private static bool TryAnnotateNestedConditionalPhi(
+            Block mergeBlock, List<Block> froms, PhiExpression phi)
+        {
+            bool CanReach(Block start, Block target)
+            {
+                var pending = new Queue<Block>();
+                var visited = new HashSet<Block>();
+                pending.Enqueue(start);
+                while (pending.Count > 0)
+                {
+                    var current = pending.Dequeue();
+                    if (!visited.Add(current) || current == mergeBlock)
+                    {
+                        continue;
+                    }
+
+                    if (current == target)
+                    {
+                        return true;
+                    }
+
+                    foreach (var next in current.To)
+                    {
+                        pending.Enqueue(next);
+                    }
+                }
+
+                return false;
+            }
+
+            bool BranchReaches(Block owner, Block branchHead, Block predecessor)
+            {
+                // 短路布尔表达式常由条件块直接跳到 merge；此时该路径的
+                // Phi 值保存在条件块自己的最终状态中，而不是独立取值块。
+                return branchHead == mergeBlock
+                    ? predecessor == owner
+                    : CanReach(branchHead, predecessor);
+            }
+
+            var values = froms
+                .Select((block, index) => (block, value: phi.PossibleExpressions[index]))
+                .ToDictionary(item => item.block, item => item.value);
+            var conditionCandidates = new HashSet<Block>();
+            var backward = new Queue<(Block Block, int Depth)>();
+            foreach (var predecessor in froms)
+            {
+                backward.Enqueue((predecessor, 0));
+            }
+
+            while (backward.Count > 0)
+            {
+                var (current, depth) = backward.Dequeue();
+                if (depth > 3)
+                {
+                    continue;
+                }
+
+                if (current.Statements?.GetCondition() != null)
+                {
+                    conditionCandidates.Add(current);
+                }
+
+                foreach (var previous in current.From)
+                {
+                    backward.Enqueue((previous, depth + 1));
+                }
+            }
+
+            foreach (var outerBlock in conditionCandidates.OrderBy(block => block.Start))
+            {
+                var outerCondition = outerBlock.Statements.GetCondition();
+                var trueHead = outerBlock.To.FirstOrDefault(block => block.Start == outerCondition.TrueBranch);
+                var falseHead = outerBlock.To.FirstOrDefault(block => block.Start == outerCondition.FalseBranch);
+                if (trueHead == null || falseHead == null)
+                {
+                    continue;
+                }
+
+                var truePreds = froms
+                    .Where(predecessor => BranchReaches(outerBlock, trueHead, predecessor))
+                    .ToList();
+                var falsePreds = froms
+                    .Where(predecessor => BranchReaches(outerBlock, falseHead, predecessor))
+                    .ToList();
+                if (truePreds.Intersect(falsePreds).Any() ||
+                    truePreds.Count + falsePreds.Count != froms.Count ||
+                    !((truePreds.Count == 2 && falsePreds.Count == 1) ||
+                      (truePreds.Count == 1 && falsePreds.Count == 2)))
+                {
+                    continue;
+                }
+
+                var nestedIsTrue = truePreds.Count == 2;
+                var nestedPreds = nestedIsTrue ? truePreds : falsePreds;
+                var directPred = (nestedIsTrue ? falsePreds : truePreds)[0];
+                var nestedHead = nestedIsTrue ? trueHead : falseHead;
+                var innerBlock = conditionCandidates
+                    .Where(block => block != outerBlock && CanReach(nestedHead, block))
+                    .OrderBy(block => block.Start)
+                    .FirstOrDefault(block =>
+                    {
+                        var condition = block.Statements.GetCondition();
+                        var innerTrue = block.To.FirstOrDefault(next => next.Start == condition.TrueBranch);
+                        var innerFalse = block.To.FirstOrDefault(next => next.Start == condition.FalseBranch);
+                        return innerTrue != null && innerFalse != null &&
+                               nestedPreds.Count(predecessor =>
+                                   BranchReaches(block, innerTrue, predecessor)) == 1 &&
+                               nestedPreds.Count(predecessor =>
+                                   BranchReaches(block, innerFalse, predecessor)) == 1;
+                    });
+                if (innerBlock == null)
+                {
+                    continue;
+                }
+
+                var innerCondition = innerBlock.Statements.GetCondition();
+                var innerTrueHead = innerBlock.To.First(block => block.Start == innerCondition.TrueBranch);
+                var innerFalseHead = innerBlock.To.First(block => block.Start == innerCondition.FalseBranch);
+                var innerTruePred = nestedPreds.Single(predecessor =>
+                    BranchReaches(innerBlock, innerTrueHead, predecessor));
+                var innerFalsePred = nestedPreds.Single(predecessor =>
+                    BranchReaches(innerBlock, innerFalseHead, predecessor));
+                var nestedPhi = new PhiExpression(phi.Slot)
+                {
+                    Condition = new ConditionExpression(innerCondition.Condition, innerCondition.JumpIf),
+                    ThenBranch = values[innerTruePred],
+                    ElseBranch = values[innerFalsePred]
+                };
+                nestedPhi.PossibleExpressions.Add(values[innerTruePred]);
+                nestedPhi.PossibleExpressions.Add(values[innerFalsePred]);
+
+                phi.Condition = new ConditionExpression(outerCondition.Condition, outerCondition.JumpIf);
+                phi.ThenBranch = nestedIsTrue ? nestedPhi : values[directPred];
+                phi.ElseBranch = nestedIsTrue ? values[directPred] : nestedPhi;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 从只含条件和空跳转块的决策链反推出“到达某个取值前驱”的谓词。
+        /// 这同时覆盖 a || b、a && b 以及多个 case 共用同一取值的三元表达式。
+        /// </summary>
+        private static bool TryAnnotateDecisionChainPhi(
+            Block mergeBlock, List<Block> froms, PhiExpression phi)
+        {
+            var target = froms.OrderBy(block => block.Start).First();
+            var other = froms.First(block => block != target);
+            var candidates = new HashSet<Block>();
+            var pending = new Queue<(Block Block, int Depth)>();
+            foreach (var predecessor in froms)
+            {
+                pending.Enqueue((predecessor, 0));
+            }
+
+            while (pending.Count > 0)
+            {
+                var (current, depth) = pending.Dequeue();
+                if (depth > 6)
+                {
+                    continue;
+                }
+
+                if (current.Statements?.GetCondition() != null)
+                {
+                    candidates.Add(current);
+                }
+
+                foreach (var previous in current.From)
+                {
+                    pending.Enqueue((previous, depth + 1));
+                }
+            }
+
+            (bool? Constant, Expression Expression)? Combine(
+                Expression condition,
+                (bool? Constant, Expression Expression) whenTrue,
+                (bool? Constant, Expression Expression) whenFalse)
+            {
+                if (whenTrue.Constant == true && whenFalse.Constant == false)
+                    return (null, condition);
+                if (whenTrue.Constant == false && whenFalse.Constant == true)
+                    return (null, condition.Invert());
+                if (whenTrue.Constant == true && whenFalse.Expression != null)
+                    return (null, condition.Or(whenFalse.Expression));
+                if (whenTrue.Expression != null && whenFalse.Constant == true)
+                    return (null, condition.Invert().Or(whenTrue.Expression));
+                if (whenTrue.Expression != null && whenFalse.Constant == false)
+                    return (null, condition.And(whenTrue.Expression));
+                if (whenTrue.Constant == false && whenFalse.Expression != null)
+                    return (null, condition.Invert().And(whenFalse.Expression));
+                if (whenTrue.Constant == whenFalse.Constant && whenTrue.Constant != null)
+                    return (whenTrue.Constant, null);
+                if (whenTrue.Expression != null && whenFalse.Expression != null)
+                {
+                    if (whenTrue.Expression.ToString() == whenFalse.Expression.ToString())
+                        return (null, whenTrue.Expression);
+                    return (null, condition.And(whenTrue.Expression)
+                        .Or(condition.Invert().And(whenFalse.Expression)));
+                }
+
+                return null;
+            }
+
+            foreach (var root in candidates.OrderBy(block => block.Start))
+            {
+                var memo = new Dictionary<Block, (bool? Constant, Expression Expression)?>();
+                var visiting = new HashSet<Block>();
+                (bool? Constant, Expression Expression)? Build(Block current)
+                {
+                    if (current == target)
+                        return (true, null);
+                    if (current == other)
+                        return (false, null);
+                    if (current == null || current == mergeBlock || !visiting.Add(current))
+                        return null;
+                    if (memo.TryGetValue(current, out var cached))
+                    {
+                        visiting.Remove(current);
+                        return cached;
+                    }
+
+                    (bool? Constant, Expression Expression)? result = null;
+                    var condition = current.Statements?.GetCondition();
+                    if (condition != null && current.To.Count == 2)
+                    {
+                        var trueHead = current.To.FirstOrDefault(block =>
+                            block.Start == condition.TrueBranch);
+                        var falseHead = current.To.FirstOrDefault(block =>
+                            block.Start == condition.FalseBranch);
+                        var whenTrue = Build(trueHead);
+                        var whenFalse = Build(falseHead);
+                        if (whenTrue != null && whenFalse != null)
+                        {
+                            result = Combine(condition.Condition, whenTrue.Value, whenFalse.Value);
+                        }
+                    }
+                    else if (current.To.Count == 1 &&
+                             (current.Statements == null ||
+                              current.Statements.All(statement => statement is GotoExpression)))
+                    {
+                        result = Build(current.To[0]);
+                    }
+
+                    visiting.Remove(current);
+                    memo[current] = result;
+                    return result;
+                }
+
+                var predicate = Build(root);
+                if (predicate?.Expression == null || predicate.Value.Constant != null)
+                {
+                    continue;
+                }
+
+                var targetIndex = froms.IndexOf(target);
+                var otherIndex = froms.IndexOf(other);
+                phi.Condition = new ConditionExpression(predicate.Value.Expression, false);
+                phi.ThenBranch = phi.PossibleExpressions[targetIndex];
+                phi.ElseBranch = phi.PossibleExpressions[otherIndex];
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryAnnotateMultiValueDecisionPhi(
+            Block mergeBlock, List<Block> froms, PhiExpression phi)
+        {
+            var values = new Dictionary<Block, Expression>();
+            for (var index = 0; index < froms.Count; index++)
+            {
+                var predecessor = froms[index];
+                var value = phi.PossibleExpressions[index];
+                if (values.TryGetValue(predecessor, out var existing))
+                {
+                    // 条件跳转的真假边可能同时落到同一基本块，使 From 中出现重复项。
+                    // 重复边只能合并同一个块末状态；若值不一致，说明对应关系不可靠。
+                    if (existing?.ToString() != value?.ToString())
+                    {
+                        return false;
+                    }
+
+                    continue;
+                }
+
+                values.Add(predecessor, value);
+            }
+            var candidates = new HashSet<Block>();
+            var backward = new Queue<(Block Block, int Depth)>();
+            foreach (var predecessor in froms)
+            {
+                backward.Enqueue((predecessor, 0));
+            }
+
+            while (backward.Count > 0)
+            {
+                var (current, depth) = backward.Dequeue();
+                if (depth > 12)
+                {
+                    continue;
+                }
+
+                if (current.Statements?.GetCondition() != null)
+                {
+                    candidates.Add(current);
+                }
+
+                foreach (var previous in current.From)
+                {
+                    backward.Enqueue((previous, depth + 1));
+                }
+            }
+
+            foreach (var root in candidates.OrderByDescending(block => block.Start))
+            {
+                var visiting = new HashSet<Block>();
+                (Expression Expression, HashSet<Block> Used)? Build(Block current)
+                {
+                    if (current == null || current == mergeBlock || !visiting.Add(current))
+                    {
+                        return null;
+                    }
+
+                    (Expression Expression, HashSet<Block> Used)? result = null;
+                    var condition = current.Statements?.GetCondition();
+                    if (condition != null && current.To.Count == 2)
+                    {
+                        (Expression Expression, HashSet<Block> Used)? BuildBranch(int branchStart)
+                        {
+                            var head = current.To.FirstOrDefault(block => block.Start == branchStart);
+                            if (head == mergeBlock)
+                            {
+                                return values.TryGetValue(current, out var directValue)
+                                    ? (directValue, new HashSet<Block> { current })
+                                    : null;
+                            }
+
+                            return Build(head);
+                        }
+
+                        var whenTrue = BuildBranch(condition.TrueBranch);
+                        var whenFalse = BuildBranch(condition.FalseBranch);
+                        if (whenTrue != null && whenFalse != null)
+                        {
+                            var used = new HashSet<Block>(whenTrue.Value.Used);
+                            used.UnionWith(whenFalse.Value.Used);
+                            if (ReferenceEquals(whenTrue.Value.Expression, whenFalse.Value.Expression) ||
+                                whenTrue.Value.Expression?.ToString() == whenFalse.Value.Expression?.ToString())
+                            {
+                                // 两条决策路径最终携带同一个值时，当前条件对结果没有影响。
+                                // 直接折叠可避免把公共的后续布尔值重复展开成多层三元表达式。
+                                result = (whenTrue.Value.Expression, used);
+                            }
+                            else
+                            {
+                                var nested = new PhiExpression(phi.Slot)
+                                {
+                                    Condition = new ConditionExpression(
+                                        condition.Condition, condition.JumpIf),
+                                    ThenBranch = whenTrue.Value.Expression,
+                                    ElseBranch = whenFalse.Value.Expression
+                                };
+                                nested.PossibleExpressions.Add(whenTrue.Value.Expression);
+                                nested.PossibleExpressions.Add(whenFalse.Value.Expression);
+                                result = (nested, used);
+                            }
+                        }
+                    }
+                    else if (values.TryGetValue(current, out var value))
+                    {
+                        result = (value, new HashSet<Block> { current });
+                    }
+                    else if (current.To.Count == 1 &&
+                             (current.Statements == null ||
+                              current.Statements.All(statement => statement is GotoExpression)))
+                    {
+                        result = Build(current.To[0]);
+                    }
+
+                    visiting.Remove(current);
+                    return result;
+                }
+
+                var resolved = Build(root);
+                if (resolved?.Expression is not PhiExpression nestedPhi ||
+                    !nestedPhi.IsConditional || !resolved.Value.Used.SetEquals(froms))
+                {
+                    continue;
+                }
+
+                phi.Condition = nestedPhi.Condition;
+                phi.ThenBranch = nestedPhi.ThenBranch;
+                phi.ElseBranch = nestedPhi.ElseBranch;
+                return true;
+            }
+
+            return false;
         }
     }
 }

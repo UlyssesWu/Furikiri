@@ -31,6 +31,7 @@ namespace Furikiri.Echo.Language
         public Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)> PropertyRefs =
             new Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)>();
         public Dictionary<CodeObject, Expression> ClassSuperExpressions = new Dictionary<CodeObject, Expression>();
+        public Dictionary<CodeObject, BlockStatement> ClassBodies = new Dictionary<CodeObject, BlockStatement>();
 
         /// <summary>
         /// Do not write return if there is nothing to return
@@ -75,7 +76,6 @@ namespace Furikiri.Echo.Language
             var paramList = GetParameterList(method);
             WriteParamList(paramList, defaults ?? new Dictionary<string, Expression>());
             _formatter.WriteToken(")");
-            _formatter.WriteLine();
         }
 
         private static List<Variable> GetParameterList(Method method)
@@ -209,20 +209,18 @@ namespace Furikiri.Echo.Language
             _formatter.WriteKeyword("property");
             _formatter.WriteSpace();
             _formatter.WriteIdentifier(property.Name);
-            _formatter.WriteLine();
-            _formatter.WriteToken("{");
-            _formatter.WriteLine();
-            _formatter.Indent();
+            _formatter.WriteStartBlock();
 
             if (property.Setter != null && setterBlock != null)
             {
                 var setterParams = GetParameterList(property.Setter);
-                var setterDefaults = ExtractDefaultParams(setterParams, setterBlock);
+                // setter 的形参语法不允许默认值。字节码中的
+                // `if (value === void) value = defaultValue` 必须保留在函数体内。
+                _defaultParamStmtsToSkip.Clear();
                 _formatter.WriteKeyword("setter");
                 _formatter.WriteToken("(");
-                WriteParamList(setterParams, setterDefaults);
+                WriteParamList(setterParams, new Dictionary<string, Expression>());
                 _formatter.WriteToken(")");
-                _formatter.WriteLine();
                 WriteMethodBody(setterBlock, true);
                 _formatter.WriteLine();
             }
@@ -231,7 +229,6 @@ namespace Furikiri.Echo.Language
             {
                 _formatter.WriteKeyword("getter");
                 _formatter.WriteToken("()");
-                _formatter.WriteLine();
                 WriteMethodBody(getterBlock, true);
                 _formatter.WriteLine();
             }
@@ -266,10 +263,14 @@ namespace Furikiri.Echo.Language
                 Visit(superExpr);
             }
 
-            _formatter.WriteLine();
-            _formatter.WriteToken("{");
-            _formatter.WriteLine();
-            _formatter.Indent();
+            _formatter.WriteStartBlock();
+
+            if (ClassBodies != null && ClassBodies.TryGetValue(classObj, out var classBody) &&
+                classBody?.Statements != null && classBody.Statements.Count > 0)
+            {
+                WriteBlock(classBody);
+                _formatter.WriteLine();
+            }
 
             var classMethods = MethodRefs
                 .Where(m => m.Key.Object.Parent == classObj &&
@@ -314,7 +315,6 @@ namespace Furikiri.Echo.Language
             _formatter.WriteToken("(");
             WriteParamList(paramList, defaults);
             _formatter.WriteToken(")");
-            _formatter.WriteLine();
             WriteMethodBody(block, true);
             _formatter.WriteLine();
         }
@@ -324,20 +324,18 @@ namespace Furikiri.Echo.Language
             _formatter.WriteKeyword("property");
             _formatter.WriteSpace();
             _formatter.WriteIdentifier(property.Name);
-            _formatter.WriteLine();
-            _formatter.WriteToken("{");
-            _formatter.WriteLine();
-            _formatter.Indent();
+            _formatter.WriteStartBlock();
 
             if (property.Setter != null && setterBlock != null)
             {
                 var setterParams = GetParameterList(property.Setter);
-                var setterDefaults = ExtractDefaultParams(setterParams, setterBlock);
+                // TJS2 只允许普通函数参数使用 `arg=default`，setter 仍需输出
+                // 原始的 void 检查，否则会生成让编译器崩溃的非法签名。
+                _defaultParamStmtsToSkip.Clear();
                 _formatter.WriteKeyword("setter");
                 _formatter.WriteToken("(");
-                WriteParamList(setterParams, setterDefaults);
+                WriteParamList(setterParams, new Dictionary<string, Expression>());
                 _formatter.WriteToken(")");
-                _formatter.WriteLine();
                 WriteMethodBody(setterBlock, true);
                 _formatter.WriteLine();
             }
@@ -346,7 +344,6 @@ namespace Furikiri.Echo.Language
             {
                 _formatter.WriteKeyword("getter");
                 _formatter.WriteToken("()");
-                _formatter.WriteLine();
                 WriteMethodBody(getterBlock, true);
                 _formatter.WriteLine();
             }
@@ -375,9 +372,7 @@ namespace Furikiri.Echo.Language
 
             if (braces)
             {
-                _formatter.WriteToken("{");
-                _formatter.WriteLine();
-                _formatter.Indent();
+                _formatter.WriteStartBlock();
             }
 
 
@@ -449,6 +444,21 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitIdentifierExpr(IdentifierExpression id)
         {
+            if (id.Instance != null && !id.HideInstance &&
+                id.Instance is not IdentifierExpression &&
+                id.Instance is not LocalExpression)
+            {
+                // FullName 只会展开简单的 a.b；成员前缀若是 links[i]、调用结果
+                // 或其他复合表达式，必须递归写出，否则 links[i].object 会丢成 object。
+                var needsParentheses = NeedsMemberAccessParentheses(id.Instance);
+                if (needsParentheses) _formatter.WriteToken("(");
+                Visit(id.Instance);
+                if (needsParentheses) _formatter.WriteToken(")");
+                _formatter.WriteToken(".");
+                _formatter.WriteIdentifier(id.Name);
+                return;
+            }
+
             _formatter.WriteIdentifier(id.FullName);
         }
 
@@ -499,6 +509,20 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteIdentifier("var");
                     _formatter.WriteSpace();
                 }
+            }
+
+            // 未初始化的类字段在字节码中以 SPDS member, void 表示。
+            // 还原成 `var member;`，避免把实现层的 void 写回细节泄露到源码。
+            if (_currentClass != null && treatAsDeclaration &&
+                bin.Right is ConstantExpression voidValue && voidValue.DataType == TjsVarType.Void)
+            {
+                Visit(bin.Left);
+                var classMemberName = TryGetDeclaredName(bin.Left);
+                if (!string.IsNullOrEmpty(classMemberName))
+                {
+                    _declaredLocals.Add(classMemberName);
+                }
+                return;
             }
 
             bool needBrackets = bin.NeedBrackets();
@@ -681,6 +705,11 @@ namespace Furikiri.Echo.Language
                 return false;
             }
 
+            var writeDictionaryAcrossLines = isDictionary &&
+                                             invoke.Parameters.Count > 0 &&
+                                             invoke.Parameters.Count % 2 == 0 &&
+                                             ShouldWriteDictionaryAcrossLines(invoke.Parameters);
+
             _formatter.WriteToken(isDictionary ? "%[" : "[");
             if (invoke.Parameters.Count <= 0)
             {
@@ -691,6 +720,12 @@ namespace Furikiri.Echo.Language
             // TJS dictionary literal allows `=>` as readability-friendly pair separator.
             if (isDictionary && invoke.Parameters.Count % 2 == 0)
             {
+                if (writeDictionaryAcrossLines)
+                {
+                    _formatter.WriteLine();
+                    _formatter.Indent();
+                }
+
                 for (var i = 0; i < invoke.Parameters.Count; i += 2)
                 {
                     Visit(invoke.Parameters[i]);
@@ -701,10 +736,22 @@ namespace Furikiri.Echo.Language
                     if (i + 2 < invoke.Parameters.Count)
                     {
                         _formatter.WriteToken(",");
-                        _formatter.WriteSpace();
+                        if (writeDictionaryAcrossLines)
+                        {
+                            _formatter.WriteLine();
+                        }
+                        else
+                        {
+                            _formatter.WriteSpace();
+                        }
                     }
                 }
 
+                if (writeDictionaryAcrossLines)
+                {
+                    _formatter.WriteLine();
+                    _formatter.Outdent();
+                }
                 _formatter.WriteToken("]");
                 return true;
             }
@@ -721,6 +768,77 @@ namespace Furikiri.Echo.Language
 
             _formatter.WriteToken("]");
             return true;
+        }
+
+        private bool ShouldWriteDictionaryAcrossLines(IReadOnlyList<Expression> parameters)
+        {
+            if (Config.MaxOutputLineLength <= 0)
+            {
+                return false;
+            }
+
+            // `%[`、`]`，以及每一对之间的 `, `。
+            var estimatedLength = 3 + Math.Max(0, parameters.Count / 2 - 1) * 2;
+            for (var i = 0; i < parameters.Count; i += 2)
+            {
+                estimatedLength += EstimateExpressionLength(parameters[i]);
+                estimatedLength += 4; // ` => `
+                estimatedLength += EstimateExpressionLength(parameters[i + 1]);
+            }
+
+            return _formatter.CurrentLineLength + estimatedLength > Config.MaxOutputLineLength;
+        }
+
+        /// <summary>
+        /// 仅用于排版决策的保守长度估算。这里不能先把表达式真正写一遍再回滚，
+        /// 因为写入过程还会更新局部变量声明等状态，重复访问可能改变最终输出。
+        /// </summary>
+        private static int EstimateExpressionLength(Expression expression)
+        {
+            if (expression == null)
+            {
+                return 0;
+            }
+
+            return expression switch
+            {
+                IdentifierExpression identifier => identifier.FullName?.Length ?? 0,
+                LocalExpression local => local.ToString().Length,
+                ConstantExpression constant => constant.ToString().Length,
+                PropertyAccessExpression property =>
+                    EstimateExpressionLength(property.Instance) +
+                    EstimateExpressionLength(property.Property) + 2,
+                BinaryExpression binary =>
+                    EstimateExpressionLength(binary.Left) +
+                    EstimateExpressionLength(binary.Right) +
+                    binary.Op.ToSymbol().Length + 2 + (binary.NeedBrackets() ? 2 : 0),
+                UnaryExpression unary =>
+                    EstimateExpressionLength(unary.Target) + unary.Op.ToSymbol().Length,
+                ConditionExpression condition => EstimateExpressionLength(condition.Condition),
+                InvokeExpression call => EstimateInvokeLength(call),
+                _ => Math.Max(1, expression.ToString()?.Length ?? 0)
+            };
+        }
+
+        private static int EstimateInvokeLength(InvokeExpression invoke)
+        {
+            var length = invoke.Instance != null && !invoke.HideInstance
+                ? EstimateExpressionLength(invoke.Instance) + 1
+                : 0;
+            length += invoke.MethodExpression != null
+                ? EstimateExpressionLength(invoke.MethodExpression)
+                : invoke.MethodName?.Length ?? 0;
+            length += 2;
+            for (var i = 0; i < invoke.Parameters.Count; i++)
+            {
+                length += EstimateExpressionLength(invoke.Parameters[i]);
+                if (i + 1 < invoke.Parameters.Count)
+                {
+                    length += 2;
+                }
+            }
+
+            return length;
         }
 
         internal override void VisitInvokeExpr(InvokeExpression invoke)
@@ -762,7 +880,7 @@ namespace Furikiri.Echo.Language
             {
                 // 当实例本身是二元表达式（如 a + b）时，需要加括号以正确绑定方法调用
                 // 例如: (System.exePath + lockKey).replace(...) 而非 System.exePath + lockKey.replace(...)
-                bool instanceNeedsParens = invoke.Instance is BinaryExpression or ConditionExpression;
+                bool instanceNeedsParens = NeedsMemberAccessParentheses(invoke.Instance);
                 if (instanceNeedsParens)
                 {
                     _formatter.WriteToken("(");
@@ -774,14 +892,25 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteToken(")");
                 }
 
-                _formatter.WriteToken(".");
+                if (invoke.MethodExpression != null)
+                {
+                    // CALLI 以运行时表达式选择成员，TJS2 语法是 obj[expr](args)。
+                    // 点号只能跟静态标识符，否则会生成 obj."prefix" + name(args)。
+                    _formatter.WriteToken("[");
+                    Visit(invoke.MethodExpression);
+                    _formatter.WriteToken("]");
+                }
+                else
+                {
+                    _formatter.WriteToken(".");
+                }
             }
 
-            if (invoke.MethodExpression != null)
+            if (invoke.MethodExpression != null && (invoke.Instance == null || invoke.HideInstance))
             {
                 Visit(invoke.MethodExpression);
             }
-            else
+            else if (invoke.MethodExpression == null)
             {
                 _formatter.WriteIdentifier(invoke.Method);
             }
@@ -901,7 +1030,10 @@ namespace Furikiri.Echo.Language
         {
             if (!prop.HideInstance)
             {
+                var needsParentheses = NeedsMemberAccessParentheses(prop.Instance);
+                if (needsParentheses) _formatter.WriteToken("(");
                 Visit(prop.Instance);
+                if (needsParentheses) _formatter.WriteToken(")");
                 //_formatter.WriteToken(".");
                 _formatter.WriteToken("[");
                 Visit(prop.Property);
@@ -913,6 +1045,12 @@ namespace Furikiri.Echo.Language
                 Visit(prop.Property);
                 _formatter.WriteToken("]");
             }
+        }
+
+        private static bool NeedsMemberAccessParentheses(Expression expression)
+        {
+            return expression is BinaryExpression or ConditionExpression ||
+                   expression is InvokeExpression { InvokeType: InvokeType.Ctor };
         }
 
         internal override void VisitThrowExpr(ThrowExpression throwExpr)
@@ -1061,6 +1199,32 @@ namespace Furikiri.Echo.Language
                 if (_defaultParamStmtsToSkip.Contains(block.Statements[i]))
                     continue;
 
+                if (i > 0 && IsUnconditionalReturnNode(block.Statements[i - 1]) &&
+                    IsUnconditionalReturnNode(block.Statements[i]))
+                {
+                    // 多个循环退出块可能汇合成相邻 return；第一个已终止执行，
+                    // 后续 return 永远不可达，重复写出只会制造伪代码噪声。
+                    continue;
+                }
+
+                if (i + 1 < block.Statements.Count &&
+                    TryMergeGuardSelectorWithFollowingIf(
+                        block.Statements[i], block.Statements[i + 1], out var guardedIf))
+                {
+                    Visit(guardedIf);
+                    i++;
+                    continue;
+                }
+
+                if (i + 1 < block.Statements.Count &&
+                    TryMergeAdjacentLoopTransferIf(
+                        block.Statements[i], block.Statements[i + 1], out var mergedTransferIf))
+                {
+                    Visit(mergedTransferIf);
+                    i++;
+                    continue;
+                }
+
                 var statement = block.Statements[i] as Statement;
                 if (Config.UseCollectionLiteralWhenPossible &&
                     statement != null &&
@@ -1090,6 +1254,104 @@ namespace Furikiri.Echo.Language
             }
         }
 
+        private static bool IsUnconditionalReturnNode(IAstNode node)
+        {
+            return node is ReturnExpression ||
+                   node is ExpressionStatement { Expression: ReturnExpression };
+        }
+
+        private static bool TryMergeGuardSelectorWithFollowingIf(
+            IAstNode selectorNode, IAstNode followingNode, out IfStatement merged)
+        {
+            merged = null;
+            var selector = selectorNode switch
+            {
+                ConditionExpression condition => condition.Condition,
+                ExpressionStatement { Expression: ConditionExpression condition } => condition.Condition,
+                _ => null
+            };
+            if (selector == null || !IsSideEffectFreeExpression(selector) ||
+                followingNode is not IfStatement following || following.Else != null)
+            {
+                return false;
+            }
+
+            var followingCondition = UnwrapCondition(following.Condition);
+            if (followingCondition is not BinaryExpression { Op: BinaryOp.LogicOr } disjunction)
+            {
+                return false;
+            }
+
+            var leftUsesSelector = ContainsConditionFactor(disjunction.Left, selector);
+            var rightUsesSelector = ContainsConditionFactor(disjunction.Right, selector);
+            if (leftUsesSelector == rightUsesSelector)
+            {
+                return false;
+            }
+
+            // CFG 中前一条件选择 OR 的两条求值臂，但共享 return 结构化后，
+            // 选择条件可能作为裸表达式遗留。把未显式带 selector 的一臂补上
+            // 反向 guard：`C; D || (C && E)` => `!C && D || C && E`。
+            var guardedUniqueArm = selector.Invert().And(
+                leftUsesSelector ? disjunction.Right : disjunction.Left);
+            following.Condition = leftUsesSelector
+                ? disjunction.Left.Or(guardedUniqueArm)
+                : guardedUniqueArm.Or(disjunction.Right);
+            merged = following;
+            return true;
+        }
+
+        private static bool TryMergeAdjacentLoopTransferIf(
+            IAstNode firstNode, IAstNode secondNode, out IfStatement merged)
+        {
+            merged = null;
+            if (firstNode is not IfStatement first || secondNode is not IfStatement second ||
+                first.Else != null || second.Else != null ||
+                !TryGetSingleLoopTransfer(first.Then, out var firstTransfer) ||
+                !TryGetSingleLoopTransfer(second.Then, out var secondTransfer) ||
+                firstTransfer.GetType() != secondTransfer.GetType())
+            {
+                return false;
+            }
+
+            var firstCondition = first.Condition is ConditionExpression firstWrapper
+                ? firstWrapper.Condition
+                : first.Condition;
+            var secondCondition = second.Condition is ConditionExpression secondWrapper
+                ? secondWrapper.Condition
+                : second.Condition;
+            if (!IsSideEffectFreeExpression(firstCondition) ||
+                !IsSideEffectFreeExpression(secondCondition))
+            {
+                return false;
+            }
+
+            // 连续的纯条件若都只执行同一种 break/continue，可保持短路求值并合并。
+            // 这也是编译器拆分 `a || b` 循环守卫后的常见 CFG 形态。
+            merged = new IfStatement(firstCondition.Or(secondCondition), first.Then, null);
+            return true;
+        }
+
+        private static bool TryGetSingleLoopTransfer(Statement statement, out Statement transfer)
+        {
+            transfer = null;
+            if (statement is BreakStatement or ContinueStatement)
+            {
+                transfer = statement;
+                return true;
+            }
+
+            if (statement is not BlockStatement block || block.Statements.Count != 1 ||
+                block.Statements[0] is not Statement nested ||
+                nested is not BreakStatement && nested is not ContinueStatement)
+            {
+                return false;
+            }
+
+            transfer = nested;
+            return true;
+        }
+
         internal override void VisitLocalExpr(LocalExpression local)
         {
             _formatter.WriteIdentifier(local.ToString());
@@ -1099,6 +1361,21 @@ namespace Furikiri.Echo.Language
         {
             _formatter.WriteKeyword("delete");
             _formatter.WriteSpace();
+
+            // DELI 的成员名是运行时表达式，必须使用 obj[index]；点号只适用于
+            // DELD 的静态标识符。直接 ToString 会产生 obj.(int) value 等非法语法。
+            if (delete.IdentifierExpression != null)
+            {
+                if (delete.Instance != null && !delete.HideInstance)
+                {
+                    Visit(delete.Instance);
+                }
+                _formatter.WriteToken("[");
+                Visit(delete.IdentifierExpression);
+                _formatter.WriteToken("]");
+                return;
+            }
+
             if (delete.Instance != null && !delete.HideInstance)
             {
                 Visit(delete.Instance);
@@ -1149,8 +1426,11 @@ namespace Furikiri.Echo.Language
                         _formatter.WriteToken(unary.Op.ToSymbol());
                     }
                     break;
+                case UnaryOp.BitNot:
                 case UnaryOp.InvertSign:
                     _formatter.WriteToken(unary.Op.ToSymbol());
+                    // BinaryExpression 会根据一元父节点自行加括号，最终得到
+                    // `~(A | B)`；这里不能再套一层，否则会产生多余的双括号。
                     Visit(unary.Target);
                     break;
                 case UnaryOp.Not:
@@ -1241,6 +1521,7 @@ namespace Furikiri.Echo.Language
                     break;
                 case UnaryOp.TypeOf:
                 case UnaryOp.Invalidate:
+                case UnaryOp.IsValid:
                     _formatter.WriteToken(unary.Op.ToSymbol());
                     _formatter.WriteSpace();
                     Visit(unary.Target);
@@ -1320,6 +1601,8 @@ namespace Furikiri.Echo.Language
 
         internal override void VisitIfStmt(IfStatement ifStmt)
         {
+            TryFlattenSharedElseBranch(ifStmt);
+
             if (TryRewriteNoOpIfWithoutElse(ifStmt))
             {
                 AddNewLineAfterStructCtrlStmt();
@@ -1343,8 +1626,6 @@ namespace Furikiri.Echo.Language
             _formatter.WriteToken("(");
             Visit(ifStmt.Condition);
             _formatter.WriteToken(")");
-            _formatter.WriteLine();
-
             _formatter.WriteStartBlock();
             var savedHideVoidReturn = HideVoidReturn;
             HideVoidReturn = false;
@@ -1353,14 +1634,13 @@ namespace Furikiri.Echo.Language
             if (ifStmt.Else != null)
             {
                 _formatter.WriteKeyword("else");
-                _formatter.WriteSpace();
                 if (ifStmt.Else is IfStatement elseIf && elseIf.IsElseIf)
                 {
+                    _formatter.WriteSpace();
                     VisitIfStmt(elseIf);
                 }
                 else
                 {
-                    _formatter.WriteLine();
                     _formatter.WriteStartBlock();
                     Visit(ifStmt.Else);
                     _formatter.WriteEndBlock();
@@ -1369,6 +1649,91 @@ namespace Furikiri.Echo.Language
             HideVoidReturn = savedHideVoidReturn;
 
             AddNewLineAfterStructCtrlStmt();
+        }
+
+        private static bool TryFlattenSharedElseBranch(IfStatement outer)
+        {
+            var inner = UnwrapSingleIf(outer?.Then);
+            var emptyOuterElse = UnwrapSingleIf(outer?.Else);
+            var sharedElse = UnwrapSingleIf(inner?.Else);
+            if (inner == null || emptyOuterElse == null || sharedElse == null ||
+                !IsStructuralNoOpIfStatement(emptyOuterElse) ||
+                IsStructuralNoOpIfStatement(sharedElse))
+            {
+                return false;
+            }
+
+            var emptyCondition = UnwrapCondition(emptyOuterElse.Condition);
+            var sharedCondition = UnwrapCondition(sharedElse.Condition);
+            if (!ContainsConditionFactor(sharedCondition, emptyCondition))
+            {
+                return false;
+            }
+
+            // CFG 共享形态：C ? (N ? A : B) : B。内层先结构化时 B 只挂在
+            // C 的 then 下，并在 outer else 留下空壳。恢复成 (C && N) ? A : B。
+            outer.Condition = UnwrapCondition(outer.Condition).And(UnwrapCondition(inner.Condition));
+            outer.Then = inner.Then;
+            outer.Else = inner.Else;
+            if (outer.Else is IfStatement elseIf)
+            {
+                elseIf.IsElseIf = true;
+            }
+            return true;
+        }
+
+        private static IfStatement UnwrapSingleIf(Statement statement)
+        {
+            if (statement is IfStatement direct)
+            {
+                return direct;
+            }
+
+            return statement is BlockStatement { Statements.Count: 1 } block &&
+                   block.Statements[0] is IfStatement nested
+                ? nested
+                : null;
+        }
+
+        private static Expression UnwrapCondition(Expression expression)
+        {
+            return expression is ConditionExpression wrapper ? wrapper.Condition : expression;
+        }
+
+        private static bool ContainsConditionFactor(Expression expression, Expression factor)
+        {
+            if (AreEquivalentConditionExpression(expression, factor))
+            {
+                return true;
+            }
+
+            return expression is BinaryExpression binary &&
+                   binary.Op is BinaryOp.LogicAnd or BinaryOp.LogicOr &&
+                   (ContainsConditionFactor(binary.Left, factor) ||
+                    ContainsConditionFactor(binary.Right, factor));
+        }
+
+        private static bool AreEquivalentConditionExpression(Expression left, Expression right)
+        {
+            left = UnwrapCondition(left);
+            right = UnwrapCondition(right);
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+
+            return (left, right) switch
+            {
+                (LocalExpression l, LocalExpression r) => l.Slot == r.Slot,
+                (IdentifierExpression l, IdentifierExpression r) => l.FullName == r.FullName,
+                (ConstantExpression l, ConstantExpression r) => l.ToString() == r.ToString(),
+                (UnaryExpression l, UnaryExpression r) => l.Op == r.Op &&
+                                                         AreEquivalentConditionExpression(l.Target, r.Target),
+                (BinaryExpression l, BinaryExpression r) => l.Op == r.Op &&
+                    AreEquivalentConditionExpression(l.Left, r.Left) &&
+                    AreEquivalentConditionExpression(l.Right, r.Right),
+                _ => false
+            };
         }
 
         private bool TryRewriteNoOpIfWithoutElse(IfStatement ifStmt)
@@ -1428,6 +1793,8 @@ namespace Furikiri.Echo.Language
                     return true;
                 case UnaryExpression unary:
                     return IsLikelyPureExpression(unary.Target);
+                case BinaryExpression bin when bin.IsSelfAssignment:
+                    return false;
                 case BinaryExpression bin when bin.Op != BinaryOp.Assign:
                     return IsLikelyPureExpression(bin.Left) && IsLikelyPureExpression(bin.Right);
                 case ConditionExpression cond:
@@ -1571,7 +1938,11 @@ namespace Furikiri.Echo.Language
                 InvokeExpression => true,
                 ReturnExpression => true,
                 ThrowExpression => true,
-                BinaryExpression bin when bin.Op == BinaryOp.Assign => true,
+                // 命名寄存器上的 ADD/SUB 等指令在 AST 写出时才会补上
+                // IsSelfAssignment；无副作用分析发生得更早，必须按运算符识别，
+                // 否则包含 `x += y` 的整个嵌套 if 会被当成空壳删除。
+                BinaryExpression bin when bin.IsSelfAssignment || bin.Op == BinaryOp.Assign ||
+                                          bin.Op.CanSelfAssign() => true,
                 UnaryExpression unary when unary.Op is UnaryOp.Inc or UnaryOp.Dec or UnaryOp.Invalidate or UnaryOp.Eval => true,
                 _ => false
             };
@@ -1591,7 +1962,7 @@ namespace Furikiri.Echo.Language
                 LocalExpression => true,
                 UnaryExpression unary when unary.Op is UnaryOp.Not or UnaryOp.InvertSign or UnaryOp.ToInt or UnaryOp.ToReal or UnaryOp.ToString or UnaryOp.ToNumber or UnaryOp.ToByteArray
                     => IsSideEffectFreeExpression(unary.Target),
-                BinaryExpression bin when bin.Op != BinaryOp.Assign
+                BinaryExpression bin when !bin.IsSelfAssignment && bin.Op != BinaryOp.Assign
                     => IsSideEffectFreeExpression(bin.Left) && IsSideEffectFreeExpression(bin.Right),
                 ConditionExpression cond => IsSideEffectFreeExpression(cond.Condition),
                 _ => false
@@ -1749,13 +2120,10 @@ namespace Furikiri.Echo.Language
             _formatter.WriteToken("(");
             Visit(mergedCondition);
             _formatter.WriteToken(")");
-            _formatter.WriteLine();
             _formatter.WriteStartBlock();
             Visit(new ContinueStatement());
             _formatter.WriteEndBlock();
             _formatter.WriteKeyword("else");
-            _formatter.WriteSpace();
-            _formatter.WriteLine();
             _formatter.WriteStartBlock();
             Visit(elseIf.Else);
             _formatter.WriteEndBlock();
@@ -1782,7 +2150,6 @@ namespace Furikiri.Echo.Language
             //_formatter.WriteSpace();
 
             _formatter.WriteToken(")");
-            _formatter.WriteLine();
             _formatter.WriteStartBlock();
             WriteLoopBody(forStmt.Body);
             _formatter.WriteEndBlock();
@@ -1792,7 +2159,6 @@ namespace Furikiri.Echo.Language
         internal override void VisitDoWhileStmt(DoWhileStatement doWhile)
         {
             _formatter.WriteKeyword("do");
-            _formatter.WriteLine();
             _formatter.WriteStartBlock();
             WriteLoopBody(doWhile.Body);
             _formatter.WriteEndBlock();
@@ -1830,8 +2196,6 @@ namespace Furikiri.Echo.Language
             }
 
             _formatter.WriteToken(")");
-            _formatter.WriteLine();
-
             _formatter.WriteStartBlock();
             WriteLoopBody(whileStmt.Body);
             _formatter.WriteEndBlock();
@@ -2022,7 +2386,6 @@ namespace Furikiri.Echo.Language
         internal override void VisitTryStmt(TryStatement tryStmt)
         {
             _formatter.WriteKeyword("try");
-            _formatter.WriteLine();
             _formatter.WriteStartBlock();
             // 活跃性预分析已正确处理 try 块中的变量声明，无需重置 _declaredLocals
             Visit(tryStmt.Try);
@@ -2031,28 +2394,40 @@ namespace Furikiri.Echo.Language
             if (tryStmt.Catch != null)
             {
                 _formatter.WriteKeyword("catch");
+                IAstNode catchVariableCopy = null;
+                Expression catchParameter = null;
                 if (tryStmt.Catch.Expression is CatchExpression catchClause && catchClause.Exception != null)
                 {
-                    // 仅当 catch 块实际使用了异常变量时才输出异常参数
                     var catchBody = tryStmt.Finally;
-                    bool exceptionIsUsed = catchBody != null && CatchBodyReferencesExpression(catchBody, catchClause.Exception);
+                    catchParameter = catchClause.Exception;
+                    // VM 先把隐式异常寄存器复制到源码 catch 变量。若删除这条
+                    // 人工赋值，就必须把赋值左侧写成 catch 参数，否则正文中的
+                    // e.message 会退化成未定义的 vN。
+                    if (TryGetCatchVariableCopy(
+                            catchBody, catchClause.Exception,
+                            out var copiedParameter, out catchVariableCopy))
+                    {
+                        catchParameter = copiedParameter;
+                    }
+
+                    // 仅当 catch 块实际使用异常变量时输出参数。
+                    bool exceptionIsUsed = catchBody != null &&
+                                           CatchBodyReferencesExpression(
+                                               catchBody, catchParameter, catchVariableCopy);
                     if (exceptionIsUsed)
                     {
                         _formatter.WriteToken("(");
-                        Visit(catchClause.Exception);
+                        Visit(catchParameter);
                         _formatter.WriteToken(")");
                     }
                 }
-                _formatter.WriteLine();
                 _formatter.WriteStartBlock();
                 // Catch body is temporarily stored in Finally
                 if (tryStmt.Finally != null)
                 {
-                    // 跳过平凡的 catch 变量拷贝语句（如 v3 = __e），这是字节码编译器为 catch(e) 生成的人工制品
-                    var catchVarExpr = (tryStmt.Catch.Expression is CatchExpression ce) ? ce.Exception : null;
                     foreach (var node in tryStmt.Finally.Statements)
                     {
-                        if (catchVarExpr != null && IsTrivialCatchVarCopy(node, catchVarExpr))
+                        if (ReferenceEquals(node, catchVariableCopy))
                             continue;
                         Visit(node);
                     }
@@ -2066,28 +2441,57 @@ namespace Furikiri.Echo.Language
         /// <summary>
         /// 检查 catch 块的语句中是否实际引用了指定的表达式对象（引用相等），忽略平凡拷贝
         /// </summary>
-        private static bool CatchBodyReferencesExpression(BlockStatement block, Expression target)
+        private static bool CatchBodyReferencesExpression(
+            BlockStatement block, Expression target, IAstNode ignoredNode = null)
         {
             if (block?.Statements == null || target == null) return false;
             return block.Statements.Any(stmt =>
-                !IsTrivialCatchVarCopy(stmt, target) && AstNodeReferencesExpression(stmt, target));
+                !ReferenceEquals(stmt, ignoredNode) && AstNodeReferencesExpression(stmt, target));
         }
 
-        /// <summary>
-        /// 判断是否为平凡的 catch 变量拷贝语句（如 v3 = __e），即 right-hand side 为 catch 变量本身
-        /// </summary>
-        private static bool IsTrivialCatchVarCopy(IAstNode node, Expression catchVar)
+        private static bool TryGetCatchVariableCopy(
+            BlockStatement block, Expression implicitException,
+            out Expression parameter, out IAstNode copyNode)
         {
-            return node is ExpressionStatement exprStmt &&
-                   exprStmt.Expression is BinaryExpression bin &&
-                   bin.Op == BinaryOp.Assign &&
-                   ReferenceEquals(bin.Right, catchVar);
+            parameter = null;
+            copyNode = null;
+            if (block?.Statements == null)
+            {
+                return false;
+            }
+
+            foreach (var node in block.Statements)
+            {
+                if (node is ExpressionStatement exprStmt &&
+                    exprStmt.Expression is BinaryExpression bin &&
+                    bin.Op == BinaryOp.Assign &&
+                    AreSameCatchVariable(bin.Right, implicitException))
+                {
+                    parameter = bin.Left;
+                    copyNode = node;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool AreSameCatchVariable(Expression left, Expression right)
+        {
+            return ReferenceEquals(left, right) ||
+                   left is LocalExpression local && right is LocalExpression targetLocal &&
+                   local.Slot == targetLocal.Slot ||
+                   left is IdentifierExpression identifier && right is IdentifierExpression targetIdentifier &&
+                   identifier.FullName == targetIdentifier.FullName;
         }
 
         private static bool AstNodeReferencesExpression(IAstNode node, Expression target)
         {
             if (node == null) return false;
-            if (ReferenceEquals(node, target)) return true;
+            if (node is Expression expression && AreSameCatchVariable(expression, target))
+            {
+                return true;
+            }
             return node switch
             {
                 BlockStatement block =>
@@ -2103,6 +2507,11 @@ namespace Furikiri.Echo.Language
                     AstNodeReferencesExpression(bin.Right, target),
                 UnaryExpression unary =>
                     AstNodeReferencesExpression(unary.Target, target),
+                IdentifierExpression identifier =>
+                    AstNodeReferencesExpression(identifier.Instance, target),
+                PropertyAccessExpression property =>
+                    AstNodeReferencesExpression(property.Instance, target) ||
+                    AstNodeReferencesExpression(property.Property, target),
                 InvokeExpression invoke =>
                     AstNodeReferencesExpression(invoke.Instance, target) ||
                     AstNodeReferencesExpression(invoke.MethodExpression, target) ||
@@ -2116,9 +2525,9 @@ namespace Furikiri.Echo.Language
         }
 
         /// <summary>
-        /// 基于活跃性启发式分析，确定哪些 IsDeclaration=true 的赋值节点需要输出 var。
-        /// 规则：同名变量的后续定义，仅当上一次定义之后发生过读取时（表明旧值已被消费，
-        /// 新赋值属于新的逻辑变量），才视为新声明；否则视为对同一变量的重新赋值，不再加 var。
+        /// 确定哪些 IsDeclaration=true 的赋值节点需要输出 var。VM 的 CP 指令不区分
+        /// 声明与普通赋值，因此同一函数槽位只在首次定义时声明；后续写入即使经过
+        /// 读取也仍是赋值。这样可避免循环或 switch 内把 `flag = false` 错写成第二个 var。
         /// </summary>
         private sealed class DeclarationAnalyzer
         {
@@ -2126,7 +2535,7 @@ namespace Furikiri.Echo.Language
             private readonly HashSet<BinaryExpression> _validDeclarations =
                 new HashSet<BinaryExpression>(ReferenceEqualityComparer.Instance);
 
-            // liveAfterDef[name] == true：该变量自上次定义后已被读取（旧值仍活跃）
+            // 已出现的函数局部名；TJS2 的 var 是函数局部声明，无需按块重复输出。
             private readonly Dictionary<string, bool> _liveAfterDef =
                 new Dictionary<string, bool>();
 
@@ -2144,19 +2553,13 @@ namespace Furikiri.Echo.Language
 
             private void ProcessDefinition(BinaryExpression bin, string name)
             {
-                if (!_liveAfterDef.TryGetValue(name, out bool live))
+                if (!_liveAfterDef.ContainsKey(name))
                 {
                     // 首次定义：加入有效声明集合
                     _validDeclarations.Add(bin);
                 }
-                else if (live)
-                {
-                    // 上次定义后曾被读取过：视为新逻辑变量，加入集合
-                    _validDeclarations.Add(bin);
-                }
-                // else：无中间读取，属于对同一变量的重新赋值，不加 var
 
-                // 重置：新值刚写入，尚未被读取
+                // 后续读取信息仍供遍历使用，但不再把同槽位写入提升成新声明。
                 _liveAfterDef[name] = false;
             }
 

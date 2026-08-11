@@ -73,6 +73,32 @@ namespace Furikiri.AST.Expressions
         }
 
         /// <summary>
+        /// 将条件标志位上的三元 Phi 化简为短路布尔表达式。
+        /// TJS2 会跨基本块保留 flag，例如 C ? X : C 实际就是 C &amp;&amp; X；
+        /// 若继续保留三元式，后续控制流恢复会把产生 flag 的空块误当成独立 if。
+        /// </summary>
+        public Expression SimplifyBoolean()
+        {
+            if (!IsConditional)
+            {
+                return Simplify();
+            }
+
+            var condition = Condition.Condition;
+            if (AreSemanticallyEqual(ElseBranch, condition))
+            {
+                return condition.And(ThenBranch);
+            }
+
+            if (AreSemanticallyEqual(ThenBranch, condition))
+            {
+                return condition.Or(ElseBranch);
+            }
+
+            return this;
+        }
+
+        /// <summary>
         /// Check if two expressions are semantically equal
         /// </summary>
         private bool AreSemanticallyEqual(Expression a, Expression b)

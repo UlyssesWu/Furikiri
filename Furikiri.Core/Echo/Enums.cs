@@ -58,6 +58,7 @@ namespace Furikiri.Echo
         IsFalse,
         TypeOf,
         Invalidate,
+        IsValid,
         Eval,
         PropertyRef,
         PropertyObject,

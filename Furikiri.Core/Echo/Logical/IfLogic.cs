@@ -18,7 +18,12 @@ namespace Furikiri.Echo.Logical
         {
             if (hideConditionBlock)
             {
-                ConditionBlock.Hidden = true;
+                // 合成的多路 else-if 共用同一个条件根块；隐藏内层“条件块”
+                // 会连同外层语句及其准备表达式一起丢失。
+                if (ConditionBlock != null && ParentIf?.ConditionBlock != ConditionBlock)
+                {
+                    ConditionBlock.Hidden = true;
+                }
             }
 
             Then?.HideBlocks();
@@ -61,9 +66,11 @@ namespace Furikiri.Echo.Logical
             // else-if chain, keep those expressions immediately before the nested if.
             if (ParentIf != null && ConditionBlock != null && Condition != null)
             {
-                var prefix = ConditionBlock.Statements
-                    .TakeWhile(stmt => !ReferenceEquals(stmt, Condition))
-                    .ToList();
+                var conditionIndex = ConditionBlock.Statements.FindIndex(
+                    stmt => ReferenceEquals(stmt, Condition));
+                var prefix = conditionIndex > 0
+                    ? ConditionBlock.Statements.Take(conditionIndex).ToList()
+                    : new System.Collections.Generic.List<IAstNode>();
                 if (prefix.Count > 0)
                 {
                     var block = new BlockStatement();

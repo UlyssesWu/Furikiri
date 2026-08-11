@@ -12,70 +12,192 @@ namespace Furikiri.Echo.Pass
     class ControlFlowPass : IPass
     {
         private DecompileContext _context;
+        private readonly HashSet<int> _structuringBlocks = new HashSet<int>();
 
         public BlockStatement Process(DecompileContext context, BlockStatement statement)
         {
             _context = context;
             _context.LoopSetSort();
 
+            NormalizeNoOpConditions();
+            HideCollapsedPhiConditions();
             IntervalAnalysisDoWhilePass();
-            
-            //try
+
+            // 先处理循环内部条件。若外围 if/try 先运行，会把尚未物化的循环基本块
+            // 当成自己的普通分支并隐藏，最终造成循环体被提到循环外。
+            foreach (var loop in context.LoopSet.OrderBy(loop => loop.Blocks.Count))
+            {
+                // 父自然循环的 Blocks 会包含子循环全部基本块。父循环若提前在这些块上
+                // 恢复 if，会把子循环体当成父循环的普通分支并搬到子循环语句之外。
+                // 子循环稍后会先物化为单个语句，因此这里仅处理父循环自己的块。
+                var childBlocks = loop.Children
+                    .SelectMany(child => child.Blocks)
+                    .ToHashSet();
+                if (loop.LoopLogic is DoWhileLogic dw)
+                {
+                    StructureLoopBodyIfElse(dw.Body.Where(block => !childBlocks.Contains(block)).ToList());
+                }
+                else if (loop.LoopLogic is ForLogic fl)
+                {
+                    StructureLoopBodyIfElse(fl.Body.Where(block => !childBlocks.Contains(block)).ToList());
+                }
+
+                // 子循环在继续处理父循环前立即物化。仅仅“先分析、稍后统一物化”仍会
+                // 让父循环的外围 if 沿 CFG 进入子循环，把其语句吸收到自己的分支中。
+                loop.MaterializedStatement = loop.LoopLogic.ToStatement();
+                loop.Header.Statements = new List<IAstNode> { loop.MaterializedStatement };
+                loop.Header.Hidden = false;
+            }
+
             BuildTry();
 
+            // 条件链统一从最早入口处理。只筛多路链会让同一短路表达式的后半段
+            // 在本轮先被物化，下一轮再看根节点时共享出口已隐藏，最终产生空分支。
+            // 外围 gate 不能直接拉平的情形会返回 false，随后仍可处理其内层链。
             foreach (var b in _context.Blocks)
             {
-                if (b.Hidden)
+                if (b.Hidden || context.LoopSet.Any(loop => loop.Header == b))
                 {
                     continue;
                 }
 
-                if (StructureIfElse(b, out var logic))
+                var condition = b.Statements.GetCondition();
+                if (condition != null &&
+                    TryStructureConditionChain(b, condition, out var multiWayLogic))
                 {
-                    if (logic.Else.IsBreak)
-                    {
-                        //can be while!
-                        var loop = context.LoopSet.FirstOrDefault(l => l.Header == b);
-                        if (loop != null && loop.LoopLogic is DoWhileLogic dw)
-                        {
-                            dw.IsWhile = true;
-                            dw.Condition = logic.Condition;
-                            // Keep the original loop body. Only strip the conditional jump/condition
-                            // from the header block if present, but do NOT remove the entire header,
-                            // as it may contain legitimate loop body statements (e.g., inner if-else chains).
-                            var lastCtrl = loop.Header.Statements.LastOrDefault(st =>
-                                st is ConditionExpression || st is GotoExpression || st is BreakStatement || st is ContinueStatement);
-                            if (lastCtrl != null)
-                            {
-                                loop.Header.Statements.Remove(lastCtrl);
-                            }
-                        }
-                        else
-                        {
-                            b.Statements.Replace(logic.Condition, logic.Simplify().ToStatement());
-                        }
-                    }
-                    else
-                    {
-                        b.Statements.Replace(logic.Condition, logic.Simplify().ToStatement());
-                    }
+                    b.Statements.Replace(condition, multiWayLogic.Simplify().ToStatement());
                 }
             }
-            
-            // Process if-else structures within loop bodies AFTER while detection
-            foreach (var loop in context.LoopSet)
+
+            // 短路链必须从最早的根条件开始恢复。若先递归物化外层分支，后面的
+            // 中间条件块会各自变成 if，根节点便无法再识别完整的 && / || 链。
+            foreach (var b in _context.Blocks)
             {
-                if (loop.LoopLogic is DoWhileLogic dw)
+                if (b.Hidden || context.LoopSet.Any(loop => loop.Header == b))
                 {
-                    StructureLoopBodyIfElse(dw.Body);
+                    continue;
                 }
-                else if (loop.LoopLogic is ForLogic fl)
+
+                var condition = b.Statements.GetCondition();
+                if (condition != null && TryStructureConditionChain(b, condition, out var chainLogic))
                 {
-                    StructureLoopBodyIfElse(fl.Body);
+                    b.Statements.Replace(condition, chainLogic.Simplify().ToStatement());
+                }
+            }
+
+            // 普通嵌套 if 从内向外物化。若先处理外层，分支入口处尚未恢复的
+            // ConditionExpression 会和其真分支一起被收进普通语句区域，结果是
+            // 条件退化为裸比较、原本受控的副作用被错误提升为无条件执行。
+            // 短路条件链已在上面的专用阶段从根节点处理，因此这里倒序不会拆散 &&/||。
+            foreach (var b in _context.Blocks.OrderByDescending(block => block.Start))
+            {
+                if (b.Hidden || context.LoopSet.Any(loop => loop.Header == b))
+                {
+                    continue;
+                }
+
+                var originalCondition = b.Statements.GetCondition();
+                if (StructureIfElse(b, out var logic))
+                {
+                    b.Statements.Replace(originalCondition, logic.Simplify().ToStatement());
                 }
             }
 
             return statement;
+        }
+
+        /// <summary>
+        /// 条件跳转的真、假目标完全相同时，条件结果没有控制流用途。纯条件可直接
+        /// 删除；若求值中含调用或赋值则只保留该表达式的副作用。否则这种字节码
+        /// 会在嵌套块中泄露成 `typeof x == "String";` 一类伪语句。
+        /// </summary>
+        private void NormalizeNoOpConditions()
+        {
+            foreach (var block in _context.Blocks)
+            {
+                for (var index = block.Statements.Count - 1; index >= 0; index--)
+                {
+                    if (block.Statements[index] is not ConditionExpression condition ||
+                        condition.TrueBranch != condition.FalseBranch)
+                    {
+                        continue;
+                    }
+
+                    if (HasObservableSideEffect(condition.Condition))
+                    {
+                        block.Statements[index] = condition.Condition;
+                    }
+                    else
+                    {
+                        block.Statements.RemoveAt(index);
+                    }
+                }
+            }
+        }
+
+        private static bool HasObservableSideEffect(Expression expression)
+        {
+            return expression switch
+            {
+                null => false,
+                InvokeExpression => true,
+                ReturnExpression => true,
+                ThrowExpression => true,
+                BinaryExpression binary when binary.Op == BinaryOp.Assign ||
+                                             binary.IsSelfAssignment ||
+                                             binary.Op.CanSelfAssign() => true,
+                BinaryExpression binary => HasObservableSideEffect(binary.Left) ||
+                                           HasObservableSideEffect(binary.Right),
+                UnaryExpression unary when unary.Op is UnaryOp.Inc or UnaryOp.Dec or
+                    UnaryOp.Invalidate or UnaryOp.Eval => true,
+                UnaryExpression unary => HasObservableSideEffect(unary.Target),
+                ConditionExpression condition => HasObservableSideEffect(condition.Condition),
+                PropertyAccessExpression property => HasObservableSideEffect(property.Instance) ||
+                                                     HasObservableSideEffect(property.Property),
+                _ => false
+            };
+        }
+
+        private void HideCollapsedPhiConditions()
+        {
+            if (_context.BlockTable == null)
+            {
+                return;
+            }
+
+            // 条件两侧都只是给 Phi 提供值并立即汇合时，表达式传播已经把它
+            // 折叠为三元表达式。必须在循环体结构化前移除控制流外壳，否则
+            // 其中一侧可能被误认成 continue，真正的赋值反而被跳过。
+            var changed = true;
+            while (changed)
+            {
+                changed = false;
+                foreach (var block in _context.Blocks)
+                {
+                    var condition = block.Hidden ? null : block.Statements.GetCondition();
+                    if (condition == null || !block.Statements.IsCondition() ||
+                        !_context.BlockTable.TryGetValue(condition.TrueBranch, out var trueTarget) ||
+                        !_context.BlockTable.TryGetValue(condition.FalseBranch, out var falseTarget))
+                    {
+                        continue;
+                    }
+
+                    var passthrough = new HashSet<Block>();
+                    var normalizedTrue = NormalizeDecisionTarget(trueTarget, passthrough);
+                    var normalizedFalse = NormalizeDecisionTarget(falseTarget, passthrough);
+                    if (normalizedTrue != normalizedFalse || passthrough.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    block.Hidden = true;
+                    foreach (var passthroughBlock in passthrough)
+                    {
+                        passthroughBlock.Hidden = true;
+                    }
+                    changed = true;
+                }
+            }
         }
 
         /// <summary>
@@ -84,7 +206,80 @@ namespace Furikiri.Echo.Pass
         private void StructureLoopBodyIfElse(List<Block> bodyBlocks)
         {
             if (bodyBlocks == null) return;
-            
+
+            var bodySet = bodyBlocks.ToHashSet();
+            // 先从最早入口恢复最终 return 的整条短路链。入口本身未必直接连到
+            // return（如 `(ext != "" && match) || (ext == "" && probe())`），
+            // 只寻找“纯条件/跳板路径”可达循环外 return 的根，避免改写普通 if。
+            foreach (var root in bodyBlocks
+                         .Where(block => !block.Hidden && block.Statements.GetCondition() != null &&
+                                         CanReachExternalReturnThroughConditions(block, bodySet))
+                         .OrderBy(block => block.Start)
+                         .ToList())
+            {
+                if (root.Hidden)
+                {
+                    continue;
+                }
+
+                var rootCondition = root.Statements.GetCondition();
+                if (TryStructureConditionChain(root, rootCondition, out var returnChain))
+                {
+                    root.Statements.Replace(
+                        rootCondition, returnChain.Simplify().ToStatement());
+                }
+            }
+
+            // 先恢复直接离开自然循环的 return 守卫。外围 case/范围条件若先物化，
+            // 会把尚未结构化的最后一项（常见于 switch 的最终 case）吞成空分支。
+            foreach (var guard in bodyBlocks
+                         .Where(block => !block.Hidden && block.Statements.GetCondition() != null &&
+                                         block.To.Any(target => !bodySet.Contains(target) &&
+                                             target.Statements.Any(node => node is ReturnExpression)))
+                         .OrderBy(block => block.Start)
+                         .ToList())
+            {
+                if (guard.Hidden)
+                {
+                    continue;
+                }
+
+                var guardCondition = guard.Statements.GetCondition();
+                // 多个条件共享同一个 return 时必须从最早入口整体恢复；先物化
+                // 尾部条件会隐藏共享 return，使前面的真分支退化为空块。
+                if (TryStructureConditionChain(guard, guardCondition, out var guardChain))
+                {
+                    guard.Statements.Replace(
+                        guardCondition, guardChain.Simplify().ToStatement());
+                }
+                else if (StructureIfElse(guard, out var guardLogic))
+                {
+                    guard.Statements.Replace(
+                        guardCondition, guardLogic.Simplify().ToStatement());
+                    guardLogic.HideBlocks(false);
+                }
+            }
+
+            // 先处理两侧分别以 ++/-- 开始的方向菱形。循环头守卫若先物化，
+            // 会把它整体隐藏；匹配必须足够严格，不能把普通比较链倒序物化。
+            foreach (var diamond in bodyBlocks
+                         .Where(block => !block.Hidden && block.To.Count == 2 &&
+                                         block.Statements.GetCondition() != null &&
+                                         block.To.All(target =>
+                                             target.Statements.FirstOrDefault() is UnaryExpression unary &&
+                                             unary.Op is UnaryOp.Inc or UnaryOp.Dec))
+                         .OrderByDescending(block => block.Start)
+                         .ToList())
+            {
+                var diamondCondition = diamond.Statements.GetCondition();
+                if (StructureIfElse(diamond, out var diamondLogic))
+                {
+                    diamond.Statements.Replace(
+                        diamondCondition, diamondLogic.Simplify().ToStatement());
+                    diamondLogic.HideBlocks(false);
+                }
+            }
+
             // Process blocks multiple times to handle nested structures properly
             bool changed = true;
             int maxIterations = 5;
@@ -100,9 +295,10 @@ namespace Furikiri.Echo.Pass
                     // Skip blocks that are already hidden
                     if (block.Hidden) continue;
                     
+                    var originalCondition = block.Statements.GetCondition();
                     if (StructureIfElse(block, out var logic))
                     {
-                        block.Statements.Replace(logic.Condition, logic.Simplify().ToStatement());
+                        block.Statements.Replace(originalCondition, logic.Simplify().ToStatement());
                         // Hide the blocks that are part of the if-else structure
                         logic.HideBlocks(false); // Don't hide the condition block itself
                         changed = true;
@@ -119,6 +315,30 @@ namespace Furikiri.Echo.Pass
                     .Where(b => b.Start >= startInclusive && b.Start < endExclusive)
                     .OrderBy(b => b.Start)
                     .ToList();
+            }
+
+            List<Block> SelectReachableBlocks(Block entry, Block exit)
+            {
+                var selected = new HashSet<Block>();
+                var pending = new Stack<Block>();
+                pending.Push(entry);
+                while (pending.Count > 0)
+                {
+                    var current = pending.Pop();
+                    if (current == null || current == exit ||
+                        current.Start < entry.Start || current.Start >= exit.Start ||
+                        !selected.Add(current))
+                    {
+                        continue;
+                    }
+
+                    foreach (var next in current.To)
+                    {
+                        pending.Push(next);
+                    }
+                }
+
+                return selected.OrderBy(candidate => candidate.Start).ToList();
             }
 
             Block GetJumpTarget(Block b)
@@ -197,7 +417,10 @@ namespace Furikiri.Echo.Pass
                 t.Body = SelectBlocksInRange(block.Start + 1, catchOrExitTry.Start);
                 if (tryEnd != null && tryEnd != catchOrExitTry) // has catch
                 {
-                    t.CatchBody = SelectBlocksInRange(catchOrExitTry.Start, tryEnd.Start);
+                    // catch 后面常紧接外围 else-if 的下一项，但 catch 自己会直接
+                    // 跳到 try 的公共出口。按地址范围收集会把这些不可达分支全部
+                    // 吞进 catch；应只沿 catch 入口实际可达的 CFG 边收集。
+                    t.CatchBody = SelectReachableBlocks(catchOrExitTry, tryEnd);
                 }
 
                 // 在 try/catch 体内结构化 if-else（需在 ToStatement 之前，
@@ -265,11 +488,41 @@ namespace Furikiri.Echo.Pass
                 dw.Break = FindBreak(loop);
 
                 Block conditionBlock = null;
-                if (lastBlock.Statements.GetCondition() is ConditionExpression lastCond &&
-                    lastCond.TrueBranch == loop.Header.Start)
+                var headerCondition = loop.Header.Statements.GetCondition();
+                var tailCondition = lastBlock.Statements.GetCondition();
+                if (tailCondition is ConditionExpression lastCond &&
+                    (lastCond.TrueBranch == loop.Header.Start ||
+                     lastCond.FalseBranch == loop.Header.Start))
                 {
-                    dw.Condition = lastCond;
+                    // 尾部测试优先于头部的早退条件。do-while 的循环体开头常有
+                    // `if (...) return`，若先看头部会把早退误认成 while 条件。
+                    dw.Condition = lastCond.TrueBranch == loop.Header.Start
+                        ? lastCond
+                        : (ConditionExpression)lastCond.Invert();
+                    var exitStart = lastCond.TrueBranch == loop.Header.Start
+                        ? lastCond.FalseBranch
+                        : lastCond.TrueBranch;
+                    if (_context.BlockTable != null &&
+                        _context.BlockTable.TryGetValue(exitStart, out var tailExit))
+                    {
+                        dw.Break = tailExit;
+                    }
                     conditionBlock = lastBlock;
+                }
+                else if (headerCondition != null && _context.BlockTable != null &&
+                    _context.BlockTable.TryGetValue(headerCondition.TrueBranch, out var headerTrue) &&
+                    _context.BlockTable.TryGetValue(headerCondition.FalseBranch, out var headerFalse) &&
+                    loop.Contains(headerTrue) != loop.Contains(headerFalse))
+                {
+                    // 入口测试型循环：一个分支进入循环体，另一个分支离开循环。
+                    // 不能依赖公共后支配块来判断退出目标，因为退出分支可能直接 return。
+                    var trueIsBody = loop.Contains(headerTrue);
+                    dw.IsWhile = true;
+                    dw.Condition = trueIsBody
+                        ? headerCondition
+                        : (ConditionExpression)headerCondition.Invert();
+                    dw.Break = trueIsBody ? headerFalse : headerTrue;
+                    conditionBlock = loop.Header;
                 }
                 else if (lastBlock.Statements.Count == 1 && lastBlock.Statements[0] is GotoExpression &&
                          loop.Header.Statements.GetCondition() is ConditionExpression cond &&
@@ -279,14 +532,21 @@ namespace Furikiri.Echo.Pass
                     dw.Condition = cond;
                     conditionBlock = loop.Header;
                 }
-
                 dw.Body = new List<Block>(loop.Blocks);
                 // Remove condition block from body if it's not part of the loop body
                 if (conditionBlock != null && conditionBlock != loop.Header)
                 {
                     dw.Body.Remove(conditionBlock);
                 }
-                conditionBlock?.Statements.Remove(conditionBlock.Statements.LastOrDefault(stmt => stmt is IJump));
+
+                if (dw.IsWhile && conditionBlock == loop.Header)
+                {
+                    var loopCondition = dw.Condition;
+                    InlineLoopHeaderAssignment(conditionBlock, ref loopCondition);
+                    dw.Condition = loopCondition;
+                }
+
+                var conditionJump = conditionBlock?.Statements.LastOrDefault(stmt => stmt is IJump);
                 dw.Continue = null;
 
                 var cont = loop.Blocks.LastOrDefault();
@@ -317,19 +577,192 @@ namespace Furikiri.Echo.Pass
                 }
                 else
                 {
-                    foreach (var bodyBlock in dw.Body)
-                    {
-                        StructureBreakContinue(bodyBlock, dw.Continue, dw.Break);
-                    }
+                    conditionBlock?.Statements.Remove(conditionJump);
+                    // while 形式若保留了带实际步进语句的闩锁块，跳到该块只是
+                    // 完成本轮 switch/分支并执行步进，并非源码级 continue。
+                    // 将它输出成 continue 会直接越过仍在循环体尾部的步进语句。
+                    var syntaxContinue = dw.Continue != null &&
+                                         dw.Continue.Statements.All(statement =>
+                                             statement is IJump)
+                        ? dw.Continue
+                        : null;
+                    StructureLoopTransfers(loop, dw.Body, syntaxContinue, dw.Break);
                 }
 
                 loop.LoopLogic = logic;
+                loop.Break = dw.Break;
             }
+        }
+
+        private static bool CanReachExternalReturnThroughConditions(
+            Block start, ISet<Block> loopBody)
+        {
+            var pending = new Stack<Block>();
+            var visited = new HashSet<Block>();
+            pending.Push(start);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                if (!visited.Add(current))
+                {
+                    continue;
+                }
+
+                if (current != start && current.Statements.GetCondition() == null &&
+                    !IsDecisionPassthrough(current))
+                {
+                    continue;
+                }
+
+                foreach (var next in current.To)
+                {
+                    if (!loopBody.Contains(next) &&
+                        next.Statements.Any(statement => statement is ReturnExpression))
+                    {
+                        return true;
+                    }
+
+                    if (next.Statements.GetCondition() != null || IsDecisionPassthrough(next))
+                    {
+                        pending.Push(next);
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private void InlineLoopHeaderAssignment(Block conditionBlock, ref Expression condition)
+        {
+            if (conditionBlock?.Statements == null || condition == null)
+            {
+                return;
+            }
+
+            var currentCondition = condition;
+            var conditionIndex = conditionBlock.Statements.FindIndex(node => ReferenceEquals(node, currentCondition));
+            if (conditionIndex < 0)
+            {
+                conditionIndex = conditionBlock.Statements.FindIndex(node => node is ConditionExpression);
+            }
+
+            if (conditionIndex <= 0)
+            {
+                return;
+            }
+
+            // `while ((value = next()) !== void)` 会编译成循环头中的赋值语句和
+            // 随后的比较。若直接把比较拿去当 while 条件，赋值会落入循环体，首次
+            // 检查就读取尚未更新的 value。仅在条件确实读取同一赋值目标时内联。
+            for (var i = conditionIndex - 1; i >= 0; i--)
+            {
+                if (conditionBlock.Statements[i] is not BinaryExpression assignment ||
+                    assignment.Op != BinaryOp.Assign ||
+                    !ReferencesAssignmentTarget(condition, assignment.Left))
+                {
+                    continue;
+                }
+
+                if (assignment.IsDeclaration)
+                {
+                    var hasEarlierDeclaration = _context.Blocks.Any(block =>
+                        block != conditionBlock && block.Start < conditionBlock.Start &&
+                        conditionBlock.Dominator != null && conditionBlock.Dominator[block.Id] &&
+                        block.Statements.OfType<BinaryExpression>().Any(previous =>
+                            previous.IsDeclaration && previous.Op == BinaryOp.Assign &&
+                            IsSameAssignmentTarget(previous.Left, assignment.Left)));
+                    if (!hasEarlierDeclaration)
+                    {
+                        // 首次声明属于循环体本身，不能生成非法的 `while (var x = ...)`，
+                        // 也不能把声明提升出每轮执行的位置。
+                        continue;
+                    }
+
+                    assignment.IsDeclaration = false;
+                }
+
+                var replaced = false;
+                condition = ReplaceConditionTarget(condition, assignment.Left, assignment, ref replaced);
+                if (replaced)
+                {
+                    conditionBlock.Statements.RemoveAt(i);
+                }
+                return;
+            }
+        }
+
+        private static Expression ReplaceConditionTarget(Expression expression, Expression target,
+            Expression replacement, ref bool replaced)
+        {
+            if (expression == null || replaced)
+            {
+                return expression;
+            }
+
+            if (IsSameAssignmentTarget(expression, target))
+            {
+                replaced = true;
+                return replacement;
+            }
+
+            switch (expression)
+            {
+                case ConditionExpression conditional:
+                    conditional.Condition = ReplaceConditionTarget(conditional.Condition, target, replacement, ref replaced);
+                    if (conditional.Condition != null)
+                    {
+                        conditional.Condition.Parent = conditional;
+                    }
+                    break;
+                case BinaryExpression binary:
+                    binary.Left = ReplaceConditionTarget(binary.Left, target, replacement, ref replaced);
+                    if (binary.Left != null)
+                    {
+                        binary.Left.Parent = binary;
+                    }
+                    if (!replaced)
+                    {
+                        binary.Right = ReplaceConditionTarget(binary.Right, target, replacement, ref replaced);
+                        if (binary.Right != null)
+                        {
+                            binary.Right.Parent = binary;
+                        }
+                    }
+                    break;
+                case UnaryExpression unary:
+                    unary.Target = ReplaceConditionTarget(unary.Target, target, replacement, ref replaced);
+                    if (unary.Target != null)
+                    {
+                        unary.Target.Parent = unary;
+                    }
+                    break;
+            }
+
+            return expression;
         }
 
         internal bool DoWhileToFor(Loop loop, DoWhileLogic dw, out ForLogic f)
         {
             f = null;
+
+            // 无闩锁块的循环没有可提取的增量表达式，不能转换为 for。
+            // 直接按 while/do-while 保留，避免复杂控制流上解引用空 Continue。
+            if (dw.Continue == null)
+            {
+                return false;
+            }
+
+            // 多个块分别回到循环头时，步进通常受条件控制，例如删除成功减长度，
+            // 否则才增加索引。只抽取最后一个回边的 ++ 放进 for 头会使其每轮都执行。
+            // 仅有唯一闩锁时，步进才可安全提升为 for 的 Increment。
+            var latchBlocks = loop.Blocks
+                .Where(block => block.To.Contains(loop.Header))
+                .Distinct()
+                .ToList();
+            if (latchBlocks.Count != 1 || latchBlocks[0] != dw.Continue)
+            {
+                return false;
+            }
 
             // Nested loops are prone to incorrect statement hoisting during for-conversion.
             // Keep them as while/do-while to preserve semantics first.
@@ -342,33 +775,71 @@ namespace Furikiri.Echo.Pass
 
             //Get Initializer
             var prev = _context.Blocks[idx - 1];
-            var lastAssign =
-                (BinaryExpression) prev.Statements.LastOrDefault(
-                    n => n is BinaryExpression b && b.Op == BinaryOp.Assign);
-            //if (lastAssign == null || !(lastAssign.Left is LocalExpression l))
-            if (lastAssign == null)
+            var externalPredecessors = loop.Header.From
+                .Where(predecessor => !loop.Blocks.Contains(predecessor))
+                .Distinct()
+                .ToList();
+            if (externalPredecessors.Count != 1 || externalPredecessors[0] != prev)
             {
                 return false;
             }
 
-            var l = lastAssign.Left;
-
             //Get Increment
             Expression step = null;
+            Expression stepTarget = null;
             //the increment statement can be unary or binary
             var operationExp = dw.Continue.Statements
                 .LastOrDefault(n => (n is IOperation));
 
-            if (operationExp is UnaryExpression step1 && step1.Op.CanSelfAssign() &&
-                (step1.Target == l || (step1.Target is LocalExpression le1 && l is LocalExpression le2 && le1.Slot == le2.Slot)))
+            if (operationExp is UnaryExpression step1 && step1.Op.CanSelfAssign())
             {
                 step = step1;
+                stepTarget = step1.Target;
             }
             else if (operationExp is BinaryExpression step2 && step2.Op.CanSelfAssign())
             {
                 step = step2;
+                stepTarget = step2.Left;
             }
             else
+            {
+                return false;
+            }
+
+            // 循环前块可能还会缓存长度等值，计数器初始化并不一定是最后一条赋值。
+            // 必须按闩锁步进的目标反查 initializer，否则会错过可安全提升的 for，
+            // 也可能把无关赋值从原位置错误搬进循环头。
+            var initializer = prev.Statements
+                .OfType<BinaryExpression>()
+                .LastOrDefault(assign => assign.Op == BinaryOp.Assign &&
+                                         IsSameAssignmentTarget(assign.Left, stepTarget));
+            if (initializer == null)
+            {
+                return false;
+            }
+
+            var l = initializer.Left;
+
+            Expression forCondition = null;
+            var headerCondition = first.Statements.LastOrDefault() as ConditionExpression;
+            if (headerCondition != null)
+            {
+                // 嵌套循环的块地址不一定连续，Blocks.Last().End + 1 并非真实出口。
+                // 入口分析已经解析出准确的 Break 块，应以它判断条件哪一侧离开循环。
+                var exitStart = dw.Break?.Start ?? loop.Exit;
+                if (headerCondition.TrueBranch == exitStart)
+                {
+                    forCondition = headerCondition.Condition.Invert();
+                }
+                else if (headerCondition.FalseBranch == exitStart)
+                {
+                    forCondition = headerCondition.Condition;
+                }
+            }
+
+            // 只有初始化、条件和步进确实围绕同一目标时才提升为 for。
+            // 否则前一块的无关赋值会被误当成 initializer，改变执行顺序。
+            if (forCondition == null || !ReferencesAssignmentTarget(forCondition, l))
             {
                 return false;
             }
@@ -377,26 +848,84 @@ namespace Furikiri.Echo.Pass
             dw.Continue.Statements.Remove(step);
 
             //Get Condition
-            if (first.Statements.LastOrDefault() is ConditionExpression condi)
-            {
-                if (condi.JumpTo == loop.Exit)
-                {
-                    dw.Condition = condi;
-                    first.Statements.Remove(condi);
-                }
-            }
+            dw.Condition = forCondition;
+            first.Statements.Remove(headerCondition);
 
             dw.Continue.Statements.Remove(dw.Continue.Statements.LastOrDefault(stmt => stmt is IJump));
 
-            f = new ForLogic {Initializer = lastAssign, Increment = step, Condition = dw.Condition, Body = dw.Body};
-            prev.Statements.Remove(lastAssign);
+            f = new ForLogic {Initializer = initializer, Increment = step, Condition = dw.Condition, Body = dw.Body};
+            prev.Statements.Remove(initializer);
 
-            foreach (var bodyBlock in f.Body)
-            {
-                StructureBreakContinue(bodyBlock, dw.Continue, dw.Break);
-            }
+            StructureLoopTransfers(loop, f.Body, dw.Continue, dw.Break);
 
             return true;
+        }
+
+        private void StructureLoopTransfers(Loop loop, IEnumerable<Block> body, Block continueBlock, Block breakBlock)
+        {
+            var bodyBlocks = body?.ToList() ?? new List<Block>();
+            foreach (var bodyBlock in bodyBlocks)
+            {
+                StructureBreakContinue(bodyBlock, continueBlock, breakBlock);
+            }
+
+        }
+
+        private static bool IsSameAssignmentTarget(Expression left, Expression right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+
+            if (left is LocalExpression leftLocal && right is LocalExpression rightLocal)
+            {
+                return leftLocal.Slot == rightLocal.Slot;
+            }
+
+            if (left is IdentifierExpression leftIdentifier && right is IdentifierExpression rightIdentifier)
+            {
+                return string.Equals(leftIdentifier.FullName, rightIdentifier.FullName, System.StringComparison.Ordinal);
+            }
+
+            return false;
+        }
+
+        private static bool ReferencesAssignmentTarget(Expression expression, Expression target)
+        {
+            if (expression == null)
+            {
+                return false;
+            }
+
+            if (IsSameAssignmentTarget(expression, target))
+            {
+                return true;
+            }
+
+            switch (expression)
+            {
+                case ConditionExpression condition:
+                    return ReferencesAssignmentTarget(condition.Condition, target);
+                case BinaryExpression binary:
+                    return ReferencesAssignmentTarget(binary.Left, target) ||
+                           ReferencesAssignmentTarget(binary.Right, target);
+                case UnaryExpression unary:
+                    return ReferencesAssignmentTarget(unary.Target, target);
+                case PropertyAccessExpression property:
+                    return ReferencesAssignmentTarget(property.Instance, target) ||
+                           ReferencesAssignmentTarget(property.Property, target);
+                case IdentifierExpression identifier:
+                    return ReferencesAssignmentTarget(identifier.Instance, target);
+                case InvokeExpression invoke:
+                    return ReferencesAssignmentTarget(invoke.Instance, target) ||
+                           ReferencesAssignmentTarget(invoke.MethodExpression, target) ||
+                           invoke.Parameters.Any(parameter => ReferencesAssignmentTarget(parameter, target));
+                case PhiExpression phi:
+                    return phi.PossibleExpressions.Any(possible => ReferencesAssignmentTarget(possible, target));
+                default:
+                    return false;
+            }
         }
 
         internal void StructureBreakContinue(Block b, Block continueBlock, Block breakBlock)
@@ -416,6 +945,77 @@ namespace Furikiri.Echo.Pass
                     }
                 }
             }
+        }
+
+        private static bool IsLoopBreakArm(Block block, Block loopBreak)
+        {
+            if (block == null || loopBreak == null)
+            {
+                return false;
+            }
+
+            if (block == loopBreak || block.Statements.Any(statement => statement is BreakStatement))
+            {
+                return true;
+            }
+
+            return block.Statements.LastOrDefault() is GotoExpression jump &&
+                   jump.JumpTo == loopBreak.Start;
+        }
+
+        private static Statement MoveLoopBreakArmToStatement(Block block, Block loopBreak)
+        {
+            if (block == null || block == loopBreak)
+            {
+                return new BreakStatement();
+            }
+
+            var result = new BlockStatement();
+            var moved = block.Statements
+                .Where(node => node is not GotoExpression && node is not BreakStatement)
+                .ToList();
+            foreach (var node in moved)
+            {
+                block.Statements.Remove(node);
+                result.Statements.Add(node is Expression expression
+                    ? new ExpressionStatement(expression)
+                    : node);
+            }
+            result.Statements.Add(new BreakStatement());
+            return result;
+        }
+
+        private static bool IsContinueArmWithPayload(Block block, Loop loop)
+        {
+            if (block == null || loop == null || !block.To.Contains(loop.Header))
+            {
+                return false;
+            }
+
+            var last = block.Statements.LastOrDefault();
+            var endsInContinue = last is ContinueStatement ||
+                                 last is GotoExpression jump &&
+                                 jump.JumpTo == loop.Header.Start;
+            return endsInContinue && block.Statements.Any(node =>
+                node is not GotoExpression && node is not ContinueStatement);
+        }
+
+        private static Statement MoveLoopContinueArmToStatement(Block block)
+        {
+            var result = new BlockStatement();
+            var moved = block.Statements
+                .Where(node => node is not GotoExpression && node is not ContinueStatement)
+                .ToList();
+            foreach (var node in moved)
+            {
+                block.Statements.Remove(node);
+                result.Statements.Add(node is Expression expression
+                    ? new ExpressionStatement(expression)
+                    : node);
+            }
+
+            result.Statements.Add(new ContinueStatement());
+            return result;
         }
 
         private bool GetThenElseBlock(ConditionExpression condition, List<Block> blocks, out Block then,
@@ -453,9 +1053,14 @@ namespace Furikiri.Echo.Pass
 
         private void MergeIfCondition(IfLogic logic, ConditionExpression condition)
         {
+            if (condition == null || _context?.BlockTable == null ||
+                !_context.BlockTable.TryGetValue(condition.TrueBranch, out var trueBlock) ||
+                !_context.BlockTable.TryGetValue(condition.FalseBranch, out var falseBlock))
+            {
+                return;
+            }
+
             //recursive to final condition and go back
-            var trueBlock = _context.BlockTable[condition.TrueBranch];
-            var falseBlock = _context.BlockTable[condition.FalseBranch];
             Expression exp = null;
             MergeIfCondition(condition, logic.ConditionBlock, logic.PostDominator, ref exp, ref trueBlock, ref falseBlock);
             if (exp != null)
@@ -509,30 +1114,1253 @@ namespace Furikiri.Echo.Pass
 
         private Block FindIfPostDominator(Block conditionBlock)
         {
-            BitArray d = new BitArray(conditionBlock.PostDominator);
-            FindPostDominator(conditionBlock);
-
-            return _context.Blocks.Find(b => b.Id == d.FirstIndexOf(true, conditionBlock.Id + 1));
-
-            void FindPostDominator(Block condition)
+            if (conditionBlock?.PostDominator == null)
             {
-                if (!condition.Statements.IsCondition())
+                return null;
+            }
+
+            var candidates = _context.Blocks
+                .Where(block => block != conditionBlock && conditionBlock.PostDominator[block.Id])
+                .ToList();
+
+            // 立即后支配节点是严格后支配集合中离当前块最近的节点：
+            // 若另一个候选节点还后支配它，则它不是“立即”节点。
+            return candidates.FirstOrDefault(candidate =>
+                !candidates.Any(other => other != candidate && other.PostDominator[candidate.Id]));
+        }
+
+        private sealed class PathPredicate
+        {
+            public bool? Constant { get; private set; }
+            public Expression Expression { get; private set; }
+
+            public static PathPredicate True() => new PathPredicate { Constant = true };
+            public static PathPredicate False() => new PathPredicate { Constant = false };
+            public static PathPredicate From(Expression expression) =>
+                new PathPredicate { Expression = expression };
+        }
+
+        /// <summary>
+        /// 分支区域中的短路链也必须先从最早入口整体恢复。若直接从尾部逐个
+        /// 物化普通 if，A &amp;&amp; call0() || B &amp;&amp; call1() 会被拆成嵌套
+        /// if/else，共同继续块还可能被误收入最后一个 false 分支。
+        /// </summary>
+        private void StructureNestedConditionChains(
+            IEnumerable<Block> candidates, ISet<Block> excluded = null)
+        {
+            foreach (var candidate in candidates
+                         .Distinct()
+                         .Where(block => !block.Hidden &&
+                                         (excluded == null || !excluded.Contains(block)))
+                         .OrderBy(block => block.Start)
+                         .ToList())
+            {
+                // 前面的根条件可能已经把本块吸收到同一条短路链并隐藏。
+                // 枚举快照仍包含它，若再次结构化会重复拼接条件并破坏共享分支。
+                if (candidate.Hidden)
                 {
-                    return;
+                    continue;
                 }
 
-                if (condition.Id == d.FirstIndexOf(true, conditionBlock.Id + 1))
+                var nestedCondition = candidate.Statements.GetCondition();
+                if (nestedCondition != null &&
+                    TryStructureConditionChain(
+                        candidate, nestedCondition, out var nestedChain))
                 {
-                    return;
-                }
-
-                d.And(condition.PostDominator);
-
-                foreach (var block in condition.To)
-                {
-                    FindPostDominator(block);
+                    candidate.Statements.Replace(
+                        nestedCondition, nestedChain.Simplify().ToStatement());
                 }
             }
+        }
+
+        /// <summary>
+        /// 将一串只负责跳转的条件块一次性恢复为“到达目标体”的谓词。
+        /// 例如 A 为真返回、否则检查 B，再检查 C，可直接得到 A || (B && C)，
+        /// 避免逐块递归时重复改写共享条件树。
+        /// </summary>
+        private bool TryStructureConditionChain(
+            Block root, ConditionExpression rootCondition, out IfLogic logic,
+            bool multiWayOnly = false)
+        {
+            logic = null;
+            if (_context.BlockTable == null)
+            {
+                return false;
+            }
+
+            if (TryStructureEqualitySwitchChain(root, out logic))
+            {
+                return true;
+            }
+
+            var chainPostDominator = FindIfPostDominator(root);
+            var passthroughBlocks = new HashSet<Block>();
+            var conditionBlocks = new HashSet<Block> { root };
+            var terminals = new HashSet<Block>();
+            var pending = new Stack<Block>();
+            pending.Push(root);
+
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                var condition = current.Statements.GetCondition();
+                if (condition == null ||
+                    !_context.BlockTable.TryGetValue(condition.TrueBranch, out var trueTarget) ||
+                    !_context.BlockTable.TryGetValue(condition.FalseBranch, out var falseTarget))
+                {
+                    return false;
+                }
+
+                trueTarget = NormalizeDecisionTarget(trueTarget, passthroughBlocks);
+                falseTarget = NormalizeDecisionTarget(falseTarget, passthroughBlocks);
+
+                foreach (var pair in new[]
+                         {
+                             (Target: trueTarget, Sibling: falseTarget),
+                             (Target: falseTarget, Sibling: trueTarget)
+                         })
+                {
+                    var target = pair.Target;
+                    // 中间短路块必须只有条件本身；带准备语句的块是实际分支体。
+                    // 此外它还必须能只经过条件块回到同级另一出口。这个约束会把
+                    // 分支体开头的普通嵌套 if 排除在短路链之外。
+                    if (target != root && target.Statements.IsCondition() &&
+                        target.From.All(predecessor =>
+                            predecessor.Statements.GetCondition() != null ||
+                            IsDecisionPassthrough(predecessor)) &&
+                        (CanReachThroughConditionBlocks(target, pair.Sibling) ||
+                         FindIfPostDominator(target) == chainPostDominator))
+                    {
+                        if (conditionBlocks.Add(target))
+                        {
+                            pending.Push(target);
+                        }
+                    }
+                    else
+                    {
+                        terminals.Add(target);
+                    }
+                }
+            }
+
+            // 单个条件不需要走链式恢复。
+            if (conditionBlocks.Count <= 1 || terminals.Count < 2)
+            {
+                return false;
+            }
+
+            var terminalList = terminals.ToList();
+            if (multiWayOnly && terminalList.Count <= 2)
+            {
+                return false;
+            }
+
+            if (terminalList.Count > 2)
+            {
+                return TryStructureMultiWayConditionChain(
+                    root, conditionBlocks, terminalList, passthroughBlocks, out logic);
+            }
+
+            Block bodyTarget;
+            Block continuationTarget;
+            Block branchPostDominator = null;
+            var hasElseBranch = false;
+            var bodyIsLoopBreak = false;
+            var returnTargets = terminalList
+                .Where(target => target.Statements.Any(statement => statement is ReturnExpression))
+                .ToList();
+            var pureReturnTargets = returnTargets
+                .Where(target => target.Statements.All(statement =>
+                    statement is ReturnExpression || statement is GotoExpression))
+                .ToList();
+
+            // 父循环的 Blocks 也包含所有子循环块。条件属于嵌套循环时必须选
+            // 最内层循环，否则内层回边会被当成普通可达路径，两个出口看起来
+            // 互相可达，完整短路链便无法恢复。
+            var containingLoop = _context.LoopSet
+                .Where(candidate => candidate.Contains(root))
+                .OrderBy(candidate => candidate.Blocks.Count)
+                .FirstOrDefault();
+            var externalLoopTargets = containingLoop == null
+                ? new List<Block>()
+                : terminalList.Where(target => !containingLoop.Contains(target)).ToList();
+            var internalLoopTargets = containingLoop == null
+                ? new List<Block>()
+                : terminalList.Where(containingLoop.Contains).ToList();
+
+            // 循环内判断两个分支是否为“执行体 -> 公共尾部”时，只考察当前迭代。
+            // 若沿回边进入下一轮，公共尾部当然也能再次到达执行体，会把实际单向
+            // 关系误判成环并放弃整条短路条件链。
+            var firstReachesSecond = containingLoop == null
+                ? CanReach(terminalList[0], terminalList[1])
+                : CanReachWithoutLoopBackEdge(terminalList[0], terminalList[1], containingLoop.Header);
+            var secondReachesFirst = containingLoop == null
+                ? CanReach(terminalList[1], terminalList[0])
+                : CanReachWithoutLoopBackEdge(terminalList[1], terminalList[0], containingLoop.Header);
+            if (firstReachesSecond && secondReachesFirst)
+            {
+                return false;
+            }
+
+            var loopContinueTargets = containingLoop == null
+                ? new List<Block>()
+                : terminalList.Where(target => target == containingLoop.Header ||
+                                                IsContinueTarget(target, containingLoop))
+                    .ToList();
+
+            // for 提升会把空闩锁归一化为循环头。此时循环头表示“条件未命中，
+            // 继续下一轮”，绝不能被选成 if 主体，否则谓词会反转且真实副作用
+            // 被提升为无条件语句。
+            if (loopContinueTargets.Count == 1 && terminalList.Count == 2)
+            {
+                continuationTarget = loopContinueTargets[0];
+                bodyTarget = terminalList.First(target => target != continuationTarget);
+            }
+            // 条件链的一侧离开循环、另一侧回到闩锁时，外部目标是 break。
+            // 普通可达性会沿下一轮循环最终到达退出块，因而不能用“可达”把它
+            // 误判成公共尾部，否则 break 会退化成空 if。
+            else if (externalLoopTargets.Count == 1 && internalLoopTargets.Count == 1 &&
+                IsLoopBreakArm(externalLoopTargets[0], FindBreak(containingLoop)))
+            {
+                bodyTarget = externalLoopTargets[0];
+                continuationTarget = internalLoopTargets[0];
+                bodyIsLoopBreak = true;
+            }
+            // 一侧最终落入另一侧时，后者是公共尾部，即使它恰好只有 return
+            // 也不能当成提前返回守卫，否则有副作用的可选分支会跳过公共返回。
+            else if (firstReachesSecond || secondReachesFirst)
+            {
+                bodyTarget = firstReachesSecond ? terminalList[0] : terminalList[1];
+                continuationTarget = firstReachesSecond ? terminalList[1] : terminalList[0];
+            }
+            else if (pureReturnTargets.Count == 1)
+            {
+                bodyTarget = pureReturnTargets[0];
+                continuationTarget = terminalList.First(target => target != bodyTarget);
+            }
+            else
+            {
+                // 两个出口互不可达但共同汇合，是带 else 的短路条件。
+                // 字节码通常先排列源码的 then 区域，因此用较早的入口作为正分支，
+                // 再根据“到达该入口”的路径反推出完整的 && / || 谓词。
+                branchPostDominator = FindIfPostDominator(root);
+                if (branchPostDominator == null || terminals.Contains(branchPostDominator))
+                {
+                    return false;
+                }
+
+                bodyTarget = terminalList.OrderBy(target => target.Start).First();
+                continuationTarget = terminalList.First(target => target != bodyTarget);
+                hasElseBranch = true;
+            }
+
+            var memo = new Dictionary<Block, PathPredicate>();
+            PathPredicate Build(Block current)
+            {
+                if (current == bodyTarget)
+                {
+                    return PathPredicate.True();
+                }
+
+                if (current == continuationTarget)
+                {
+                    return PathPredicate.False();
+                }
+
+                if (!conditionBlocks.Contains(current))
+                {
+                    return null;
+                }
+
+                if (memo.TryGetValue(current, out var cached))
+                {
+                    return cached;
+                }
+
+                var condition = current.Statements.GetCondition();
+                var whenTrue = Build(NormalizeDecisionTarget(
+                    _context.BlockTable[condition.TrueBranch], passthroughBlocks));
+                var whenFalse = Build(NormalizeDecisionTarget(
+                    _context.BlockTable[condition.FalseBranch], passthroughBlocks));
+                if (whenTrue == null || whenFalse == null)
+                {
+                    return null;
+                }
+
+                var combined = CombinePathPredicate(condition.Condition, whenTrue, whenFalse);
+                memo[current] = combined;
+                return combined;
+            }
+
+            var predicate = Build(root);
+            if (predicate?.Expression == null || predicate.Constant != null)
+            {
+                return false;
+            }
+
+            IfLogic result;
+            if (hasElseBranch)
+            {
+                var initialThen = CollectDominatedBranchRegion(
+                    root, bodyTarget, branchPostDominator, true);
+                var initialElse = CollectDominatedBranchRegion(
+                    root, continuationTarget, branchPostDominator, true);
+                if (initialThen.Count == 0 || initialElse.Count == 0)
+                {
+                    return false;
+                }
+
+                var nestedCandidates = initialThen.Concat(initialElse)
+                    .Distinct()
+                    .Where(candidate => !conditionBlocks.Contains(candidate))
+                    .ToList();
+                StructureNestedConditionChains(nestedCandidates, conditionBlocks);
+
+                // 外层条件物化前先恢复两个分支区域里的内层条件，否则这些条件块
+                // 随区域一起隐藏后只会留下裸比较表达式。
+                foreach (var candidate in nestedCandidates
+                             .OrderByDescending(candidate => candidate.Start))
+                {
+                    var nestedCondition = candidate.Statements.GetCondition();
+                    if (nestedCondition != null && StructureIfElse(candidate, out var nestedLogic))
+                    {
+                        candidate.Statements.Replace(
+                            nestedCondition, nestedLogic.Simplify().ToStatement());
+                    }
+                }
+
+                var thenRegion = CollectDominatedBranchRegion(
+                    root, bodyTarget, branchPostDominator, true);
+                var elseRegion = CollectDominatedBranchRegion(
+                    root, continuationTarget, branchPostDominator, true);
+                if (thenRegion.Count == 0 || elseRegion.Count == 0)
+                {
+                    return false;
+                }
+
+                result = new IfLogic
+                {
+                    ConditionBlock = root,
+                    Condition = predicate.Expression,
+                    PostDominator = branchPostDominator,
+                    Then = { Type = LogicalBlockType.BlockList, Blocks = thenRegion },
+                    Else = { Type = LogicalBlockType.BlockList, Blocks = elseRegion }
+                };
+            }
+            else
+            {
+                if (bodyIsLoopBreak)
+                {
+                    result = new IfLogic
+                    {
+                        ConditionBlock = root,
+                        Condition = predicate.Expression,
+                        PostDominator = continuationTarget,
+                        Then = { Type = LogicalBlockType.Statement, Statement = new BreakStatement() },
+                        Else = { Type = LogicalBlockType.None }
+                    };
+                }
+                else
+                {
+                    var initialBodyRegion = CollectDominatedBranchRegion(
+                        root, bodyTarget, continuationTarget, true);
+                    StructureNestedConditionChains(initialBodyRegion, conditionBlocks);
+                    // 外层短路谓词只决定是否进入分支体；分支体内部仍可能包含
+                    // 独立的 if/else。若直接收集基本块，这些条件会变成裸比较，
+                    // 两侧副作用则被顺序输出。先从尾到头物化，再重新收集可见区域。
+                    foreach (var candidate in initialBodyRegion
+                                 .Where(candidate => !conditionBlocks.Contains(candidate))
+                                 .OrderByDescending(candidate => candidate.Start))
+                    {
+                        var nestedCondition = candidate.Statements.GetCondition();
+                        if (nestedCondition != null && StructureIfElse(candidate, out var nestedLogic))
+                        {
+                            candidate.Statements.Replace(
+                                nestedCondition, nestedLogic.Simplify().ToStatement());
+                        }
+                    }
+
+                    var bodyRegion = CollectDominatedBranchRegion(
+                        root, bodyTarget, continuationTarget, true);
+                    if (bodyRegion.Count == 0)
+                    {
+                        bodyRegion = new List<Block> { bodyTarget };
+                    }
+                    result = new IfLogic
+                    {
+                        ConditionBlock = root,
+                        Condition = predicate.Expression,
+                        PostDominator = continuationTarget,
+                        Then = { Type = LogicalBlockType.BlockList, Blocks = bodyRegion },
+                        Else = { Type = LogicalBlockType.None }
+                    };
+                }
+            }
+
+            foreach (var conditionBlock in conditionBlocks.Where(block => block != root))
+            {
+                conditionBlock.Hidden = true;
+            }
+            foreach (var passthroughBlock in passthroughBlocks)
+            {
+                passthroughBlock.Hidden = true;
+            }
+
+            logic = result;
+            return true;
+        }
+
+        private bool TryStructureMultiWayConditionChain(
+            Block root, HashSet<Block> conditionBlocks, List<Block> terminals,
+            HashSet<Block> passthroughBlocks, out IfLogic logic)
+        {
+            logic = null;
+            var postDominator = FindIfPostDominator(root);
+            if (postDominator == null)
+            {
+                return false;
+            }
+
+            var rootCondition = root.Statements.GetCondition();
+            if (rootCondition != null &&
+                (_context.BlockTable[rootCondition.TrueBranch] == postDominator ||
+                 _context.BlockTable[rootCondition.FalseBranch] == postDominator))
+            {
+                // 根条件的一侧直接结束、另一侧才进入多路分派时，根是外围 gate。
+                // 把它和内层 else-if 拉平会使后续分支在 gate=false 时也执行。
+                return false;
+            }
+
+            var orderedTerminals = terminals.OrderBy(target => target.Start).ToList();
+            var initialRegions = orderedTerminals.ToDictionary(
+                target => target,
+                target => target == postDominator
+                    ? new List<Block>()
+                    : CollectDominatedBranchRegion(root, target, postDominator, true));
+            if (initialRegions.Any(pair => pair.Key != postDominator && pair.Value.Count == 0))
+            {
+                return false;
+            }
+
+            StructureNestedConditionChains(
+                initialRegions.Values.SelectMany(region => region), conditionBlocks);
+
+            foreach (var candidate in initialRegions.Values.SelectMany(region => region)
+                         .Distinct()
+                         .Where(candidate => !conditionBlocks.Contains(candidate))
+                         .OrderByDescending(candidate => candidate.Start))
+            {
+                var nestedCondition = candidate.Statements.GetCondition();
+                if (nestedCondition != null && StructureIfElse(candidate, out var nestedLogic))
+                {
+                    candidate.Statements.Replace(
+                        nestedCondition, nestedLogic.Simplify().ToStatement());
+                }
+            }
+
+            var regions = orderedTerminals.ToDictionary(
+                target => target,
+                target => target == postDominator
+                    ? new List<Block>()
+                    : CollectDominatedBranchRegion(root, target, postDominator, true));
+            if (regions.Any(pair => pair.Key != postDominator && pair.Value.Count == 0))
+            {
+                return false;
+            }
+
+            IfLogic nested = null;
+            var defaultTarget = orderedTerminals[^1];
+            for (var index = orderedTerminals.Count - 2; index >= 0; index--)
+            {
+                var target = orderedTerminals[index];
+                var remainingTerminals = orderedTerminals.Skip(index).ToHashSet();
+                var decisionRoot = conditionBlocks
+                    .OrderBy(candidate => candidate.Start)
+                    .FirstOrDefault(candidate => GetReachableDecisionTerminals(
+                        candidate, terminals, passthroughBlocks).SetEquals(remainingTerminals))
+                    ?? root;
+                var predicate = BuildPathPredicate(
+                    decisionRoot, target, terminals, conditionBlocks, passthroughBlocks);
+                if (predicate?.Expression == null || predicate.Constant != null)
+                {
+                    return false;
+                }
+
+                var current = new IfLogic
+                {
+                    ConditionBlock = decisionRoot,
+                    Condition = predicate.Expression,
+                    PostDominator = postDominator,
+                    Then = { Type = LogicalBlockType.BlockList, Blocks = regions[target] }
+                };
+
+                if (nested == null)
+                {
+                    current.Else.Type = defaultTarget == postDominator
+                        ? LogicalBlockType.None
+                        : LogicalBlockType.BlockList;
+                    current.Else.Blocks = regions[defaultTarget];
+                }
+                else
+                {
+                    current.Else.Type = LogicalBlockType.Logical;
+                    current.Else.Logic = nested;
+                    nested.ParentIf = current;
+                }
+
+                nested = current;
+            }
+
+            foreach (var conditionBlock in conditionBlocks.Where(block => block != root))
+            {
+                conditionBlock.Hidden = true;
+            }
+            foreach (var passthroughBlock in passthroughBlocks)
+            {
+                passthroughBlock.Hidden = true;
+            }
+
+            logic = nested;
+            return logic != null;
+        }
+
+        private HashSet<Block> GetReachableDecisionTerminals(
+            Block start, IReadOnlyCollection<Block> terminals,
+            HashSet<Block> passthroughBlocks)
+        {
+            var result = new HashSet<Block>();
+            var visited = new HashSet<Block>();
+            var pending = new Stack<Block>();
+            pending.Push(start);
+            while (pending.Count > 0)
+            {
+                var current = NormalizeDecisionTarget(pending.Pop(), passthroughBlocks);
+                if (!visited.Add(current))
+                {
+                    continue;
+                }
+
+                if (terminals.Contains(current))
+                {
+                    result.Add(current);
+                    continue;
+                }
+
+                var condition = current.Statements.GetCondition();
+                if (condition == null)
+                {
+                    continue;
+                }
+
+                pending.Push(_context.BlockTable[condition.TrueBranch]);
+                pending.Push(_context.BlockTable[condition.FalseBranch]);
+            }
+
+            return result;
+        }
+
+        private PathPredicate BuildPathPredicate(
+            Block root, Block bodyTarget, IReadOnlyCollection<Block> terminals,
+            HashSet<Block> conditionBlocks, HashSet<Block> passthroughBlocks)
+        {
+            var memo = new Dictionary<Block, PathPredicate>();
+            PathPredicate Build(Block current)
+            {
+                current = NormalizeDecisionTarget(current, passthroughBlocks);
+                if (terminals.Contains(current))
+                {
+                    return current == bodyTarget
+                        ? PathPredicate.True()
+                        : PathPredicate.False();
+                }
+
+                if (!conditionBlocks.Contains(current))
+                {
+                    return null;
+                }
+
+                if (memo.TryGetValue(current, out var cached))
+                {
+                    return cached;
+                }
+
+                var condition = current.Statements.GetCondition();
+                var whenTrue = Build(_context.BlockTable[condition.TrueBranch]);
+                var whenFalse = Build(_context.BlockTable[condition.FalseBranch]);
+                if (whenTrue == null || whenFalse == null)
+                {
+                    return null;
+                }
+
+                var combined = CombinePathPredicate(condition.Condition, whenTrue, whenFalse);
+                memo[current] = combined;
+                return combined;
+            }
+
+            return Build(root);
+        }
+
+        private static PathPredicate CombinePathPredicate(
+            Expression condition, PathPredicate whenTrue, PathPredicate whenFalse)
+        {
+            if (whenTrue.Constant == true && whenFalse.Constant == false)
+            {
+                return PathPredicate.From(condition);
+            }
+
+            if (whenTrue.Constant == false && whenFalse.Constant == true)
+            {
+                return PathPredicate.From(condition.Invert());
+            }
+
+            if (whenTrue.Constant == true && whenFalse.Expression != null)
+            {
+                return PathPredicate.From(CombineBoolean(condition, whenFalse.Expression, BinaryOp.LogicOr));
+            }
+
+            if (whenTrue.Expression != null && whenFalse.Constant == true)
+            {
+                return PathPredicate.From(CombineBoolean(condition.Invert(), whenTrue.Expression, BinaryOp.LogicOr));
+            }
+
+            if (whenTrue.Expression != null && whenFalse.Constant == false)
+            {
+                return PathPredicate.From(CombineBoolean(condition, whenTrue.Expression, BinaryOp.LogicAnd));
+            }
+
+            if (whenTrue.Constant == false && whenFalse.Expression != null)
+            {
+                return PathPredicate.From(CombineBoolean(condition.Invert(), whenFalse.Expression, BinaryOp.LogicAnd));
+            }
+
+            if (whenTrue.Constant == whenFalse.Constant && whenTrue.Constant != null)
+            {
+                return whenTrue.Constant == true ? PathPredicate.True() : PathPredicate.False();
+            }
+
+            if (whenTrue.Expression != null && whenFalse.Expression != null)
+            {
+                var trueExpression = whenTrue.Expression;
+                var falseExpression = whenFalse.Expression;
+                if (AreEquivalentExpressions(trueExpression, falseExpression))
+                {
+                    return PathPredicate.From(trueExpression);
+                }
+
+                // A ? (X || Y) : X  =>  (A && Y) || X。
+                // 条件项必须放在前面，才能保持原 CFG 的求值顺序；X/Y 可能是调用。
+                if (TryRemoveBooleanFactor(trueExpression, BinaryOp.LogicOr,
+                        falseExpression, out var trueRemainder))
+                {
+                    return PathPredicate.From(CombineBoolean(
+                        CombineBoolean(condition, trueRemainder, BinaryOp.LogicAnd),
+                        falseExpression,
+                        BinaryOp.LogicOr));
+                }
+
+                // A ? X : (X || Y)  =>  (!A && Y) || X
+                if (TryRemoveBooleanFactor(falseExpression, BinaryOp.LogicOr,
+                        trueExpression, out var falseRemainder))
+                {
+                    return PathPredicate.From(CombineBoolean(
+                        CombineBoolean(condition.Invert(), falseRemainder, BinaryOp.LogicAnd),
+                        trueExpression,
+                        BinaryOp.LogicOr));
+                }
+
+                // A ? (X && Y) : X  =>  (!A || Y) && X
+                if (TryRemoveBooleanFactor(trueExpression, BinaryOp.LogicAnd,
+                        falseExpression, out trueRemainder))
+                {
+                    return PathPredicate.From(CombineBoolean(
+                        CombineBoolean(condition.Invert(), trueRemainder, BinaryOp.LogicOr),
+                        falseExpression,
+                        BinaryOp.LogicAnd));
+                }
+
+                // A ? X : (X && Y)  =>  (A || Y) && X
+                if (TryRemoveBooleanFactor(falseExpression, BinaryOp.LogicAnd,
+                        trueExpression, out falseRemainder))
+                {
+                    return PathPredicate.From(CombineBoolean(
+                        CombineBoolean(condition, falseRemainder, BinaryOp.LogicOr),
+                        trueExpression,
+                        BinaryOp.LogicAnd));
+                }
+
+                return PathPredicate.From(CombineBoolean(
+                    CombineBoolean(condition, trueExpression, BinaryOp.LogicAnd),
+                    CombineBoolean(condition.Invert(), falseExpression, BinaryOp.LogicAnd),
+                    BinaryOp.LogicOr));
+            }
+
+            return null;
+        }
+
+        private static Expression CombineBoolean(Expression left, Expression right, BinaryOp op)
+        {
+            if (AreEquivalentExpressions(left, right))
+            {
+                return left;
+            }
+
+            var absorbingOp = op == BinaryOp.LogicOr ? BinaryOp.LogicAnd : BinaryOp.LogicOr;
+            if (TryRemoveBooleanFactor(right, absorbingOp, left, out _) ||
+                TryRemoveBooleanFactor(left, absorbingOp, right, out _))
+            {
+                // X || (X && Y) = X；X && (X || Y) = X。
+                return TryRemoveBooleanFactor(right, absorbingOp, left, out _) ? left : right;
+            }
+
+            return op == BinaryOp.LogicOr ? left.Or(right) : left.And(right);
+        }
+
+        private static bool TryRemoveBooleanFactor(
+            Expression expression, BinaryOp op, Expression factor, out Expression remainder)
+        {
+            remainder = null;
+            if (expression is not BinaryExpression binary || binary.Op != op)
+            {
+                return false;
+            }
+
+            if (AreEquivalentExpressions(binary.Left, factor))
+            {
+                remainder = binary.Right;
+                return true;
+            }
+
+            if (AreEquivalentExpressions(binary.Right, factor))
+            {
+                remainder = binary.Left;
+                return true;
+            }
+
+            if (TryRemoveBooleanFactor(binary.Left, op, factor, out var leftRemainder))
+            {
+                remainder = CombineBoolean(leftRemainder, binary.Right, op);
+                return true;
+            }
+
+            if (TryRemoveBooleanFactor(binary.Right, op, factor, out var rightRemainder))
+            {
+                remainder = CombineBoolean(binary.Left, rightRemainder, op);
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool AreEquivalentExpressions(Expression left, Expression right)
+        {
+            return ReferenceEquals(left, right) ||
+                   left != null && right != null && left.GetType() == right.GetType() &&
+                   string.Equals(left.ToString(), right.ToString(), System.StringComparison.Ordinal);
+        }
+
+        private static bool IsDecisionPassthrough(Block block)
+        {
+            return block != null && block.To.Count == 1 &&
+                   block.Statements.All(statement => statement is GotoExpression);
+        }
+
+        private static Block NormalizeDecisionTarget(
+            Block block, HashSet<Block> passthroughBlocks)
+        {
+            var memo = new Dictionary<Block, Block>();
+            var visiting = new HashSet<Block>();
+            Block Normalize(Block current)
+            {
+                if (current == null || !visiting.Add(current))
+                {
+                    return current;
+                }
+
+                if (memo.TryGetValue(current, out var cached))
+                {
+                    visiting.Remove(current);
+                    return cached;
+                }
+
+                Block result = current;
+                if (IsDecisionPassthrough(current))
+                {
+                    passthroughBlocks?.Add(current);
+                    result = Normalize(current.To[0]);
+                }
+                else if (current.Hidden && current.Statements.IsCondition() && current.To.Count == 2)
+                {
+                    var normalizedFirst = Normalize(current.To[0]);
+                    var normalizedSecond = Normalize(current.To[1]);
+                    if (normalizedFirst == normalizedSecond)
+                    {
+                        passthroughBlocks?.Add(current);
+                        result = normalizedFirst;
+                    }
+                }
+
+                visiting.Remove(current);
+                memo[current] = result;
+                return result;
+            }
+
+            return Normalize(block);
+        }
+
+        private static bool CanReachThroughConditionBlocks(Block start, Block target)
+        {
+            var pending = new Stack<Block>();
+            var visited = new HashSet<Block>();
+            pending.Push(start);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                if (!visited.Add(current))
+                {
+                    continue;
+                }
+
+                if (current == target)
+                {
+                    return true;
+                }
+
+                if (!current.Statements.IsCondition() && !IsDecisionPassthrough(current))
+                {
+                    continue;
+                }
+
+                foreach (var next in current.To)
+                {
+                    if (next == target || next.Statements.IsCondition() ||
+                        IsDecisionPassthrough(next))
+                    {
+                        pending.Push(next);
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 恢复编译器生成的相等比较 case 链。多个 case 可先跳到同一标签块，
+        /// 再共用一个源码分支；按“比较值 -&gt; 真实分支入口”分组，避免把分支
+        /// 开头的嵌套 if 继续误认成短路条件。
+        /// </summary>
+        private bool TryStructureEqualitySwitchChain(Block root, out IfLogic logic)
+        {
+            logic = null;
+            var labels = new HashSet<Block>();
+            var caseBlocks = new List<Block>();
+            var groups = new List<(Block Target, List<Expression> Conditions, Block Owner)>();
+            Expression comparisonTarget = null;
+            var current = root;
+            Block defaultTarget = null;
+
+            while (current != null)
+            {
+                var condition = current.Statements.GetCondition();
+                if (condition?.Condition is not BinaryExpression comparison ||
+                    comparison.Op is not (BinaryOp.Equal or BinaryOp.Congruent))
+                {
+                    defaultTarget = current;
+                    break;
+                }
+
+                if (comparisonTarget == null)
+                {
+                    comparisonTarget = comparison.Left;
+                }
+                else if (comparisonTarget?.ToString() != comparison.Left?.ToString())
+                {
+                    defaultTarget = current;
+                    break;
+                }
+
+                if (!_context.BlockTable.TryGetValue(condition.TrueBranch, out var bodyTarget) ||
+                    !_context.BlockTable.TryGetValue(condition.FalseBranch, out var nextTarget))
+                {
+                    return false;
+                }
+
+                bodyTarget = NormalizeDecisionTarget(bodyTarget, labels);
+                nextTarget = NormalizeDecisionTarget(nextTarget, labels);
+                caseBlocks.Add(current);
+
+                var groupIndex = groups.FindIndex(group => group.Target == bodyTarget);
+                if (groupIndex < 0)
+                {
+                    groups.Add((bodyTarget, new List<Expression> { comparison }, current));
+                }
+                else
+                {
+                    groups[groupIndex].Conditions.Add(comparison);
+                }
+
+                var nextCondition = nextTarget.Statements.GetCondition();
+                if (nextTarget.Statements.IsCondition() &&
+                    nextCondition?.Condition is BinaryExpression nextComparison &&
+                    nextComparison.Op is BinaryOp.Equal or BinaryOp.Congruent &&
+                    nextComparison.Left?.ToString() == comparisonTarget?.ToString())
+                {
+                    current = nextTarget;
+                    continue;
+                }
+
+                defaultTarget = nextTarget;
+                break;
+            }
+
+            if (caseBlocks.Count < 2 || groups.Count == 0 || defaultTarget == null)
+            {
+                return false;
+            }
+
+            var postDominator = FindIfPostDominator(root);
+            if (postDominator == null)
+            {
+                return false;
+            }
+
+            // default 仍能只经过条件块回到既有 case 体时，这不是互斥的 switch，
+            // 而是 `a == x || a == y || (P && Q)` 一类短路谓词。交给通用条件链
+            // 一次性恢复，否则共享真分支会只挂在最后一项，前面的 case 变成空壳。
+            if (defaultTarget != postDominator && groups.Any(group =>
+                    CanReachThroughConditionBlocks(defaultTarget, group.Target)))
+            {
+                return false;
+            }
+
+            // 首个 case 为空且直接 break 时，外层空分支的 AST 隐藏顺序仍需由
+            // 普通分支恢复处理；在这里接管会让后续非空 case 一并不可见。
+            if (groups[0].Target == postDominator)
+            {
+                return false;
+            }
+
+            var initialRegions = groups.ToDictionary(
+                group => group.Target,
+                group => group.Target == postDominator
+                    ? new List<Block>()
+                    : CollectDominatedBranchRegion(root, group.Target, postDominator, true));
+            if (initialRegions.Any(pair => pair.Key != postDominator && pair.Value.Count == 0))
+            {
+                return false;
+            }
+
+            // equality case 链的 default 入口可能本身是一条范围/短路条件链，
+            // 例如 '.', '-' 两个 case 之后再判断 '0' <= ch <= '9'。
+            // default 若只按原始基本块收集，条件节点会被过滤而两个分支顺序输出。
+            if (defaultTarget != postDominator)
+            {
+                var defaultCondition = defaultTarget.Statements.GetCondition();
+                // 带准备赋值的 default 入口也可能正是另一条相等 case 链的根。
+                // 这类链必须先整体恢复，不能先从尾部物化，否则共享 case 体会
+                // 被拆成空分支并把赋值提升为无条件执行。
+                if (defaultCondition != null &&
+                    TryStructureEqualitySwitchChain(defaultTarget, out var nestedDefaultEquality))
+                {
+                    defaultTarget.Statements.Replace(
+                        defaultCondition, nestedDefaultEquality.Simplify().ToStatement());
+                    defaultCondition = null;
+                }
+
+                var defaultRegion = CollectDominatedBranchRegion(
+                    root, defaultTarget, postDominator, true);
+                var defaultNested = defaultRegion
+                    .Where(candidate => candidate != defaultTarget)
+                    .ToList();
+                if (defaultCondition != null && !defaultTarget.Statements.IsCondition())
+                {
+                    StructureNestedConditionChains(defaultNested);
+                    // 带准备语句的 default 入口不是短路链根；内部较晚的 if 必须
+                    // 先物化，否则入口整体 ToStatement 会把它们隐藏成裸比较。
+                    foreach (var candidate in defaultNested
+                                 .OrderByDescending(candidate => candidate.Start))
+                    {
+                        var nestedCondition = candidate.Statements.GetCondition();
+                        if (!candidate.Hidden && nestedCondition != null &&
+                            StructureIfElse(candidate, out var nestedLogic))
+                        {
+                            candidate.Statements.Replace(
+                                nestedCondition, nestedLogic.Simplify().ToStatement());
+                        }
+                    }
+                }
+
+                if (defaultCondition != null &&
+                    StructureIfElse(defaultTarget, out var defaultLogic))
+                {
+                    defaultTarget.Statements.Replace(
+                        defaultCondition, defaultLogic.Simplify().ToStatement());
+                }
+            }
+
+            // 分支入口可能又是一条独立的相等比较链。必须在“从尾到头”处理
+            // 区域内条件之前整体物化，否则尾部条件先被替换成 IfStatement 后，
+            // 入口就只能看到一项比较，首个分支条件会退化成裸表达式。
+            foreach (var candidate in groups.Select(group => group.Target).Distinct()
+                         .Where(candidate => candidate != postDominator))
+            {
+                var nestedCondition = candidate.Statements.GetCondition();
+                if (nestedCondition != null &&
+                    TryStructureEqualitySwitchChain(candidate, out var nestedEquality))
+                {
+                    candidate.Statements.Replace(
+                        nestedCondition, nestedEquality.Simplify().ToStatement());
+                }
+            }
+
+            // 先从 case 区域尾部恢复内层 if。case 入口只覆盖首个条件，后续的
+            // 短路判断通常位于共享后继块；若直接物化入口，这些后继会以裸比较
+            // 输出，真正受控的副作用语句则被隐藏掉。
+            foreach (var candidate in initialRegions.Values.SelectMany(region => region)
+                         .Distinct()
+                         .Where(candidate => !groups.Any(group => group.Target == candidate))
+                         .OrderByDescending(candidate => candidate.Start))
+            {
+                var nestedCondition = candidate.Statements.GetCondition();
+                if (nestedCondition != null && StructureIfElse(candidate, out var nestedLogic))
+                {
+                    candidate.Statements.Replace(
+                        nestedCondition, nestedLogic.Simplify().ToStatement());
+                }
+            }
+
+            // 最后把每个 case 的真实入口作为整体递归结构化。入口本身也可能是
+            // 另一组合法的相等比较链（如事件类型分支中的按钮目标判断），不能
+            // 禁用条件链恢复，否则首个比较会以裸表达式输出，真分支副作用被提升。
+            foreach (var candidate in groups.Select(group => group.Target).Distinct()
+                         .Where(candidate => candidate != postDominator))
+            {
+                var nestedCondition = candidate.Statements.GetCondition();
+                if (nestedCondition != null &&
+                    StructureIfElse(candidate, out var nestedLogic))
+                {
+                    candidate.Statements.Replace(
+                        nestedCondition, nestedLogic.Simplify().ToStatement());
+                }
+            }
+
+            var regions = groups.ToDictionary(
+                group => group.Target,
+                group => group.Target == postDominator
+                    ? new List<Block>()
+                    : CollectDominatedBranchRegion(root, group.Target, postDominator, true));
+
+            LogicalBlock defaultBlock = new LogicalBlock { Type = LogicalBlockType.None };
+            if (defaultTarget != postDominator)
+            {
+                var defaultRegion = CollectDominatedBranchRegion(
+                    root, defaultTarget, postDominator, true);
+                if (defaultRegion.Count > 0)
+                {
+                    defaultBlock.Type = LogicalBlockType.BlockList;
+                    defaultBlock.Blocks = defaultRegion;
+                }
+            }
+
+            IfLogic nested = null;
+            for (var index = groups.Count - 1; index >= 0; index--)
+            {
+                var group = groups[index];
+                var combinedCondition = group.Conditions[0];
+                for (var conditionIndex = 1; conditionIndex < group.Conditions.Count; conditionIndex++)
+                {
+                    combinedCondition = combinedCondition.Or(group.Conditions[conditionIndex]);
+                }
+
+                var currentLogic = new IfLogic
+                {
+                    ConditionBlock = group.Owner,
+                    Condition = combinedCondition,
+                    PostDominator = postDominator,
+                    Then =
+                    {
+                        Type = regions[group.Target].Count == 0
+                            ? LogicalBlockType.None
+                            : LogicalBlockType.BlockList,
+                        Blocks = regions[group.Target]
+                    }
+                };
+
+                if (nested != null)
+                {
+                    currentLogic.Else.Type = LogicalBlockType.Logical;
+                    currentLogic.Else.Logic = nested;
+                    nested.ParentIf = currentLogic;
+                }
+                else
+                {
+                    currentLogic.Else = defaultBlock;
+                }
+
+                nested = currentLogic;
+            }
+
+            foreach (var caseBlock in caseBlocks.Where(block => block != root))
+            {
+                caseBlock.Hidden = true;
+            }
+            foreach (var label in labels)
+            {
+                label.Hidden = true;
+            }
+
+            logic = nested;
+            return logic != null;
+        }
+
+        private static bool CanReach(Block start, Block target)
+        {
+            var pending = new Queue<Block>();
+            var visited = new HashSet<Block>();
+            pending.Enqueue(start);
+            while (pending.Count > 0)
+            {
+                var current = pending.Dequeue();
+                if (!visited.Add(current))
+                {
+                    continue;
+                }
+
+                if (current == target)
+                {
+                    return true;
+                }
+
+                foreach (var next in current.To)
+                {
+                    pending.Enqueue(next);
+                }
+            }
+
+            return false;
+        }
+
+        private static bool CanReachWithoutLoopBackEdge(Block start, Block target, Block loopHeader)
+        {
+            var pending = new Queue<Block>();
+            var visited = new HashSet<Block>();
+            pending.Enqueue(start);
+            while (pending.Count > 0)
+            {
+                var current = pending.Dequeue();
+                if (!visited.Add(current))
+                {
+                    continue;
+                }
+
+                if (current == target)
+                {
+                    return true;
+                }
+
+                foreach (var next in current.To)
+                {
+                    // 仅屏蔽所属自然循环的回边；子循环的头块必须保留，才能从
+                    // 子循环执行体继续搜索到它的出口和当前迭代后继。
+                    if (next != loopHeader)
+                    {
+                        pending.Enqueue(next);
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 收集某个分支入口所支配的完整区域。编译器经常把一个源码分支拆成
+        /// “准备语句 + 循环 + 返回值”多个基本块，只保留入口块会把后续语句
+        /// 错误提升到 if 外。共享汇合块不受分支入口支配，因此会自然排除。
+        /// </summary>
+        private List<Block> CollectDominatedBranchRegion(
+            Block conditionBlock, Block branchEntry, Block postDominator, bool visibleOnly)
+        {
+            if (conditionBlock == null || branchEntry == null || branchEntry == postDominator ||
+                branchEntry.Dominator == null || !branchEntry.Dominator[conditionBlock.Id])
+            {
+                return new List<Block>();
+            }
+
+            var containingLoop = _context.LoopSet
+                .Where(loop => loop.Contains(conditionBlock))
+                .OrderBy(loop => loop.Blocks.Count)
+                .FirstOrDefault();
+            var branchStaysInLoop = containingLoop != null && containingLoop.Contains(branchEntry);
+            var normalLoopExit = containingLoop?.Break ??
+                                 (containingLoop?.LoopLogic as DoWhileLogic)?.Break ??
+                                 (containingLoop == null ? null : FindBreak(containingLoop));
+
+            return _context.Blocks
+                .Where(candidate => candidate != conditionBlock &&
+                                    candidate != postDominator &&
+                                    candidate != _context.ExitBlock &&
+                                    candidate.Dominator != null &&
+                                    candidate.Dominator[conditionBlock.Id] &&
+                                    candidate.Dominator[branchEntry.Id] &&
+                                    (!branchStaysInLoop || normalLoopExit == null ||
+                                     (candidate != normalLoopExit &&
+                                      (candidate.Dominator == null ||
+                                       !candidate.Dominator[normalLoopExit.Id]))) &&
+                                    (!visibleOnly || !candidate.Hidden))
+                .OrderBy(candidate => candidate.Start)
+                .ToList();
+        }
+
+        /// <summary>
+        /// 多基本块分支使用支配区域直接结构化。区域内条件从后向前处理，
+        /// 使内层 if 先隐藏自己的子块，随后外层区域只收集仍可见的语句块。
+        /// </summary>
+        private bool TryStructureDominatedBranchRegions(
+            Block conditionBlock, Block thenEntry, Block elseEntry,
+            Block postDominator, IfLogic logic)
+        {
+            var initialThen = CollectDominatedBranchRegion(
+                conditionBlock, thenEntry, postDominator, true);
+            var initialElse = CollectDominatedBranchRegion(
+                conditionBlock, elseEntry, postDominator, true);
+
+            // 单块分支交给原有逻辑，它对 break/continue 和 else-if 有更细处理。
+            if (initialThen.Count <= 1 && initialElse.Count <= 1)
+            {
+                return false;
+            }
+
+            var nestedCandidates = initialThen.Concat(initialElse)
+                .Distinct()
+                .OrderByDescending(candidate => candidate.Start);
+            foreach (var candidate in nestedCandidates)
+            {
+                var nestedCondition = candidate.Statements.GetCondition();
+                if (nestedCondition == null)
+                {
+                    continue;
+                }
+
+                if (StructureIfElse(candidate, out var nestedLogic))
+                {
+                    candidate.Statements.Replace(
+                        nestedCondition, nestedLogic.Simplify().ToStatement());
+                }
+            }
+
+            var thenRegion = CollectDominatedBranchRegion(
+                conditionBlock, thenEntry, postDominator, true);
+            var elseRegion = CollectDominatedBranchRegion(
+                conditionBlock, elseEntry, postDominator, true);
+
+            logic.Then.Type = thenRegion.Count == 0
+                ? LogicalBlockType.None
+                : LogicalBlockType.BlockList;
+            logic.Then.Blocks = thenRegion;
+            logic.Else.Type = elseRegion.Count == 0
+                ? LogicalBlockType.None
+                : LogicalBlockType.BlockList;
+            logic.Else.Blocks = elseRegion;
+            return thenRegion.Count > 0 || elseRegion.Count > 0;
         }
 
         /// <summary>
@@ -549,6 +2377,13 @@ namespace Furikiri.Echo.Pass
         private bool MergeIfCondition(ConditionExpression condition, Block conditionBlock, Block dominator, ref Expression merge,
             ref Block then, ref Block @else, bool isOrChain = false)
         {
+            if (condition == null || _context?.BlockTable == null ||
+                !_context.BlockTable.ContainsKey(condition.TrueBranch) ||
+                !_context.BlockTable.ContainsKey(condition.FalseBranch))
+            {
+                return false;
+            }
+
             if (dominator != null && condition.TrueBranch == dominator.Start)
             {
                 condition = (ConditionExpression) condition.Invert();
@@ -690,6 +2525,13 @@ namespace Furikiri.Echo.Pass
             if (target.Statements.Count == 0 && target.To.Count == 1 && target.To[0] == loop.Header)
                 return true;
 
+            // 无显式 for 闩锁的 while，源码 continue 常落在一个只含 JMP 的跳板块。
+            // GotoExpression 仍保留时也要识别，否则会输出空 if 并把后续语句塞进 else。
+            if (target.Statements.Count > 0 &&
+                target.Statements.All(statement => statement is GotoExpression) &&
+                target.To.Count == 1 && target.To[0] == loop.Header)
+                return true;
+
             // 块只包含 ContinueStatement
             if (target.Statements.Count == 1 && target.Statements[0] is ContinueStatement)
                 return true;
@@ -739,9 +2581,10 @@ namespace Furikiri.Echo.Pass
             // 递归结构化 body 块
             if (bodyBlock.To.Count == 2 && bodyBlock.Statements.GetCondition() != null)
             {
+                var bodyCondition = bodyBlock.Statements.GetCondition();
                 if (StructureIfElse(bodyBlock, out IfLogic innerIf))
                 {
-                    bodyBlock.Statements.Replace(innerIf.Condition, innerIf.Simplify().ToStatement());
+                    bodyBlock.Statements.Replace(bodyCondition, innerIf.Simplify().ToStatement());
                 }
             }
 
@@ -760,9 +2603,10 @@ namespace Furikiri.Echo.Pass
 
                     if (bodyCont.To.Count == 2 && bodyCont.Statements.GetCondition() != null)
                     {
+                        var bodyContinuationCondition = bodyCont.Statements.GetCondition();
                         if (StructureIfElse(bodyCont, out IfLogic nestedCont2))
                         {
-                            bodyCont.Statements.Replace(nestedCont2.Condition,
+                            bodyCont.Statements.Replace(bodyContinuationCondition,
                                 nestedCont2.Simplify().ToStatement());
                         }
                     }
@@ -818,6 +2662,24 @@ namespace Furikiri.Echo.Pass
         internal bool StructureIfElse(Block block, out IfLogic outIf)
         {
             outIf = null;
+            if (block == null || !_structuringBlocks.Add(block.Id))
+            {
+                return false;
+            }
+
+            try
+            {
+                return StructureIfElseCore(block, out outIf, true);
+            }
+            finally
+            {
+                _structuringBlocks.Remove(block.Id);
+            }
+        }
+
+        private bool StructureIfElseCore(Block block, out IfLogic outIf, bool allowConditionChain)
+        {
+            outIf = null;
             if (block.To.Count != 2)
             {
                 return false;
@@ -829,13 +2691,26 @@ namespace Furikiri.Echo.Pass
                 return false;
             }
 
-            var loop = _context.LoopSet.FirstOrDefault(l => l.Contains(block));
+            var loop = _context.LoopSet.FirstOrDefault(candidate => candidate.Contains(block));
+            // 父自然循环的 Blocks 也包含全部子循环块。判断 continue 目标时必须
+            // 使用最内层循环，否则跳到内层头部的分支会被当成普通 goto，随后
+            // 退化成裸条件和无条件副作用。其余旧分支判定仍保留原循环选择，
+            // 避免改变已稳定的外层循环区域划分。
+            var transferLoop = _context.LoopSet
+                .Where(candidate => candidate.Contains(block))
+                .OrderBy(candidate => candidate.Blocks.Count)
+                .FirstOrDefault();
             if (loop?.LoopLogic is IConditional conditionLogic)
             {
                 if (conditionLogic.Condition == cond)
                 {
                     return false;
                 }
+            }
+
+            if (allowConditionChain && TryStructureConditionChain(block, cond, out outIf))
+            {
+                return true;
             }
 
             var postDominator = FindIfPostDominator(block);
@@ -848,6 +2723,23 @@ namespace Furikiri.Echo.Pass
                 elseBlock = block.To[1];
             }
 
+            if (TryMergeConsumedNestedBranch(
+                    block, cond, thenBlock, elseBlock, postDominator, out outIf))
+            {
+                return true;
+            }
+
+            // Phi 已经消费掉的短路条件块会被标记为隐藏，但 CFG 边仍指向旧入口。
+            // 外层 if 若继续把旧入口当作分支体，会重新物化一个空 if，甚至把
+            // 真正的 return 只放进其中一侧。这里先穿过这些隐藏决策壳层。
+            // 两侧都属于已折叠决策链时才同时归一化。只处理单侧会把默认参数
+            // 初始化等“隐藏条件 + 实际赋值”形态错误改写成提前返回守卫。
+            if (thenBlock.Hidden && elseBlock.Hidden)
+            {
+                thenBlock = NormalizeDecisionTarget(thenBlock, new HashSet<Block>());
+                elseBlock = NormalizeDecisionTarget(elseBlock, new HashSet<Block>());
+            }
+
             var logic = new IfLogic
             {
                 ConditionBlock = block,
@@ -856,6 +2748,31 @@ namespace Furikiri.Echo.Pass
                 Then = {Blocks = new List<Block> {thenBlock}},
                 Else = {Blocks = new List<Block> {elseBlock}}
             };
+
+            // 单臂 if 的一侧会直接落入另一侧入口：C ? A : join，且 A -> join。
+            // 循环中的后支配分析容易把 join 选成循环头，若先按“支配区域”收集，
+            // 会把公共后继误塞进 else 并反转条件。入口含真实载荷时可直接按边
+            // 关系恢复，不依赖循环上的后支配结果。
+            if (thenBlock.To.Contains(elseBlock) && HasBranchPayload(thenBlock))
+            {
+                logic.Then.Type = LogicalBlockType.BlockList;
+                logic.Then.Blocks = new List<Block> { thenBlock };
+                logic.Else.Type = LogicalBlockType.None;
+                RemoveLastGoto(thenBlock, elseBlock);
+                outIf = logic;
+                return true;
+            }
+
+            if (elseBlock.To.Contains(thenBlock) && HasBranchPayload(elseBlock))
+            {
+                logic.Condition = cond.Invert();
+                logic.Then.Type = LogicalBlockType.BlockList;
+                logic.Then.Blocks = new List<Block> { elseBlock };
+                logic.Else.Type = LogicalBlockType.None;
+                RemoveLastGoto(elseBlock, thenBlock);
+                outIf = logic;
+                return true;
+            }
 
 
             bool elseIsBreak = false;
@@ -867,9 +2784,62 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
+            // 循环体条件的一侧留在循环内、另一侧直接 return 时，外侧块属于
+            // 条件体而不是循环后的顺序代码。例如 “if (x <= y) return i; i--;”。
+            // 原实现因两个分支后继不同而放弃结构化，最终只输出了比较表达式。
+            if (loop != null && loop.Contains(thenBlock) != loop.Contains(elseBlock))
+            {
+                var externalBlock = loop.Contains(thenBlock) ? elseBlock : thenBlock;
+                var externalIsTrue = externalBlock == thenBlock;
+                var loopBreak = (loop.LoopLogic as DoWhileLogic)?.Break ?? FindBreak(loop);
+
+                if (IsLoopBreakArm(externalBlock, loopBreak))
+                {
+                    logic.Condition = externalIsTrue ? cond : cond.Invert();
+                    logic.Then.Type = LogicalBlockType.Statement;
+                    logic.Then.Statement = MoveLoopBreakArmToStatement(externalBlock, loopBreak);
+                    logic.Else.Type = LogicalBlockType.None;
+                    outIf = logic;
+                    return true;
+                }
+
+                if (externalBlock.Dominator != null &&
+                    externalBlock.Dominator[block.Id] &&
+                    externalBlock.Statements.Any(statement => statement is ReturnExpression))
+                {
+                    logic.Condition = externalIsTrue ? cond : cond.Invert();
+                    logic.Then.Type = LogicalBlockType.BlockList;
+                    logic.Then.Blocks = new List<Block> { externalBlock };
+                    logic.Else.Type = LogicalBlockType.None;
+                    outIf = logic;
+                    return true;
+                }
+            }
+
+            // continue 分支常与本轮最后一条副作用共处于同一基本块，例如
+            // `if (step == 0) { timer.interval = 0; continue; }`。旧逻辑只识别
+            // “纯 JMP”跳板，因此条件被留下为裸比较、赋值则变成无条件执行。
+            // 有载荷的 continue 臂会终止当前路径，另一臂可继续按顺序结构化。
+            if (transferLoop != null && !elseIsBreak)
+            {
+                var thenHasContinuePayload = IsContinueArmWithPayload(thenBlock, transferLoop);
+                var elseHasContinuePayload = IsContinueArmWithPayload(elseBlock, transferLoop);
+                if (thenHasContinuePayload != elseHasContinuePayload)
+                {
+                    var continueArm = thenHasContinuePayload ? thenBlock : elseBlock;
+                    logic.Condition = thenHasContinuePayload ? cond : cond.Invert();
+                    logic.Then.Type = LogicalBlockType.Statement;
+                    logic.Then.Statement = MoveLoopContinueArmToStatement(continueArm);
+                    logic.Else.Type = LogicalBlockType.None;
+                    continueArm.Hidden = true;
+                    outIf = logic;
+                    return true;
+                }
+            }
+
             // 连续 continue 守卫合并：在循环体内，如果 if 的 true 分支是 continue
             // （跳转到循环闩锁块），则将连续的 continue 守卫合并为 || 条件
-            if (loop != null && !elseIsBreak && IsContinueTarget(thenBlock, loop))
+            if (transferLoop != null && !elseIsBreak && IsContinueTarget(thenBlock, transferLoop))
             {
                 Expression mergedCondition = cond.Condition;
                 Block currentElse = elseBlock;
@@ -881,7 +2851,7 @@ namespace Furikiri.Echo.Pass
                     var nextThenBlock = _context.BlockTable[nextCond.TrueBranch];
                     var nextElseBlock = _context.BlockTable[nextCond.FalseBranch];
 
-                    if (IsContinueTarget(nextThenBlock, loop))
+                    if (IsContinueTarget(nextThenBlock, transferLoop))
                     {
                         mergedCondition = mergedCondition.Or(nextCond.Condition);
                         nextThenBlock.Hidden = true;
@@ -941,14 +2911,40 @@ namespace Furikiri.Echo.Pass
                 elseBlock = logic.Else.Blocks[0];
             }
 
+            if (TryStructureDominatedBranchRegions(
+                    block, thenBlock, elseBlock, postDominator, logic))
+            {
+                outIf = logic;
+                return true;
+            }
+
+            // 两个分支根可能已分别物化成完整 IfStatement（共享 case/键分派常见）。
+            // 此时基本块不再含 ConditionExpression，旧递归路径会误以为无法结构化，
+            // 最终丢掉最外层条件并把两支顺序输出。若两支都明确汇合到同一后支配块，
+            // 可直接把已物化语句作为 then/else 接回外层。
+            if (postDominator != null && thenBlock != postDominator && elseBlock != postDominator &&
+                HasBranchPayload(thenBlock) && HasBranchPayload(elseBlock) &&
+                CanReach(thenBlock, postDominator) && CanReach(elseBlock, postDominator))
+            {
+                logic.Then.Type = LogicalBlockType.BlockList;
+                logic.Then.Blocks = new List<Block> { thenBlock };
+                logic.Else.Type = LogicalBlockType.BlockList;
+                logic.Else.Blocks = new List<Block> { elseBlock };
+                RemoveLastGoto(thenBlock, postDominator);
+                RemoveLastGoto(elseBlock, postDominator);
+                outIf = logic;
+                return true;
+            }
+
             // 若 thenBlock 本身是条件块（包含嵌套 if），递归结构化。
             // 当 MergeIfCondition 未处理（非 && / || 链）且 thenBlock 仍为条件块时，
             // 其内部条件需要被结构化为嵌套 IfStatement，否则会作为独立表达式输出。
             if (thenBlock.To.Count == 2 && thenBlock.Statements.GetCondition() != null)
             {
+                var thenCondition = thenBlock.Statements.GetCondition();
                 if (StructureIfElse(thenBlock, out IfLogic nestedThenIf))
                 {
-                    thenBlock.Statements.Replace(nestedThenIf.Condition, nestedThenIf.Simplify().ToStatement());
+                    thenBlock.Statements.Replace(thenCondition, nestedThenIf.Simplify().ToStatement());
                 }
             }
 
@@ -987,7 +2983,7 @@ namespace Furikiri.Echo.Pass
                         }
                         else if (StructureIfElse(visibleContinuation, out IfLogic nestedContIf))
                         {
-                            visibleContinuation.Statements.Replace(nestedContIf.Condition,
+                            visibleContinuation.Statements.Replace(contCond,
                                 nestedContIf.Simplify().ToStatement());
                         }
                     }
@@ -1028,7 +3024,7 @@ namespace Furikiri.Echo.Pass
                 {
                     if (StructureIfElse(thenBlock, out IfLogic nestedIf))
                     {
-                        thenBlock.Statements.Replace(nestedIf.Condition, nestedIf.Simplify().ToStatement());
+                        thenBlock.Statements.Replace(nestedCond, nestedIf.Simplify().ToStatement());
                     }
                 }
             }
@@ -1039,6 +3035,16 @@ namespace Furikiri.Echo.Pass
                 // the then block. This means there's no fall-through; the else block is
                 // just sequential code after the if, not an explicit else.
                 // (When else flows into then, it's a short-circuit pattern like &&, not a simple if.)
+                logic.Else.Type = LogicalBlockType.None;
+            }
+            else if (elseBlock.Statements.Any(s => s is ReturnExpression) &&
+                     !(thenBlock.To.Count > 0 && thenBlock.To[0] == elseBlock))
+            {
+                // 对称的 guard-return：跳转分支 return，顺序分支继续执行。
+                // 将条件反转后只输出 return 分支，继续块由外围支配区域顺序收集。
+                logic.Condition = cond.Invert();
+                logic.Then.Type = LogicalBlockType.BlockList;
+                logic.Then.Blocks = new List<Block> { elseBlock };
                 logic.Else.Type = LogicalBlockType.None;
             }
             else
@@ -1096,6 +3102,129 @@ namespace Furikiri.Echo.Pass
 
             outIf = logic;
             return true;
+        }
+
+        /// <summary>
+        /// 判断分支入口是否含有真正会执行的语句。嵌套 if 先被物化后，入口块
+        /// 往往是“赋值 + IfStatement”，另一侧仍是普通表达式；只检查 Statement
+        /// 会漏掉这种合法的单块 if/else。纯 Condition/Goto 仍属于短路求值外壳，
+        /// 不能据此构造分支，否则会把逻辑表达式误写成控制语句。
+        /// </summary>
+        private static bool HasBranchPayload(Block block)
+        {
+            return block?.Statements.Any(node =>
+                node is not ConditionExpression && node is not GotoExpression) == true;
+        }
+
+        /// <summary>
+        /// 内层 if 先物化时会隐藏自己的 then/else 数据块。外层条件若某一路正好
+        /// 复用内层的一个分支，不能简单穿过隐藏块到公共尾部，否则该路语句会丢失。
+        /// 例如 C ? (N ? A : B) : B 可安全合并为 (C &amp;&amp; N) ? A : B。
+        /// </summary>
+        private bool TryMergeConsumedNestedBranch(
+            Block owner, ConditionExpression outerCondition,
+            Block trueBlock, Block falseBlock, Block postDominator,
+            out IfLogic logic)
+        {
+            logic = null;
+            IfLogic mergedLogic = null;
+            if (trueBlock == null || falseBlock == null ||
+                (!trueBlock.Hidden && !falseBlock.Hidden))
+            {
+                return false;
+            }
+
+            var trueOwner = NormalizeDecisionTarget(trueBlock, new HashSet<Block>());
+            var falseOwner = NormalizeDecisionTarget(falseBlock, new HashSet<Block>());
+
+            bool TryBuild(Block nestedOwner, Block sharedBlock, bool nestedOnTrue)
+            {
+                var nested = nestedOwner?.Statements?.OfType<IfStatement>().LastOrDefault();
+                if (nested == null)
+                {
+                    return false;
+                }
+
+                var nestedCondition = nested.Condition is ConditionExpression wrapper
+                    ? wrapper.Condition
+                    : nested.Condition;
+                var outer = outerCondition.Condition;
+                Expression combined;
+                Statement thenStatement;
+                Statement elseStatement;
+
+                if (ContainsAnyOriginalNode(nested.Else, sharedBlock))
+                {
+                    // C ? (N ? A : B) : B  =>  (C && N) ? A : B
+                    combined = nestedOnTrue
+                        ? outer.And(nestedCondition)
+                        : outer.Invert().And(nestedCondition);
+                    thenStatement = nested.Then;
+                    elseStatement = nested.Else;
+                }
+                else if (ContainsAnyOriginalNode(nested.Then, sharedBlock))
+                {
+                    // C ? (N ? A : B) : A  =>  (!C || N) ? A : B
+                    combined = nestedOnTrue
+                        ? outer.Invert().Or(nestedCondition)
+                        : outer.Or(nestedCondition);
+                    thenStatement = nested.Then;
+                    elseStatement = nested.Else;
+                }
+                else
+                {
+                    return false;
+                }
+
+                mergedLogic = new IfLogic
+                {
+                    ConditionBlock = owner,
+                    Condition = combined,
+                    PostDominator = postDominator,
+                    Then = { Type = LogicalBlockType.Statement, Statement = thenStatement },
+                    Else = { Type = LogicalBlockType.Statement, Statement = elseStatement }
+                };
+                nestedOwner.Hidden = true;
+                return true;
+            }
+
+            var merged = trueBlock.Hidden && TryBuild(trueOwner, falseBlock, true) ||
+                         falseBlock.Hidden && TryBuild(falseOwner, trueBlock, false);
+            logic = mergedLogic;
+            return merged;
+        }
+
+        private static bool ContainsAnyOriginalNode(Statement statement, Block sourceBlock)
+        {
+            if (statement == null || sourceBlock?.Statements == null)
+            {
+                return false;
+            }
+
+            bool Contains(IAstNode node)
+            {
+                if (node == null)
+                {
+                    return false;
+                }
+
+                if (sourceBlock.Statements.Any(source =>
+                        ReferenceEquals(source, node) ||
+                        node is ExpressionStatement expressionStatement &&
+                        ReferenceEquals(source, expressionStatement.Expression)))
+                {
+                    return true;
+                }
+
+                return node switch
+                {
+                    BlockStatement block => block.Statements.Any(Contains),
+                    IfStatement nested => Contains(nested.Then) || Contains(nested.Else),
+                    _ => false
+                };
+            }
+
+            return Contains(statement);
         }
     }
 }

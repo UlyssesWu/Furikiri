@@ -20,6 +20,7 @@ namespace Furikiri.Echo
         public List<Block> Blocks { get; set; } = new List<Block>();
 
         public ILogical LoopLogic { get; set; }
+        public Statement MaterializedStatement { get; set; }
 
         public List<Block> Body { get; set; } = new List<Block>();
         public Block Break { get; set; } 

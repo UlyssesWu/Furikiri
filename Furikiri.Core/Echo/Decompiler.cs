@@ -79,8 +79,13 @@ namespace Furikiri.Echo
                 new Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)>();
             var classObjects = Script.Objects.Where(o => o.ContextType == TjsContextType.Class).ToList();
             var classSuperExpressions = new Dictionary<CodeObject, Expression>();
+            var classBodies = new Dictionary<CodeObject, BlockStatement>();
 
             methods.Add(Script.Methods[Script.TopLevel], DecompileObject(Script.TopLevel));
+            foreach (var classObject in classObjects)
+            {
+                classBodies[classObject] = DecompileObject(classObject);
+            }
             foreach (var method in Script.Methods)
             {
                 if (method.Key == Script.TopLevel)
@@ -157,7 +162,8 @@ namespace Furikiri.Echo
             {
                 MethodRefs = methods,
                 PropertyRefs = propertyBlocks,
-                ClassSuperExpressions = classSuperExpressions
+                ClassSuperExpressions = classSuperExpressions,
+                ClassBodies = classBodies
             };
             tjs.WriteLicense();
 
@@ -287,6 +293,17 @@ namespace Furikiri.Echo
             var dir = GetDebugDumpDir();
             Directory.CreateDirectory(dir);
             var rawName = string.IsNullOrWhiteSpace(obj?.Name) ? "top-level" : obj.Name;
+            if (!string.IsNullOrWhiteSpace(obj?.Parent?.Name))
+            {
+                rawName = $"{obj.Parent.Name}__{rawName}__{obj.ContextType}";
+            }
+            // 同一父对象下可能有多个同名匿名函数。对象表序号来自字节码文件且稳定，
+            // 用它区分调试文件，避免后反编译的闭包覆盖先前闭包的 CFG。
+            var objectIndex = obj?.Script?.Objects?.IndexOf(obj) ?? -1;
+            if (objectIndex >= 0)
+            {
+                rawName = $"{rawName}__obj{objectIndex:D4}";
+            }
             var invalid = Path.GetInvalidFileNameChars();
             var safeName = new string(rawName.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
             return Path.Combine(dir, $"{safeName}.debug.txt");

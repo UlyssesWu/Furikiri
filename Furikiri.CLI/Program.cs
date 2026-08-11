@@ -29,6 +29,10 @@ namespace Furikiri.CLI
             var optDis = app.Option("-da|--disassemble", "Disassemble byte code", CommandOptionType.NoValue);
             var optDec = app.Option("-d|--dec", "Decompile byte code", CommandOptionType.NoValue);
             var optPrint = app.Option("-p|--print", "Print result", CommandOptionType.NoValue);
+            var optSameLineBrace = app.Option(
+                "--same-line-brace",
+                "Place opening braces on the same line as declarations and control statements",
+                CommandOptionType.NoValue);
 
             //args
             var argPath =
@@ -36,6 +40,7 @@ namespace Furikiri.CLI
 
             app.OnExecute(() =>
             {
+                Config.OpeningBraceOnNewLine = !optSameLineBrace.HasValue();
                 var print = optPrint.HasValue();
                 foreach (string s in argPath.Values)
                 {

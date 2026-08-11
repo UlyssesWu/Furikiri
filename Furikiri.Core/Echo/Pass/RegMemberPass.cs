@@ -13,6 +13,21 @@ namespace Furikiri.Echo.Pass
 
             var entry = context.EntryBlock;
             var codes = entry.Instructions;
+
+            // 类代码对象的开头负责建立继承关系并执行 regmember，真正的字段
+            // 声明紧随其后。该前导序列不是类体源码，保留会多输出一次父类调用。
+            if (context.Object.ContextType == TjsContextType.Class)
+            {
+                var registerMemberIndex = codes.FindIndex(instruction =>
+                    instruction.OpCode == OpCode.REGMEMBER);
+                if (registerMemberIndex >= 0)
+                {
+                    codes.RemoveRange(0, registerMemberIndex + 1);
+                }
+
+                return statement;
+            }
+
             int i = 0;
             if (codes.Count < i + 3)
             {

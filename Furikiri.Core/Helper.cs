@@ -480,6 +480,7 @@ namespace Furikiri
             {
                 case UnaryOp.TypeOf:
                 case UnaryOp.Invalidate:
+                case UnaryOp.IsValid:
                 case UnaryOp.ToByteArray:
                 case UnaryOp.ToInt:
                 case UnaryOp.ToNumber:
@@ -573,6 +574,8 @@ namespace Furikiri
                     return "!";
                 case UnaryOp.Invalidate:
                     return "invalidate";
+                case UnaryOp.IsValid:
+                    return "isvalid";
                 case UnaryOp.TypeOf:
                     return "typeof";
                 case UnaryOp.Eval:

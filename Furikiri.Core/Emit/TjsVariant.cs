@@ -57,6 +57,12 @@ namespace Furikiri.Emit
         {
             Value = obj;
         }
+
+        public override string ToString()
+        {
+            // 字节码中的 Object(null) 是 TJS2 的 null 常量，不是 CLR 类型名。
+            return Value?.ToString() ?? "null";
+        }
     }
 
     [DebuggerDisplay("{DebugString}")]

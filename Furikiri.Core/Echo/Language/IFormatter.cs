@@ -21,6 +21,7 @@ namespace Furikiri.Echo.Language
         void Indent();
         void Outdent();
         int CurrentPosition { get; }
+        int CurrentLineLength { get; }
 
         /// <summary>
         /// Instructs the formatter, that all the text it recieves from now on should be handled as comment.

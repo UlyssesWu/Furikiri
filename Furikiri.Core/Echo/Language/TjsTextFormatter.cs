@@ -75,6 +75,26 @@ namespace Furikiri.Echo.Language
 
         public int CurrentPosition => (Writer.InnerWriter as StringWriter)?.GetStringBuilder().Length ?? 0;
 
+        public int CurrentLineLength
+        {
+            get
+            {
+                var builder = (Writer.InnerWriter as StringWriter)?.GetStringBuilder();
+                if (builder == null)
+                {
+                    return 0;
+                }
+
+                var index = builder.Length - 1;
+                while (index >= 0 && builder[index] != '\r' && builder[index] != '\n')
+                {
+                    index--;
+                }
+
+                return builder.Length - index - 1;
+            }
+        }
+
         public void StartWritingComment()
         {
             Writer.Write("// ");
@@ -87,6 +107,15 @@ namespace Furikiri.Echo.Language
 
         public void WriteStartBlock()
         {
+            if (Config.OpeningBraceOnNewLine)
+            {
+                Writer.WriteLine();
+            }
+            else
+            {
+                Writer.Write(" ");
+            }
+
             Writer.WriteLine("{");
             Indent();
         }

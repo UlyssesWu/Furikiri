@@ -430,7 +430,21 @@ namespace Furikiri.Echo
                         var natureLoop = NaturalLoopForEdge(to, block);
                         if (natureLoop != null)
                         {
-                            LoopSet.Add(natureLoop);
+                            // 同一循环头可能有多个回边（例如循环体内多个 continue）。
+                            // 每条回边分别建立 Loop 会把同一个循环错误嵌套几十层；
+                            // 自然循环应按 header 合并其所有回边覆盖到的基本块。
+                            var existingLoop = LoopSet.FirstOrDefault(loop => loop.Header == natureLoop.Header);
+                            if (existingLoop == null)
+                            {
+                                LoopSet.Add(natureLoop);
+                            }
+                            else
+                            {
+                                foreach (var loopBlock in natureLoop.Blocks)
+                                {
+                                    existingLoop.Blocks.TryAdd(loopBlock);
+                                }
+                            }
                         }
                     }
                 }
@@ -707,6 +721,16 @@ namespace Furikiri.Echo
         {
             switch (node)
             {
+                case ReturnExpression returnExpression:
+                    return $"Expr(ReturnExpression): return {returnExpression.Return}";
+                case ConditionExpression condition:
+                    return $"Expr(ConditionExpression): {condition.Condition}; " +
+                           $"true={condition.TrueBranch}, false={condition.FalseBranch}, " +
+                           $"jump={(condition.JumpIf ? "JF" : "JNF")}";
+                case IfStatement ifStatement:
+                    return $"Stmt(IfStatement): condition={ifStatement.Condition}; " +
+                           $"then={FormatStatementShape(ifStatement.Then)}, " +
+                           $"else={FormatStatementShape(ifStatement.Else)}";
                 case ExpressionStatement es:
                     return $"ExprStmt({es.Expression?.GetType().Name}): {es.Expression}";
                 case Statement st:
@@ -716,6 +740,29 @@ namespace Furikiri.Echo
                 default:
                     return node?.GetType().Name ?? "null";
             }
+        }
+
+        private static string FormatStatementShape(Statement statement, int depth = 0)
+        {
+            if (depth >= 3)
+            {
+                return statement?.GetType().Name ?? "<none>";
+            }
+
+            return statement switch
+            {
+                null => "<none>",
+                BlockStatement block => $"Block[{block.Statements.Count}: " +
+                                        string.Join(" | ", block.Statements.Take(6).Select(node =>
+                                            node is Statement nested
+                                                ? FormatStatementShape(nested, depth + 1)
+                                                : node?.ToString() ?? "null")) + "]",
+                IfStatement nestedIf => $"If({nestedIf.Condition}; " +
+                                        $"then={FormatStatementShape(nestedIf.Then, depth + 1)}; " +
+                                        $"else={FormatStatementShape(nestedIf.Else, depth + 1)})",
+                ExpressionStatement expression => expression.Expression?.ToString() ?? "<empty expression>",
+                _ => statement.GetType().Name
+            };
         }
 
         #endregion

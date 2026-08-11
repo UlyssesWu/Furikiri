@@ -330,6 +330,10 @@ ASALocalRun/
 .mfractor/
 
 /Furikiri.Tests/Res
+!/Furikiri.Tests/Res/
+/Furikiri.Tests/Res/*
+!/Furikiri.Tests/Res/SemanticControlFlow.tjs
+!/Furikiri.Tests/Res/SemanticControlFlow.tjs.comp
 /IronTJS
 /KrkrSharp
 /bak
@@ -338,3 +342,5 @@ ASALocalRun/
 /RunTest/decompile-debug
 /RunTest/decompiled.tjs
 /decompile-debug
+/docs/validation.md
+/Furikiri.Tests/Res/*.comp
