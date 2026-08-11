@@ -145,14 +145,9 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
-            if (!usedNames.Contains(baseName))
+            for (var suffix = 0;; suffix++)
             {
-                return baseName;
-            }
-
-            for (var suffix = 2;; suffix++)
-            {
-                var candidate = $"{baseName}{suffix}";
+                var candidate = $"{baseName}_{suffix}";
                 if (!usedNames.Contains(candidate))
                 {
                     return candidate;
@@ -715,10 +710,10 @@ namespace Furikiri.Echo.Pass
                             dst = l;
                             ex[dstSlot] = l; //assignment -> statements, local -> expressions
 
-                            // 当局部变量从已知属性/方法赋值时，使用属性名+'_'命名
+                            // 当局部变量从已知属性/方法赋值时，使用 name_0、name_1 命名。
                             if (declare && l.VariableDef.Name == null && src is IdentifierExpression srcId && srcId.Instance != null && !string.IsNullOrEmpty(srcId.Name))
                             {
-                                var baseName = srcId.Name + "_";
+                                var baseName = srcId.Name;
                                 l.VariableDef.Name = GetUniqueDerivedLocalName(baseName, context, ex, expList);
                             }
 

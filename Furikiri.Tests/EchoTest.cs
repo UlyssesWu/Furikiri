@@ -22,6 +22,8 @@ namespace Furikiri.Tests
         {
             // 既有语义断言使用旧快照；专门的命名测试同时覆盖新默认和兼容模式。
             Config.UseLegacyRegisterVariableNames = true;
+            Config.UseInferredVariableNames = true;
+            Config.OpeningBraceOnNewLine = true;
         }
 
         [TestMethod]
@@ -152,7 +154,7 @@ namespace Furikiri.Tests
             StringAssert.Contains(result, "v7 += p4[+v9];");
             StringAssert.Contains(result, "v7 += v9;");
             var delayedForBody = SliceBetween(result, "function delayedForInitializer", "function rangeBreak");
-            StringAssert.Contains(delayedForBody, "for (var v5 = 0; v5 < count_; v5++)");
+            StringAssert.Contains(delayedForBody, "for (var v5 = 0; v5 < count_0; v5++)");
             StringAssert.Contains(delayedForBody, "continue;");
             Assert.IsFalse(delayedForBody.Contains("if (p3[v5] == \"\")\r\n        {\r\n        }", StringComparison.Ordinal),
                 "循环前还有缓存赋值时，也应按步进变量找到初始化并恢复 continue");
@@ -164,22 +166,22 @@ namespace Furikiri.Tests
             var assignedGuardBody = SliceBetween(
                 result, "function assignmentShortCircuitGuard", "function bitwiseMask");
             var combinedAssignedGuard = assignedGuardBody.Contains(
-                "if (v6 && (name_ = v6.name) != \"\")", StringComparison.Ordinal);
+                "if (v6 && (name_0 = v6.name) != \"\")", StringComparison.Ordinal);
             var nestedAssignedGuard = assignedGuardBody.Contains("if (v6)", StringComparison.Ordinal) &&
-                                      assignedGuardBody.Contains("name_ = v6.name;", StringComparison.Ordinal) &&
-                                      assignedGuardBody.Contains("if (name_ != \"\")", StringComparison.Ordinal);
+                                      assignedGuardBody.Contains("name_0 = v6.name;", StringComparison.Ordinal) &&
+                                      assignedGuardBody.Contains("if (name_0 != \"\")", StringComparison.Ordinal);
             Assert.IsTrue(combinedAssignedGuard || nestedAssignedGuard,
                 "带赋值的短路条件应恢复为组合式或等价的嵌套式");
-            Assert.IsTrue(assignedGuardBody.IndexOf("name_ = v6.name", StringComparison.Ordinal) <
+            Assert.IsTrue(assignedGuardBody.IndexOf("name_0 = v6.name", StringComparison.Ordinal) <
                           assignedGuardBody.IndexOf("consume(v6);", StringComparison.Ordinal),
                 "带赋值的短路条件必须继续保护后续副作用");
             StringAssert.Contains(result,
-                "if (p3 == \"\" || p4[p3] === void || (states_ = p4[p3].states) === void)");
-            StringAssert.Contains(result, "consume(states_);");
+                "if (p3 == \"\" || p4[p3] === void || (states_0 = p4[p3].states) === void)");
+            StringAssert.Contains(result, "consume(states_0);");
             var conditionalLatchBody = SliceBetween(
                 result, "function conditionalLatchLoop", "function delayedForInitializer");
-            StringAssert.Contains(conditionalLatchBody, "while (v4 < count_)");
-            StringAssert.Contains(conditionalLatchBody, "count_--;");
+            StringAssert.Contains(conditionalLatchBody, "while (v4 < count_0)");
+            StringAssert.Contains(conditionalLatchBody, "count_0--;");
             StringAssert.Contains(conditionalLatchBody, "else\r\n            {");
             StringAssert.Contains(conditionalLatchBody, "v4++;");
             Assert.IsFalse(conditionalLatchBody.Contains("for (", StringComparison.Ordinal),
@@ -215,7 +217,7 @@ namespace Furikiri.Tests
             var initializedSideEffectBody = SliceBetween(
                 result, "function initializedSideEffectGuard", "function loopShortCircuitBody");
             StringAssert.Contains(initializedSideEffectBody,
-                "if (off_ && setVisible(0) || on_ && setVisible(1))");
+                "if (off_0 && setVisible(0) || on_0 && setVisible(1))");
             StringAssert.Contains(initializedSideEffectBody, "return -3;");
             StringAssert.Contains(initializedSideEffectBody, "afterVisibility();");
             var sideEffectGuardBody = SliceBetween(
@@ -268,9 +270,9 @@ namespace Furikiri.Tests
                 "\r\n            \"ptext\" => SemanticControlFlow.drawReconstructibleText\r\n        ];");
             StringAssert.Contains(result,
                 "if (p3 === void || p3 == \"\" || p3.substr(0, 3) == \"eye\" && +p3.substr(3) == p4 || p3.substr(0, 3) == \"lip\" && +p3.substr(3) == p5)");
-            StringAssert.Contains(result, "var object_ = p3[p4].object;");
+            StringAssert.Contains(result, "var object_0 = p3[p4].object;");
             StringAssert.Contains(result,
-                "if (object_ === void || !isvalid object_ || object_.visible && object_.enabled)");
+                "if (object_0 === void || !isvalid object_0 || object_0.visible && object_0.enabled)");
             StringAssert.Contains(result, "consume((new PSBFile(p3)).root);");
             StringAssert.Contains(result,
                 "if (p3 != \"\" && p4 == p3 || p3 == \"\" && probe(p5) != \"\")");
@@ -297,6 +299,11 @@ namespace Furikiri.Tests
                 StringAssert.Contains(result, "else if (p3.mode == \"addalpha\") {");
                 StringAssert.Contains(result, "try {");
                 StringAssert.Contains(result, "catch(v4) {");
+
+                Config.OpeningBraceOnNewLine = true;
+                var allman = new Decompiler(path).Decompile();
+                StringAssert.Contains(allman, "class SemanticControlFlow\r\n{");
+                StringAssert.Contains(allman, "function guard(p3, p4)\r\n    {");
             }
             finally
             {
@@ -309,9 +316,13 @@ namespace Furikiri.Tests
         {
             var path = "..\\..\\..\\Res\\SemanticControlFlow.tjs.comp";
             var originalStyle = Config.UseLegacyRegisterVariableNames;
+            var originalInference = Config.UseInferredVariableNames;
+            var originalBraceStyle = Config.OpeningBraceOnNewLine;
             try
             {
                 Config.UseLegacyRegisterVariableNames = false;
+                Config.UseInferredVariableNames = false;
+                Config.OpeningBraceOnNewLine = false;
                 var sequential = new Decompiler(path).Decompile();
                 StringAssert.Contains(sequential, "function guard(a0, a1)");
                 StringAssert.Contains(sequential,
@@ -325,8 +336,19 @@ namespace Furikiri.Tests
                     sequential, "function collapseNames", "function compoundDoWhile");
                 StringAssert.Contains(collapseBody, "var v0 = a0;");
                 StringAssert.Contains(collapseBody, "var v1 = __params1.count;");
+                StringAssert.Contains(sequential, "function defaultArgument(a0 = 1) {");
+                StringAssert.Contains(sequential,
+                    "function uninitializedLocals(a0, a1) {\r\n        var v0 = void;\r\n        var v1 = void;");
                 Assert.IsFalse(sequential.Contains("function guard(p3, p4)", StringComparison.Ordinal));
+                Assert.IsFalse(sequential.Contains("\r\n\r\n\r\n", StringComparison.Ordinal),
+                    "输出中不应出现连续两个以上空白行");
 
+                Config.UseInferredVariableNames = true;
+                var inferred = new Decompiler(path).Decompile();
+                StringAssert.Contains(inferred, "var name_0 = void;");
+                Assert.IsFalse(inferred.Contains("var name_;", StringComparison.Ordinal));
+
+                Config.UseInferredVariableNames = false;
                 Config.UseLegacyRegisterVariableNames = true;
                 var legacy = new Decompiler(path).Decompile();
                 StringAssert.Contains(legacy, "function guard(p3, p4)");
@@ -335,6 +357,8 @@ namespace Furikiri.Tests
             finally
             {
                 Config.UseLegacyRegisterVariableNames = originalStyle;
+                Config.UseInferredVariableNames = originalInference;
+                Config.OpeningBraceOnNewLine = originalBraceStyle;
             }
         }
 

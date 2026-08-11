@@ -96,8 +96,11 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            // 新样式有意保持稳定的 aN/vN 命名；旧模式仍保留已有的成员名推导。
-            return Config.UseLegacyRegisterVariableNames ? Name ?? DefaultName : DefaultName;
+            // 新样式默认保持稳定的 aN/vN；可显式启用成员名推导。旧模式继续
+            // 保留历史行为，以便生成结果能与原有输出逐行对照。
+            return Config.UseLegacyRegisterVariableNames || Config.UseInferredVariableNames
+                ? Name ?? DefaultName
+                : DefaultName;
         }
     }
 }

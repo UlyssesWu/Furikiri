@@ -174,7 +174,9 @@ namespace Furikiri.Echo.Language
                     _formatter.WriteToken("*");
                 if (defaults.TryGetValue(paramList[i].ToString(), out var defVal))
                 {
+                    _formatter.WriteSpace();
                     _formatter.WriteToken("=");
+                    _formatter.WriteSpace();
                     Visit(defVal);
                 }
                 _formatter.WriteToken(",");
@@ -186,7 +188,9 @@ namespace Furikiri.Echo.Language
                 _formatter.WriteToken("*");
             if (defaults.TryGetValue(last.ToString(), out var lastDef))
             {
+                _formatter.WriteSpace();
                 _formatter.WriteToken("=");
+                _formatter.WriteSpace();
                 Visit(lastDef);
             }
         }
@@ -514,6 +518,7 @@ namespace Furikiri.Echo.Language
             // 未初始化的类字段在字节码中以 SPDS member, void 表示。
             // 还原成 `var member;`，避免把实现层的 void 写回细节泄露到源码。
             if (_currentClass != null && treatAsDeclaration &&
+                bin.Left is IdentifierExpression &&
                 bin.Right is ConstantExpression voidValue && voidValue.DataType == TjsVarType.Void)
             {
                 Visit(bin.Left);

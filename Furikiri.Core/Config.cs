@@ -15,15 +15,21 @@ namespace Furikiri
         public static bool UseLegacyRegisterVariableNames { get; set; } = false;
 
         /// <summary>
+        /// 是否根据成员读取推导局部变量名。默认关闭以保持稳定的 vN；开启后
+        /// 使用 name_0、name_1 等形式，并在同一函数内自动避让重名。
+        /// </summary>
+        public static bool UseInferredVariableNames { get; set; } = false;
+
+        /// <summary>
         /// 使用集合字面量语法初始化集合（Dictionary: %[]，Array: []）
         /// </summary>
         public static bool UseCollectionLiteralWhenPossible { get; set; } = true;
 
         /// <summary>
-        /// 左大括号是否另起一行。默认为 true，以保持原有 Allman 风格；
-        /// 设为 false 时输出为 <c>if (...) {</c>、<c>function f() {</c>。
+        /// 左大括号是否另起一行。默认 false，输出为
+        /// <c>if (...) {</c>、<c>function f() {</c>；设为 true 时使用 Allman 风格。
         /// </summary>
-        public static bool OpeningBraceOnNewLine { get; set; } = true;
+        public static bool OpeningBraceOnNewLine { get; set; } = false;
 
         /// <summary>
         /// 集合字面量的建议最大行宽。长字典会在 <c>%[</c> 后换行；

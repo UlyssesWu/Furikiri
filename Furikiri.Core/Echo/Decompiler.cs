@@ -61,8 +61,7 @@ namespace Furikiri.Echo
             }
 
             writer.Flush();
-            var result = writer.ToString();
-            return result;
+            return NormalizeBlankLines(writer.ToString());
         }
 
         public string Decompile()
@@ -220,8 +219,43 @@ namespace Furikiri.Echo
             tjs.WriteLine();
 
             writer.Flush();
-            var result = writer.ToString();
-            return result;
+            return NormalizeBlankLines(writer.ToString());
+        }
+
+        /// <summary>
+        /// 多层结构语句各自追加分隔行时，方法尾部可能累计出多个空行。
+        /// 统一压缩为最多一个空白行，同时清除空白行上的缩进字符。
+        /// </summary>
+        private static string NormalizeBlankLines(string source)
+        {
+            if (string.IsNullOrEmpty(source))
+            {
+                return source;
+            }
+
+            var newLine = source.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+            var lines = source.Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace('\r', '\n')
+                .Split('\n');
+            var output = new List<string>(lines.Length);
+            var previousWasBlank = false;
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    if (!previousWasBlank)
+                    {
+                        output.Add(string.Empty);
+                    }
+                    previousWasBlank = true;
+                    continue;
+                }
+
+                output.Add(line);
+                previousWasBlank = false;
+            }
+
+            return string.Join(newLine, output);
         }
 
         private BlockStatement DecompileObject(CodeObject obj)

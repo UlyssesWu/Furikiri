@@ -31,11 +31,19 @@ namespace Furikiri.CLI
             var optPrint = app.Option("-p|--print", "Print result", CommandOptionType.NoValue);
             var optSameLineBrace = app.Option(
                 "--same-line-brace",
-                "Place opening braces on the same line as declarations and control statements",
+                "Place opening braces on the same line (the default; retained for compatibility)",
+                CommandOptionType.NoValue);
+            var optNewLineBrace = app.Option(
+                "--new-line-brace",
+                "Place opening braces on a new line",
                 CommandOptionType.NoValue);
             var optLegacyRegisterNames = app.Option(
                 "--legacy-register-names",
                 "Use legacy VM register based names such as p3 and v5",
+                CommandOptionType.NoValue);
+            var optInferVariableNames = app.Option(
+                "--infer-variable-names",
+                "Infer readable local names such as name_0 from member accesses",
                 CommandOptionType.NoValue);
 
             //args
@@ -44,8 +52,10 @@ namespace Furikiri.CLI
 
             app.OnExecute(() =>
             {
-                Config.OpeningBraceOnNewLine = !optSameLineBrace.HasValue();
+                Config.OpeningBraceOnNewLine = optNewLineBrace.HasValue() &&
+                                               !optSameLineBrace.HasValue();
                 Config.UseLegacyRegisterVariableNames = optLegacyRegisterNames.HasValue();
+                Config.UseInferredVariableNames = optInferVariableNames.HasValue();
                 var print = optPrint.HasValue();
                 foreach (string s in argPath.Values)
                 {

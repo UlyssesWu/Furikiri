@@ -58,6 +58,21 @@ class SemanticControlFlow
         return firstLocal + count;
     }
 
+    function defaultArgument(value = 1)
+    {
+        return value;
+    }
+
+    function uninitializedLocals(firstFlag, secondFlag)
+    {
+        var first, second;
+        if (firstFlag) first = 1;
+        else first = 0;
+        if (secondFlag) second = 1;
+        else second = 0;
+        return first + second;
+    }
+
     function cleanup(obj, hook)
     {
         if (hook !== void && isvalid obj)
