@@ -1938,6 +1938,9 @@ namespace Furikiri.Echo.Language
                 InvokeExpression => true,
                 ReturnExpression => true,
                 ThrowExpression => true,
+                // delete 即使目标成员不存在也属于可观察的对象写操作，不能把
+                // 只含 DELD/DELI 的条件分支判为结构性空壳。
+                DeleteExpression => true,
                 // 命名寄存器上的 ADD/SUB 等指令在 AST 写出时才会补上
                 // IsSelfAssignment；无副作用分析发生得更早，必须按运算符识别，
                 // 否则包含 `x += y` 的整个嵌套 if 会被当成空壳删除。

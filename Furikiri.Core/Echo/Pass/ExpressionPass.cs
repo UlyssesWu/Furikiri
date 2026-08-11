@@ -41,7 +41,11 @@ namespace Furikiri.Echo.Pass
             for (short i = 0; i < argCount; i++)
             {
                 short slot = (short) (-i + Const.ArgBase);
-                var v = new Variable(slot) {IsParameter = true};
+                var v = new Variable(slot)
+                {
+                    IsParameter = true,
+                    GeneratedIndex = i
+                };
                 context.Vars.Add(slot, v);
                 exps.Add(slot, new LocalExpression(v));
             }
@@ -56,6 +60,7 @@ namespace Furikiri.Echo.Pass
                 {
                     IsParameter = true,
                     IsNamedArray = true,
+                    GeneratedIndex = Const.ArgBase - slot,
                     VarType = TjsVarType.Object
                 };
                 context.Vars.Add(slot, array);

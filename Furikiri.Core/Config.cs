@@ -7,6 +7,13 @@ namespace Furikiri
         public static bool DumpDecompileDebug { get; set; } = false;
         public static bool HideVoidReturn { get; set; } = true;
         public static bool UseBooleanWhenPossible { get; set; } = false;
+
+        /// <summary>
+        /// 是否使用与 VM 寄存器槽位一致的旧变量名（如 p3、v5）。默认关闭，
+        /// 参数和局部变量分别从 a0、v0 开始编号。
+        /// </summary>
+        public static bool UseLegacyRegisterVariableNames { get; set; } = false;
+
         /// <summary>
         /// 使用集合字面量语法初始化集合（Dictionary: %[]，Array: []）
         /// </summary>

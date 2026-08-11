@@ -488,6 +488,7 @@ namespace Furikiri.Echo.Pass
                 dw.Break = FindBreak(loop);
 
                 Block conditionBlock = null;
+                ConditionExpression mergedTailPrefix = null;
                 var headerCondition = loop.Header.Statements.GetCondition();
                 var tailCondition = lastBlock.Statements.GetCondition();
                 if (tailCondition is ConditionExpression lastCond &&
@@ -508,6 +509,23 @@ namespace Furikiri.Echo.Pass
                         dw.Break = tailExit;
                     }
                     conditionBlock = lastBlock;
+
+                    // do-while 的复合条件会被编译成“带循环体尾语句的首个条件 +
+                    // 纯条件闩锁块”。例如 `c < n && colors[c] == ""` 中，前半段
+                    // 留在 Header，后半段才负责回跳。两段的失败出口相同且 Header
+                    // 的成功分支直达闩锁时，可以安全恢复为一个短路 && 条件。
+                    if (loop.Header != lastBlock && headerCondition != null &&
+                        ((headerCondition.TrueBranch == lastBlock.Start &&
+                          headerCondition.FalseBranch == exitStart) ||
+                         (headerCondition.FalseBranch == lastBlock.Start &&
+                          headerCondition.TrueBranch == exitStart)))
+                    {
+                        var prefix = headerCondition.TrueBranch == lastBlock.Start
+                            ? headerCondition.Condition
+                            : headerCondition.Condition.Invert();
+                        dw.Condition = prefix.And(dw.Condition);
+                        mergedTailPrefix = headerCondition;
+                    }
                 }
                 else if (headerCondition != null && _context.BlockTable != null &&
                     _context.BlockTable.TryGetValue(headerCondition.TrueBranch, out var headerTrue) &&
@@ -537,6 +555,10 @@ namespace Furikiri.Echo.Pass
                 if (conditionBlock != null && conditionBlock != loop.Header)
                 {
                     dw.Body.Remove(conditionBlock);
+                }
+                if (mergedTailPrefix != null)
+                {
+                    loop.Header.Statements.Remove(mergedTailPrefix);
                 }
 
                 if (dw.IsWhile && conditionBlock == loop.Header)
@@ -689,6 +711,27 @@ namespace Furikiri.Echo.Pass
                 }
                 return;
             }
+        }
+
+        /// <summary>
+        /// 短路链中允许一种严格的带载荷条件块：一条赋值紧跟一条读取同一目标的
+        /// 条件。将赋值内联后，`ui = source; ui === void` 可恢复为
+        /// `(ui = source) === void`，该块也就能继续参与前后的 `||`/`&&` 合并。
+        /// 只接受恰好两条语句，避免跨越其他副作用改变求值顺序。
+        /// </summary>
+        private void InlineShortCircuitAssignment(Block conditionBlock)
+        {
+            if (conditionBlock?.Statements.Count != 2 ||
+                conditionBlock.Statements[0] is not BinaryExpression assignment ||
+                assignment.Op != BinaryOp.Assign ||
+                conditionBlock.Statements[1] is not ConditionExpression condition ||
+                !ReferencesAssignmentTarget(condition, assignment.Left))
+            {
+                return;
+            }
+
+            Expression mergedCondition = condition;
+            InlineLoopHeaderAssignment(conditionBlock, ref mergedCondition);
         }
 
         private static Expression ReplaceConditionTarget(Expression expression, Expression target,
@@ -1129,17 +1172,6 @@ namespace Furikiri.Echo.Pass
                 !candidates.Any(other => other != candidate && other.PostDominator[candidate.Id]));
         }
 
-        private sealed class PathPredicate
-        {
-            public bool? Constant { get; private set; }
-            public Expression Expression { get; private set; }
-
-            public static PathPredicate True() => new PathPredicate { Constant = true };
-            public static PathPredicate False() => new PathPredicate { Constant = false };
-            public static PathPredicate From(Expression expression) =>
-                new PathPredicate { Expression = expression };
-        }
-
         /// <summary>
         /// 分支区域中的短路链也必须先从最早入口整体恢复。若直接从尾部逐个
         /// 物化普通 if，A &amp;&amp; call0() || B &amp;&amp; call1() 会被拆成嵌套
@@ -1221,6 +1253,7 @@ namespace Furikiri.Echo.Pass
                          })
                 {
                     var target = pair.Target;
+                    InlineShortCircuitAssignment(target);
                     // 中间短路块必须只有条件本身；带准备语句的块是实际分支体。
                     // 此外它还必须能只经过条件块回到同级另一出口。这个约束会把
                     // 分支体开头的普通嵌套 if 排除在短路链之外。
@@ -1267,7 +1300,9 @@ namespace Furikiri.Echo.Pass
             var hasElseBranch = false;
             var bodyIsLoopBreak = false;
             var returnTargets = terminalList
-                .Where(target => target.Statements.Any(statement => statement is ReturnExpression))
+                .Where(target => target.Statements.Any(statement => statement is ReturnExpression) ||
+                                 FindIfPostDominator(target)?.Statements.Any(
+                                     statement => statement is ReturnExpression) == true)
                 .ToList();
             var pureReturnTargets = returnTargets
                 .Where(target => target.Statements.All(statement =>
@@ -1387,7 +1422,7 @@ namespace Furikiri.Echo.Pass
                     return null;
                 }
 
-                var combined = CombinePathPredicate(condition.Condition, whenTrue, whenFalse);
+                var combined = PathPredicate.Combine(condition.Condition, whenTrue, whenFalse);
                 memo[current] = combined;
                 return combined;
             }
@@ -1692,170 +1727,12 @@ namespace Furikiri.Echo.Pass
                     return null;
                 }
 
-                var combined = CombinePathPredicate(condition.Condition, whenTrue, whenFalse);
+                var combined = PathPredicate.Combine(condition.Condition, whenTrue, whenFalse);
                 memo[current] = combined;
                 return combined;
             }
 
             return Build(root);
-        }
-
-        private static PathPredicate CombinePathPredicate(
-            Expression condition, PathPredicate whenTrue, PathPredicate whenFalse)
-        {
-            if (whenTrue.Constant == true && whenFalse.Constant == false)
-            {
-                return PathPredicate.From(condition);
-            }
-
-            if (whenTrue.Constant == false && whenFalse.Constant == true)
-            {
-                return PathPredicate.From(condition.Invert());
-            }
-
-            if (whenTrue.Constant == true && whenFalse.Expression != null)
-            {
-                return PathPredicate.From(CombineBoolean(condition, whenFalse.Expression, BinaryOp.LogicOr));
-            }
-
-            if (whenTrue.Expression != null && whenFalse.Constant == true)
-            {
-                return PathPredicate.From(CombineBoolean(condition.Invert(), whenTrue.Expression, BinaryOp.LogicOr));
-            }
-
-            if (whenTrue.Expression != null && whenFalse.Constant == false)
-            {
-                return PathPredicate.From(CombineBoolean(condition, whenTrue.Expression, BinaryOp.LogicAnd));
-            }
-
-            if (whenTrue.Constant == false && whenFalse.Expression != null)
-            {
-                return PathPredicate.From(CombineBoolean(condition.Invert(), whenFalse.Expression, BinaryOp.LogicAnd));
-            }
-
-            if (whenTrue.Constant == whenFalse.Constant && whenTrue.Constant != null)
-            {
-                return whenTrue.Constant == true ? PathPredicate.True() : PathPredicate.False();
-            }
-
-            if (whenTrue.Expression != null && whenFalse.Expression != null)
-            {
-                var trueExpression = whenTrue.Expression;
-                var falseExpression = whenFalse.Expression;
-                if (AreEquivalentExpressions(trueExpression, falseExpression))
-                {
-                    return PathPredicate.From(trueExpression);
-                }
-
-                // A ? (X || Y) : X  =>  (A && Y) || X。
-                // 条件项必须放在前面，才能保持原 CFG 的求值顺序；X/Y 可能是调用。
-                if (TryRemoveBooleanFactor(trueExpression, BinaryOp.LogicOr,
-                        falseExpression, out var trueRemainder))
-                {
-                    return PathPredicate.From(CombineBoolean(
-                        CombineBoolean(condition, trueRemainder, BinaryOp.LogicAnd),
-                        falseExpression,
-                        BinaryOp.LogicOr));
-                }
-
-                // A ? X : (X || Y)  =>  (!A && Y) || X
-                if (TryRemoveBooleanFactor(falseExpression, BinaryOp.LogicOr,
-                        trueExpression, out var falseRemainder))
-                {
-                    return PathPredicate.From(CombineBoolean(
-                        CombineBoolean(condition.Invert(), falseRemainder, BinaryOp.LogicAnd),
-                        trueExpression,
-                        BinaryOp.LogicOr));
-                }
-
-                // A ? (X && Y) : X  =>  (!A || Y) && X
-                if (TryRemoveBooleanFactor(trueExpression, BinaryOp.LogicAnd,
-                        falseExpression, out trueRemainder))
-                {
-                    return PathPredicate.From(CombineBoolean(
-                        CombineBoolean(condition.Invert(), trueRemainder, BinaryOp.LogicOr),
-                        falseExpression,
-                        BinaryOp.LogicAnd));
-                }
-
-                // A ? X : (X && Y)  =>  (A || Y) && X
-                if (TryRemoveBooleanFactor(falseExpression, BinaryOp.LogicAnd,
-                        trueExpression, out falseRemainder))
-                {
-                    return PathPredicate.From(CombineBoolean(
-                        CombineBoolean(condition, falseRemainder, BinaryOp.LogicOr),
-                        trueExpression,
-                        BinaryOp.LogicAnd));
-                }
-
-                return PathPredicate.From(CombineBoolean(
-                    CombineBoolean(condition, trueExpression, BinaryOp.LogicAnd),
-                    CombineBoolean(condition.Invert(), falseExpression, BinaryOp.LogicAnd),
-                    BinaryOp.LogicOr));
-            }
-
-            return null;
-        }
-
-        private static Expression CombineBoolean(Expression left, Expression right, BinaryOp op)
-        {
-            if (AreEquivalentExpressions(left, right))
-            {
-                return left;
-            }
-
-            var absorbingOp = op == BinaryOp.LogicOr ? BinaryOp.LogicAnd : BinaryOp.LogicOr;
-            if (TryRemoveBooleanFactor(right, absorbingOp, left, out _) ||
-                TryRemoveBooleanFactor(left, absorbingOp, right, out _))
-            {
-                // X || (X && Y) = X；X && (X || Y) = X。
-                return TryRemoveBooleanFactor(right, absorbingOp, left, out _) ? left : right;
-            }
-
-            return op == BinaryOp.LogicOr ? left.Or(right) : left.And(right);
-        }
-
-        private static bool TryRemoveBooleanFactor(
-            Expression expression, BinaryOp op, Expression factor, out Expression remainder)
-        {
-            remainder = null;
-            if (expression is not BinaryExpression binary || binary.Op != op)
-            {
-                return false;
-            }
-
-            if (AreEquivalentExpressions(binary.Left, factor))
-            {
-                remainder = binary.Right;
-                return true;
-            }
-
-            if (AreEquivalentExpressions(binary.Right, factor))
-            {
-                remainder = binary.Left;
-                return true;
-            }
-
-            if (TryRemoveBooleanFactor(binary.Left, op, factor, out var leftRemainder))
-            {
-                remainder = CombineBoolean(leftRemainder, binary.Right, op);
-                return true;
-            }
-
-            if (TryRemoveBooleanFactor(binary.Right, op, factor, out var rightRemainder))
-            {
-                remainder = CombineBoolean(binary.Left, rightRemainder, op);
-                return true;
-            }
-
-            return false;
-        }
-
-        private static bool AreEquivalentExpressions(Expression left, Expression right)
-        {
-            return ReferenceEquals(left, right) ||
-                   left != null && right != null && left.GetType() == right.GetType() &&
-                   string.Equals(left.ToString(), right.ToString(), System.StringComparison.Ordinal);
         }
 
         private static bool IsDecisionPassthrough(Block block)
@@ -2752,9 +2629,11 @@ namespace Furikiri.Echo.Pass
             // 单臂 if 的一侧会直接落入另一侧入口：C ? A : join，且 A -> join。
             // 循环中的后支配分析容易把 join 选成循环头，若先按“支配区域”收集，
             // 会把公共后继误塞进 else 并反转条件。入口含真实载荷时可直接按边
-            // 关系恢复，不依赖循环上的后支配结果。
+            // 关系恢复，不依赖循环上的后支配结果。分支入口本身仍可能是带准备
+            // 语句的嵌套条件块，必须先物化内层 if；否则快速返回后只会留下裸条件。
             if (thenBlock.To.Contains(elseBlock) && HasBranchPayload(thenBlock))
             {
+                StructureNestedBranchCondition(thenBlock);
                 logic.Then.Type = LogicalBlockType.BlockList;
                 logic.Then.Blocks = new List<Block> { thenBlock };
                 logic.Else.Type = LogicalBlockType.None;
@@ -2765,6 +2644,7 @@ namespace Furikiri.Echo.Pass
 
             if (elseBlock.To.Contains(thenBlock) && HasBranchPayload(elseBlock))
             {
+                StructureNestedBranchCondition(elseBlock);
                 logic.Condition = cond.Invert();
                 logic.Then.Type = LogicalBlockType.BlockList;
                 logic.Then.Blocks = new List<Block> { elseBlock };
@@ -3114,6 +2994,21 @@ namespace Furikiri.Echo.Pass
         {
             return block?.Statements.Any(node =>
                 node is not ConditionExpression && node is not GotoExpression) == true;
+        }
+
+        /// <summary>
+        /// 单臂分支入口可能同时包含准备语句和另一个条件，例如短路表达式
+        /// <c>target &amp;&amp; (name = target.name) != ""</c> 的第二段。外层快速路径
+        /// 只收集入口块，因此要先把入口后的受控区域折叠为嵌套 IfStatement。
+        /// </summary>
+        private void StructureNestedBranchCondition(Block branch)
+        {
+            var nestedCondition = branch?.Statements.GetCondition();
+            if (nestedCondition != null && StructureIfElse(branch, out var nestedLogic))
+            {
+                branch.Statements.Replace(
+                    nestedCondition, nestedLogic.Simplify().ToStatement());
+            }
         }
 
         /// <summary>

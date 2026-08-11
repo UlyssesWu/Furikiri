@@ -33,6 +33,10 @@ namespace Furikiri.CLI
                 "--same-line-brace",
                 "Place opening braces on the same line as declarations and control statements",
                 CommandOptionType.NoValue);
+            var optLegacyRegisterNames = app.Option(
+                "--legacy-register-names",
+                "Use legacy VM register based names such as p3 and v5",
+                CommandOptionType.NoValue);
 
             //args
             var argPath =
@@ -41,6 +45,7 @@ namespace Furikiri.CLI
             app.OnExecute(() =>
             {
                 Config.OpeningBraceOnNewLine = !optSameLineBrace.HasValue();
+                Config.UseLegacyRegisterVariableNames = optLegacyRegisterNames.HasValue();
                 var print = optPrint.HasValue();
                 foreach (string s in argPath.Values)
                 {

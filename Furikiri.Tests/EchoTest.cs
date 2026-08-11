@@ -17,6 +17,13 @@ namespace Furikiri.Tests
     [TestClass]
     public class EchoTest
     {
+        [TestInitialize]
+        public void UseLegacyNamesForExistingSemanticAssertions()
+        {
+            // 既有语义断言使用旧快照；专门的命名测试同时覆盖新默认和兼容模式。
+            Config.UseLegacyRegisterVariableNames = true;
+        }
+
         [TestMethod]
         public void TestDisassemble()
         {
@@ -154,6 +161,21 @@ namespace Furikiri.Tests
             StringAssert.Contains(assignmentLoopBody, "touch();");
             StringAssert.Contains(assignmentLoopBody, "break;");
             StringAssert.Contains(assignmentLoopBody, "continue;");
+            var assignedGuardBody = SliceBetween(
+                result, "function assignmentShortCircuitGuard", "function bitwiseMask");
+            var combinedAssignedGuard = assignedGuardBody.Contains(
+                "if (v6 && (name_ = v6.name) != \"\")", StringComparison.Ordinal);
+            var nestedAssignedGuard = assignedGuardBody.Contains("if (v6)", StringComparison.Ordinal) &&
+                                      assignedGuardBody.Contains("name_ = v6.name;", StringComparison.Ordinal) &&
+                                      assignedGuardBody.Contains("if (name_ != \"\")", StringComparison.Ordinal);
+            Assert.IsTrue(combinedAssignedGuard || nestedAssignedGuard,
+                "带赋值的短路条件应恢复为组合式或等价的嵌套式");
+            Assert.IsTrue(assignedGuardBody.IndexOf("name_ = v6.name", StringComparison.Ordinal) <
+                          assignedGuardBody.IndexOf("consume(v6);", StringComparison.Ordinal),
+                "带赋值的短路条件必须继续保护后续副作用");
+            StringAssert.Contains(result,
+                "if (p3 == \"\" || p4[p3] === void || (states_ = p4[p3].states) === void)");
+            StringAssert.Contains(result, "consume(states_);");
             var conditionalLatchBody = SliceBetween(
                 result, "function conditionalLatchLoop", "function delayedForInitializer");
             StringAssert.Contains(conditionalLatchBody, "while (v4 < count_)");
@@ -162,6 +184,24 @@ namespace Furikiri.Tests
             StringAssert.Contains(conditionalLatchBody, "v4++;");
             Assert.IsFalse(conditionalLatchBody.Contains("for (", StringComparison.Ordinal),
                 "多个条件化回边不能被提升成带无条件步进的 for");
+            var compoundDoWhileBody = SliceBetween(
+                result, "function compoundDoWhile", "function conditionalLatchLoop");
+            StringAssert.Contains(compoundDoWhileBody,
+                "while (v5 < p4 && p3[v5] == \"\")");
+            Assert.IsFalse(compoundDoWhileBody.Contains("v5 < p4;", StringComparison.Ordinal),
+                "do-while 的短路前缀不能作为循环体内的裸比较输出");
+            var emptySwitchBody = SliceBetween(
+                result, "function emptySwitchCase", "function equalityDefault");
+            StringAssert.Contains(emptySwitchBody, "if (v5 == \"\\\\\")");
+            StringAssert.Contains(emptySwitchBody, "else if (v5 == \"k\")");
+            Assert.IsFalse(emptySwitchBody.Contains("v5 == \"\\\\\";", StringComparison.Ordinal),
+                "空 case 的比较不能脱离 switch 成为裸表达式");
+            Assert.IsFalse(emptySwitchBody.Contains("v5 == \"\\\\\" || v5 == \"k\"", StringComparison.Ordinal),
+                "跳出 switch 的空 case 不能与后续有副作用的 case 合并");
+            var guardedDeleteBody = SliceBetween(
+                result, "function guardedDelete", "function initializedSideEffectGuard");
+            StringAssert.Contains(guardedDeleteBody, "if (p3[p4] !== void)");
+            StringAssert.Contains(guardedDeleteBody, "delete p3[p4];");
             var shortCircuitLoopBody = SliceBetween(
                 result, "function loopShortCircuitBody", "function mode");
             StringAssert.Contains(shortCircuitLoopBody, "if (p5 || p4 === void");
@@ -261,6 +301,40 @@ namespace Furikiri.Tests
             finally
             {
                 Config.OpeningBraceOnNewLine = originalStyle;
+            }
+        }
+
+        [TestMethod]
+        public void TestSequentialVariableNamingStyle()
+        {
+            var path = "..\\..\\..\\Res\\SemanticControlFlow.tjs.comp";
+            var originalStyle = Config.UseLegacyRegisterVariableNames;
+            try
+            {
+                Config.UseLegacyRegisterVariableNames = false;
+                var sequential = new Decompiler(path).Decompile();
+                StringAssert.Contains(sequential, "function guard(a0, a1)");
+                StringAssert.Contains(sequential,
+                    "if (a1 === void || typeof a0.isBitmap == \"Object\" && !a0.isBitmap())");
+                StringAssert.Contains(sequential, "function options(a0, a1)");
+                StringAssert.Contains(sequential, "for (var v0 = 0; v0 < a1.count; v0++)");
+                StringAssert.Contains(sequential, "function switchLoop(a0, a1, a2, a3)");
+                StringAssert.Contains(sequential, "var v0 = \"\";");
+                StringAssert.Contains(sequential, "function collapseNames(a0, __params1*)");
+                var collapseBody = SliceBetween(
+                    sequential, "function collapseNames", "function compoundDoWhile");
+                StringAssert.Contains(collapseBody, "var v0 = a0;");
+                StringAssert.Contains(collapseBody, "var v1 = __params1.count;");
+                Assert.IsFalse(sequential.Contains("function guard(p3, p4)", StringComparison.Ordinal));
+
+                Config.UseLegacyRegisterVariableNames = true;
+                var legacy = new Decompiler(path).Decompile();
+                StringAssert.Contains(legacy, "function guard(p3, p4)");
+                StringAssert.Contains(legacy, "for (var v5 = 0; v5 < p4.count; v5++)");
+            }
+            finally
+            {
+                Config.UseLegacyRegisterVariableNames = originalStyle;
             }
         }
 

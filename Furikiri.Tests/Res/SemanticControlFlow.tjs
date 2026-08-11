@@ -51,6 +51,13 @@ class SemanticControlFlow
         return fn(arg);
     }
 
+    function collapseNames(first, rest*)
+    {
+        var firstLocal = first;
+        var count = rest.count;
+        return firstLocal + count;
+    }
+
     function cleanup(obj, hook)
     {
         if (hook !== void && isvalid obj)
@@ -236,6 +243,30 @@ class SemanticControlFlow
         return total;
     }
 
+    function assignmentShortCircuitGuard(items)
+    {
+        var accepted = 0;
+        for (var i = items.count - 1; i >= 0; i--)
+        {
+            var target = items[i], name;
+            if (target && (name = target.name) != "")
+            {
+                consume(target);
+                accepted++;
+            }
+        }
+        return accepted;
+    }
+
+    function assignedReturnGuard(target, table)
+    {
+        var states;
+        if (target == "" || table[target] === void ||
+            (states = table[target].states) === void)
+            return;
+        consume(states);
+    }
+
     function conditionalLatchLoop(items)
     {
         var i = 0;
@@ -252,6 +283,45 @@ class SemanticControlFlow
             else i++;
         }
         return count;
+    }
+
+    function compoundDoWhile(items, limit)
+    {
+        var i = 0;
+        do
+        {
+            i++;
+        }
+        while (i < limit && items[i] == "");
+        return i;
+    }
+
+    function emptySwitchCase(items)
+    {
+        for (var i = 0; i < items.count; i++)
+        {
+            var value = items[i];
+            switch (value)
+            {
+            case "\\":
+                break;
+            case "k":
+                accept(value);
+            default:
+                continue;
+            }
+            after(value);
+        }
+    }
+
+    function guardedDelete(table, key)
+    {
+        if (typeof key == "String")
+        {
+            if (table[key] !== void)
+                delete table[key];
+            consume(key);
+        }
     }
 
     function loopShortCircuitBody(items, value, all)
