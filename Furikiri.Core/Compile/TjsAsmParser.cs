@@ -22,7 +22,7 @@ namespace Furikiri.Compile
         private static readonly TokenListParser<TjsAsmToken, ITjsVariant> IntVariant =
             from typeDesc in Token.EqualTo(TjsAsmToken.TypeDescription).Apply(TjsAsmTokenizer.TypeDescriptionToken)
             where typeDesc == TjsVarType.Int.ToTjsTypeName()
-            from val in Token.EqualTo(TjsAsmToken.IntValue).Apply(Numerics.IntegerInt32)
+            from val in Token.EqualTo(TjsAsmToken.IntValue).Apply(Numerics.IntegerInt64)
             select (ITjsVariant) new TjsInt(val);
 
         private static readonly TokenListParser<TjsAsmToken, ITjsVariant> OctetVariant =

@@ -167,8 +167,12 @@ namespace Furikiri.Echo
             tjs.WriteLicense();
 
             var topLevelMethod = Script.Methods[Script.TopLevel];
-            // Write classes first so top-level class alias statements can be skipped safely.
-            foreach (var classObj in classObjects)
+            // 嵌套类由所属类递归写出。若在这里也按对象表平铺，`Outer.Inner` 会被错误
+            // 变成全局 `Inner`，虽然文本仍能编译，运行时的成员查找却已经改变。
+            var rootClasses = classObjects
+                .Where(classObj => classObj.Parent?.ContextType != TjsContextType.Class)
+                .ToList();
+            foreach (var classObj in rootClasses)
             {
                 tjs.WriteLine();
                 tjs.WriteClass(classObj);
@@ -224,7 +228,8 @@ namespace Furikiri.Echo
 
         /// <summary>
         /// 多层结构语句各自追加分隔行时，方法尾部可能累计出多个空行。
-        /// 统一压缩为最多一个空白行，同时清除空白行上的缩进字符。
+        /// 统一压缩为最多一个空白行，并删除紧邻右大括号之前的
+        /// 结构分隔行，避免简短 if 使方法尾部显得松散。
         /// </summary>
         private static string NormalizeBlankLines(string source)
         {
@@ -238,21 +243,35 @@ namespace Furikiri.Echo
                 .Replace('\r', '\n')
                 .Split('\n');
             var output = new List<string>(lines.Length);
-            var previousWasBlank = false;
-            foreach (var line in lines)
+            for (var index = 0; index < lines.Length; index++)
             {
+                var line = lines[index];
                 if (string.IsNullOrWhiteSpace(line))
                 {
-                    if (!previousWasBlank)
+                    var nextIndex = index + 1;
+                    while (nextIndex < lines.Length && string.IsNullOrWhiteSpace(lines[nextIndex]))
+                    {
+                        nextIndex++;
+                    }
+
+                    // Writer 会在 if/for/while 等结构后追加分隔行。
+                    // 若后面紧接外层右大括号，该空行没有分组作用。
+                    if (nextIndex < lines.Length && lines[nextIndex].TrimStart().StartsWith("}", StringComparison.Ordinal))
+                    {
+                        index = nextIndex - 1;
+                        continue;
+                    }
+
+                    if (output.Count == 0 || output[^1].Length != 0)
                     {
                         output.Add(string.Empty);
                     }
-                    previousWasBlank = true;
+
+                    index = nextIndex - 1;
                     continue;
                 }
 
                 output.Add(line);
-                previousWasBlank = false;
             }
 
             return string.Join(newLine, output);
@@ -267,6 +286,7 @@ namespace Furikiri.Echo
                 m = obj.ResolveMethod();
             }
             m.Compact();
+            context.Method = m;
             context.BuildCFG(m.Instructions);
             if (IsDebugDumpEnabled())
             {
@@ -298,6 +318,15 @@ namespace Furikiri.Echo
             var pass5 = new StatementCollectPass();
             entry = pass5.Process(context, entry);
             DumpDebugState(obj, context, "After StatementCollectPass");
+
+            // Pass 6: Reconcile explicit terminal returns with the original CFG.
+            var pass6 = new TerminalReturnReconciliationPass();
+            entry = pass6.Process(context, entry);
+
+            // Pass 7: Normalize only control-flow facts that are provable from the AST.
+            var pass7 = new StructuredAstNormalizationPass();
+            entry = pass7.Process(context, entry);
+            DumpDebugState(obj, context, "After StructuredAstNormalizationPass");
 
             m.Vars = context.Vars;
             
@@ -362,5 +391,6 @@ namespace Furikiri.Echo
             var path = GetDebugDumpPath(obj);
             File.AppendAllText(path, context.DumpState(stage));
         }
+
     }
 }

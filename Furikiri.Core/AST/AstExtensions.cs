@@ -12,7 +12,7 @@ namespace Furikiri.AST
     {
         public static bool IsCondition(this List<IAstNode> statements)
         {
-            return statements.Count == 1 && statements[0] is ConditionExpression;
+            return statements?.Count == 1 && statements[0] is ConditionExpression;
         }
 
         public static ConditionExpression GetCondition(this List<IAstNode> statements)
@@ -23,7 +23,7 @@ namespace Furikiri.AST
             //    return condition;
             //}
 
-            if (statements.LastOrDefault() is ConditionExpression condition)
+            if (statements?.LastOrDefault() is ConditionExpression condition)
             {
                 return condition;
             }
@@ -77,20 +77,22 @@ namespace Furikiri.AST
                         return new BinaryExpression(binary.Left, binary.Right, BinaryOp.LessThan);
                     case BinaryOp.LessOrEqual:
                         return new BinaryExpression(binary.Left, binary.Right, BinaryOp.GreaterThan);
-                    // De Morgan 定律: !(A || B) => !A && !B, !(A && B) => !A || !B
+                    // De Morgan 定律: !(A || B) => !A && !B, !(A && B) => !A || !B。
+                    // 路径谓词会在多个分支间共享同一表达式节点，因此也必须返回
+                    // 新树；原地修改会让先前缓存的谓词方向随之后的取反一起改变。
                     case BinaryOp.LogicOr:
-                        binary.Op = BinaryOp.LogicAnd;
-                        binary.Left = binary.Left.Invert();
-                        binary.Right = binary.Right.Invert();
-                        break;
+                        return new BinaryExpression(
+                            binary.Left.Invert(), binary.Right.Invert(), BinaryOp.LogicAnd);
                     case BinaryOp.LogicAnd:
-                        binary.Op = BinaryOp.LogicOr;
-                        binary.Left = binary.Left.Invert();
-                        binary.Right = binary.Right.Invert();
-                        break;
+                        return new BinaryExpression(
+                            binary.Left.Invert(), binary.Right.Invert(), BinaryOp.LogicOr);
+                    default:
+                        // 位运算、算术等二元式没有可直接翻转的对应运算符。
+                        // TF/NF 仍必须保留逻辑取反，不能原样返回表达式；例如
+                        // `!(shift & ssShift)` 若丢掉 ! 会把按键分支方向完全颠倒。
+                        return new UnaryExpression(binary, UnaryOp.Not);
                 }
 
-                return binary;
             }
 
             return new UnaryExpression(exp, UnaryOp.Not);
@@ -144,7 +146,20 @@ namespace Furikiri.AST
             {
                 var binLevel = bin.Op.GetPrecedence();
                 var parentLevel = bParent.Op.GetPrecedence();
-                if (parentLevel < binLevel || parentLevel == binLevel && bParent.Op != bin.Op && bParent.Right == bin)
+                var isRightOperand = ReferenceEquals(bParent.Right, bin);
+                // 二元运算通常按左结合解析。同优先级的右子树即使运算符相同也
+                // 不能一概展开：TJS2 的 + 会随运行时类型执行数值相加或字符串
+                // 拼接，`prefix + (line + 1)` 与 `prefix + line + 1` 语义不同。
+                // 自赋值 AST 仍保存为 `left + right`，但写出时会变为 `left += right`，
+                // 此时整个 right 已由赋值语法自然成组，不应再输出多余括号。
+                // 其余情况仅对明确可安全重组的短路/位运算和普通赋值省略括号。
+                var canFlattenRight = bParent.IsSelfAssignment ||
+                    bParent.Op == bin.Op &&
+                    bParent.Op is BinaryOp.LogicAnd or BinaryOp.LogicOr or
+                        BinaryOp.BitAnd or BinaryOp.BitOr or BinaryOp.BitXor or
+                        BinaryOp.Assign;
+                if (parentLevel < binLevel ||
+                    parentLevel == binLevel && isRightOperand && !canFlattenRight)
                 {
                     return true;
                 }
@@ -152,7 +167,15 @@ namespace Furikiri.AST
 
             else if (bin.Parent is UnaryExpression uParent)
             {
-                if (uParent.Op.GetPrecedence() < bin.Op.GetPrecedence())
+                // 一元前缀运算符的目标若是完整二元式，必须显式成组。
+                // 尤其 `!(x instanceof "Function")` 不能写成
+                // `!x instanceof "Function"`，后者会先对 x 取反。
+                // int()/string()/后置 eval 等自身已有括号，不在此重复添加。
+                if (uParent.Op is UnaryOp.Not or UnaryOp.BitNot or
+                    UnaryOp.InvertSign or UnaryOp.ToNumber or UnaryOp.IsFalse or
+                    UnaryOp.TypeOf or UnaryOp.Invalidate or UnaryOp.IsValid or
+                    UnaryOp.PropertyRef or UnaryOp.ToCharacterCode or
+                    UnaryOp.FromCharacterCode)
                 {
                     return true;
                 }

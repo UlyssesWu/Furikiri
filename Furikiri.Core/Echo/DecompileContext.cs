@@ -5,6 +5,7 @@ using System.Text;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
+using Furikiri.Echo.Logical;
 using Furikiri.Emit;
 
 namespace Furikiri.Echo
@@ -43,6 +44,27 @@ namespace Furikiri.Echo
         internal List<Loop> LoopSet { get; set; } = new List<Loop>();
 
         public CodeObject Object { get; set; }
+        /// <summary>
+        /// 当前代码对象解析后的完整指令流。CFG 会忽略不可达的编译器收尾跳转，
+        /// 少数结构溯源仍需只读检查这些指令，因此单独保留而不塞回基本块。
+        /// </summary>
+        internal Method Method { get; set; }
+        /// <summary>
+        /// 控制流改写前冻结的单 case switch 来源证据。后续阶段会把条件块替换为
+        /// IfStatement，不能再从已变异 AST 中可靠判断指令空洞属于哪一层分派。
+        /// </summary>
+        internal HashSet<Block> SingleCaseSwitchRoots { get; } =
+            new HashSet<Block>();
+        /// <summary>
+        /// 控制流改写前具有缓存选择值身份的相等条件块。即使节点后来被替换为
+        /// IfStatement，这些块仍不能按无语义跳板折叠，因为可能承载 case 标签。
+        /// </summary>
+        internal HashSet<Block> CachedEqualityConditionBlocks { get; } =
+            new HashSet<Block>();
+        internal Dictionary<Block, ConditionExpression>
+            CachedEqualityConditions { get; } =
+                new Dictionary<Block, ConditionExpression>();
+        internal bool HasCapturedSingleCaseSwitchEvidence { get; set; }
         public Dictionary<short, Variable> Vars { get; set; } = new Dictionary<short, Variable>();
 
         internal Dictionary<string, ITjsVariant> RegisteredMembers { get; set; } =
@@ -709,7 +731,10 @@ namespace Furikiri.Echo
                     var blocks = string.Join(",", loop.Blocks.OrderBy(b => b.Start).Select(b => b.Start));
                     var children = string.Join(",", loop.Children.Select(l => l.Header?.Start ?? -1));
                     var parent = loop.Parent?.Header?.Start.ToString() ?? "-";
-                    sb.AppendLine($"  loop header={loop.Header?.Start} parent={parent} children=[{children}] blocks=[{blocks}]");
+                    var breakTarget = loop.Break?.Start ??
+                                      (loop.LoopLogic as DoWhileLogic)?.Break?.Start;
+                    var breakText = breakTarget?.ToString() ?? "-";
+                    sb.AppendLine($"  loop header={loop.Header?.Start} break={breakText} parent={parent} children=[{children}] blocks=[{blocks}]");
                 }
             }
 
@@ -724,11 +749,13 @@ namespace Furikiri.Echo
                 case ReturnExpression returnExpression:
                     return $"Expr(ReturnExpression): return {returnExpression.Return}";
                 case ConditionExpression condition:
-                    return $"Expr(ConditionExpression): {condition.Condition}; " +
+                    return $"Expr(ConditionExpression): {condition.Condition}" +
+                           FormatEvaluationIdentity(condition.Condition) + "; " +
                            $"true={condition.TrueBranch}, false={condition.FalseBranch}, " +
                            $"jump={(condition.JumpIf ? "JF" : "JNF")}";
                 case IfStatement ifStatement:
                     return $"Stmt(IfStatement): condition={ifStatement.Condition}; " +
+                           $"equality-dispatch={ifStatement.IsEqualityDispatch}; " +
                            $"then={FormatStatementShape(ifStatement.Then)}, " +
                            $"else={FormatStatementShape(ifStatement.Else)}";
                 case ExpressionStatement es:
@@ -740,6 +767,29 @@ namespace Furikiri.Echo
                 default:
                     return node?.GetType().Name ?? "null";
             }
+        }
+
+        /// <summary>
+        /// 调试转储中附带选择表达式的 VM 定义身份。相同槽位会被复用，只看
+        /// 表达式文本无法判断一串相等比较究竟共享一次求值还是反复读取。
+        /// </summary>
+        private static string FormatEvaluationIdentity(Expression expression)
+        {
+            if (expression is ConditionExpression condition)
+            {
+                expression = condition.Condition;
+            }
+
+            if (expression is BinaryExpression binary)
+            {
+                expression = binary.Left;
+            }
+
+            return expression?.CachedTemporarySlot.HasValue == true ||
+                   expression?.CachedEvaluationId.HasValue == true
+                ? $" [cache-slot={expression.CachedTemporarySlot?.ToString() ?? "-"}, " +
+                  $"evaluation={expression.CachedEvaluationId?.ToString() ?? "-"}]"
+                : string.Empty;
         }
 
         private static string FormatStatementShape(Statement statement, int depth = 0)

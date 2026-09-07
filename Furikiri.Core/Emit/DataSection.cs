@@ -171,6 +171,11 @@ namespace Furikiri.Emit
             bw.Write(Longs.Count);
             Longs.ForEach(bw.Write);
 
+            // DATA 节的读取顺序固定为 long、double、string。漏写 double
+            // 计数会让后续字符串数量被当成实数数量，所有段边界随之错位。
+            bw.Write(Doubles.Count);
+            Doubles.ForEach(bw.Write);
+
             //string
             bw.Write(Strings.Count);
             Strings.ForEach(bw.Write2ByteString);

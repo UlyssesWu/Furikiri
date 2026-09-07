@@ -8,6 +8,10 @@ namespace Furikiri.Echo
     {
         Unknown = -1,
         Assign,
+        /// <summary>
+        /// TJS2 的交换运算符。编译后表现为“临时保存左值，再交叉复制”的三条 CP。
+        /// </summary>
+        Swap,
         Add,
         Sub,
         Mul,
@@ -54,6 +58,8 @@ namespace Furikiri.Echo
         ToString,
         ToNumber,
         ToByteArray,
+        ToCharacterCode,
+        FromCharacterCode,
         IsTrue,
         IsFalse,
         TypeOf,

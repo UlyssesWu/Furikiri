@@ -2,6 +2,11 @@ class SemanticControlFlow
 {
     var owner;
     var number;
+    var chainOuter;
+    var chainInner;
+    var cached;
+    var pendingState;
+    var memberAssignmentState;
 
     function guard(layer, arg)
     {
@@ -51,6 +56,80 @@ class SemanticControlFlow
         return fn(arg);
     }
 
+    // switch 控制表达式只能求值一次，即使最终以 else-if 形式输出。
+    function cachedSwitchInvocation(value)
+    {
+        switch (value[0].toLowerCase())
+        {
+        case "first":
+            first();
+            break;
+        case "second":
+            second();
+            break;
+        case "third":
+            third();
+            break;
+        default:
+            fallback();
+            break;
+        }
+    }
+
+    // 直接方法调用形式的 switch 也只允许求值一次；部分编译器不会为它保留临时槽。
+    function directSwitchInvocation(value)
+    {
+        switch (value.toLowerCase())
+        {
+        case "first":
+            first();
+            break;
+        case "second":
+            second();
+            break;
+        case "third":
+            third();
+            break;
+        }
+    }
+
+    function multiplicativePrecedence(left, right)
+    {
+        return (left - right) \ 2 + (left + right) % 3;
+    }
+
+    function repeatedMemberReceiver()
+    {
+        with (getDimensions())
+        {
+            consume(w, h, x);
+        }
+    }
+
+    function chainedSideEffectAssignment()
+    {
+        chainOuter = chainInner = produce();
+    }
+
+    function chainedLocalAssignment()
+    {
+        var local = this.cached = produce();
+        consume(local);
+    }
+
+    function sharedTerminalReturn(items)
+    {
+        var start = items.find("---");
+        if (start >= 0)
+        {
+            var copy = [];
+            for (var i = start + 1; i < items.count; i++)
+                copy.add(items[i]);
+            items = copy;
+        }
+        return finishShared(items);
+    }
+
     function collapseNames(first, rest*)
     {
         var firstLocal = first;
@@ -58,8 +137,94 @@ class SemanticControlFlow
         return firstLocal + count;
     }
 
+    function duplicateInferredNames(left, right)
+    {
+        var leftName = left.name;
+        var rightName = right.name;
+        consume(leftName, rightName);
+    }
+
+    // 外层 gate 内的第一个可选副作不能吞掉后续独立调用条件。
+    function sequentialNestedCallGuards(textEnabled, withBack, current)
+    {
+        if (textEnabled)
+        {
+            if (withBack)
+                current.comp.processReturn();
+            if (current.processReturn())
+            {
+                var ret = showPageBreakAndClear();
+                if (ret == -5)
+                    ret = -4;
+                else if (ret == -3)
+                    ret = -2;
+                return ret;
+            }
+        }
+        return fallbackSpeed();
+    }
+
+    // 多个并列调用守卫共享继续点时，每个调用只能在自己的分支中求值一次。
+    function sequentialInvocationReturnGuards(mode, leading, following)
+    {
+        var changed = false;
+        if (mode >= 0)
+        {
+            changed = true;
+            if (mode == 0)
+            {
+                if (commitLine()) return true;
+            }
+            else if (leading && following)
+            {
+                if (commitLine()) return true;
+            }
+            else if (leading)
+            {
+                if (commitLine()) return true;
+            }
+            else
+            {
+                changed = false;
+            }
+        }
+        return changed;
+    }
+
+    // 已有对象分支结束后仍有多级早退 fallback，中间的已配置分支不能丢失。
+    function configuredFallbackChain(name, options)
+    {
+        var layer = getEnvLayer(name);
+        if (layer !== void)
+        {
+            if (layer.deleteFlag)
+                layer = getNewLayer(name, options);
+            if (layer !== void)
+                return layer;
+        }
+        if (envinfo.layers !== void && envinfo.layers[name] !== void)
+            return getNewLayer(name, options);
+        if (name.substring(0, 2) == "ev" || isExistEvent(name))
+            return event;
+        if (name.substring(0, 3) == "lay")
+            return getNewLayer(name, options);
+        if (envCommands[name] !== void)
+            return this;
+        return void;
+    }
+
     function defaultArgument(value = 1)
     {
+        return value;
+    }
+
+    // 参数槽由函数签名声明；重新写入参数或把 void 守卫恢复成默认参数后，
+    // 函数体都不能再生成同名 var。
+    function parameterDeclarationOwnership(source, value)
+    {
+        value = source.value if value === void;
+        if (source.override !== void)
+            value = source.override;
         return value;
     }
 
@@ -282,6 +447,37 @@ class SemanticControlFlow
         consume(states);
     }
 
+    // 正常返回由外层条件共享时，内部失败判定仍应恢复为短路早退。
+    function conditionalStringEvaluation(name)
+    {
+        var pos;
+        if ((pos = name.indexOf("$")) >= 0)
+        {
+            var expression = name.substr(pos + 1);
+            name = name.substr(0, pos);
+            if (expression != "" && !Scripts.eval(expression))
+                return;
+        }
+        setVisible(name, true);
+        return name;
+    }
+
+    // 外层条件可直接到达公共尾部时，内层载荷仍必须留在外层正文内。
+    function prefixedNestedPayload(sender, name, level)
+    {
+        var changed = checkVPosUpdate(sender, name);
+        if (changed)
+        {
+            currentLevel = level;
+            if (currentCh !== void)
+            {
+                currentCh.level = level;
+                syncAll();
+            }
+        }
+        copyClipboard(name);
+    }
+
     function conditionalLatchLoop(items)
     {
         var i = 0;
@@ -329,6 +525,43 @@ class SemanticControlFlow
         }
     }
 
+    // switch 的 break 只结束分派，仍须进入本轮后续处理；其余 case 则 continue。
+    function escapedSwitchSharedDispatch(text)
+    {
+        var i = 0;
+        while (i < text.length)
+        {
+            var ch = text.charAt(i++);
+            if (ch == "\\")
+            {
+                if (i < text.length)
+                    ch = text.charAt(i++);
+                switch (ch)
+                {
+                case "\\":
+                    break;
+                case "k":
+                    escaped();
+                default:
+                    continue;
+                }
+            }
+
+            if (ch == "\n")
+                newline();
+            else if (ch == "%")
+            {
+                if (i < text.length)
+                {
+                    ch = text.charAt(i++);
+                    percent(ch);
+                }
+            }
+            else
+                normal(ch);
+        }
+    }
+
     function guardedDelete(table, key)
     {
         if (typeof key == "String")
@@ -361,6 +594,22 @@ class SemanticControlFlow
                 }
             }
             i++;
+        }
+    }
+
+    function loopTryCleanup(items)
+    {
+        for (var i = 0; i < items.count; i++)
+        {
+            beforeTry(i);
+            try
+            {
+                consume(items[i]);
+            }
+            catch (e)
+            {
+            }
+            afterTry(i);
         }
     }
 
@@ -499,5 +748,1736 @@ class SemanticControlFlow
             (ext == "" && probe(storage) != ""))
             return 1;
         return 0;
+    }
+
+    function guardedSharedContinuation(mode, empty, item)
+    {
+        if (mode > 0)
+        {
+            if (item == 3)
+            {
+                closeName(item);
+                return;
+            }
+            else
+            {
+                if (mode == 1)
+                {
+                    if (item == 1)
+                    {
+                        mode = 2;
+                        return 0;
+                    }
+                    else
+                        updateName(item);
+                }
+                else
+                    updateDisplay(item);
+            }
+            return;
+        }
+        else if (empty)
+        {
+            lineCheck(item);
+            if (item == 2)
+                return;
+            emptyCheck(item);
+        }
+
+        var begin = -1;
+        if (item)
+            begin = probe(item);
+        consume(begin);
+    }
+
+    function sharedExplicitReturn(label, expected)
+    {
+        if (isAuto)
+        {
+            currentLabel = label;
+            currentLine = line;
+            if (targetLine !== void)
+            {
+                if (label !== expected)
+                    reportMismatch();
+                return 1;
+            }
+        }
+
+        return fallbackLabel();
+    }
+
+    // 循环内两路嵌套更新之后的状态赋值是本轮公共尾部，不能移进某一条 continue 路径。
+    function sharedLoopTailAfterNestedBranches(items)
+    {
+        var first = true;
+        var depth = 0;
+        for (var i = 0; i < items.count; i++)
+        {
+            var begin = beginIndex(items[i]);
+            var end = endIndex(items[i]);
+            if (begin >= 0)
+            {
+                if (first)
+                    openIndent();
+                depth++;
+            }
+            else if (end >= 0)
+            {
+                if (depth == 1)
+                    closeIndent();
+                depth--;
+            }
+            first = false;
+        }
+        return depth;
+    }
+
+    function nestedSharedUpdateGuard(name)
+    {
+        if (name == "")
+            return;
+        if (name != currentName || isClear() || isShown())
+        {
+            currentName = name;
+            updateCurrent();
+        }
+        finishUpdate();
+    }
+
+    function mergedObjectGate(value)
+    {
+        var name = (string)value;
+        if (value === global || (value !== owner &&
+                                 value !== cache &&
+                                 value !== handlers &&
+                                 visited[name] === void &&
+                                 getAddr(value) == getBase(value)))
+            accept(value);
+    }
+
+    function waitWithHandlers(layer, canskip, wait)
+    {
+        var name = "anim:" + layer.name;
+        if ((canskip === void || +canskip) && clickSkipEnabled)
+        {
+            consume(%[
+                "click" => function (target) { target.stop(); } incontextof this,
+                "click_arg" => layer,
+                name => function (arg) { return arg; } incontextof this,
+                name + "_arg" => wait
+            ]);
+        }
+        else
+        {
+            consume(%[
+                name => function (arg) { return arg; } incontextof this,
+                name + "_arg" => wait
+            ]);
+        }
+        return -2;
+    }
+
+    function returnGuardContinuation(stopFlag, delayValue, now, startValue, timeValue)
+    {
+        if (!stopFlag && delayValue !== void)
+        {
+            now -= delayValue;
+            if (now < 0)
+                return false;
+        }
+        now += startValue;
+        return consume(now, stopFlag || (timeValue !== void && now > timeValue));
+    }
+
+    // 分支中的连续早退不能吞掉另一分支和函数末尾的共享返回。
+    function nestedPayloadReturnGuard(mode, wait)
+    {
+        var value;
+        if (mode == "until")
+        {
+            value = calcWait(wait);
+            if (value < 0)
+            {
+                resetWait();
+                return 0;
+            }
+            saveWait(value);
+            if (value < 6)
+                return 0;
+        }
+        else
+            value = +wait;
+        return finishWait(value);
+    }
+
+    function equalityDefaultTrailingIf(kind, columns)
+    {
+        if (kind == "copy")
+            first();
+        else if (kind == "base")
+            second();
+        else
+        {
+            var stateName = columns[0], isrect = stateName == "rect";
+            for (var i = 1; i < columns.count; i++)
+            {
+                var state = columns[i];
+                if (state == "") continue;
+                isrect |= state == "rect";
+            }
+            if (isrect) columns[0] = "";
+            consume(stateName, columns);
+        }
+    }
+
+    // 多路相等分派中的某一路可以提前返回，其余路径仍必须落入公共播放尾部。
+    function equalityDispatchSharedTail(kind, enabled, hasPrefix, missing)
+    {
+        var found = true;
+        if (kind == "disc")
+        {
+            if (!hasPrefix)
+            {
+                if (missing)
+                    return;
+                prepareDisc();
+            }
+        }
+        else if (kind == "wave")
+        {
+            if (missing)
+                found = false;
+        }
+        else if (kind == "midi")
+        {
+            prepareMidi();
+        }
+
+        if (enabled)
+        {
+            if (!found)
+            {
+                reportMissing();
+                return;
+            }
+            playNow();
+        }
+        currentKind = kind;
+    }
+
+    function colorKeyDispatch(key)
+    {
+        if (key === void)
+            key = COLOR_NONE;
+        else if (typeof key == "String")
+        {
+            if (key == "adapt")
+                key = COLOR_ADAPT;
+            else if (key.length >= 7)
+                key = +key;
+            else
+                key = +key + 50331648;
+        }
+        return key;
+    }
+
+    function nestedGuardFallthrough(enabled)
+    {
+        var count = 0;
+        if (enabled)
+        {
+            if (count > 0)
+                return true;
+            count++;
+        }
+        consume(count);
+        return false;
+    }
+
+    function conditionalBitFlags(style, italic, underline, strikeout)
+    {
+        style |= FONT_ITALIC if (italic);
+        style |= FONT_UNDERLINE if (underline);
+        style |= FONT_STRIKEOUT if (strikeout);
+        return style;
+    }
+
+    function menuTracking(vis, bykey, force)
+    {
+        if (vis && !bykey && ignoreMenu) return;
+        var old = menuShowing;
+        menuShowing = !vis ? 0 : bykey ? -1 : 1;
+        if (force || !old != !vis)
+        {
+            if (vis)
+                setVisible(1);
+            else
+            {
+                if (fullScreen) setVisible(0);
+                updateMenu();
+            }
+        }
+    }
+
+    function conditionalPhiBranch(enabled, focus)
+    {
+        var base = focus ? 4 : 3;
+        if (enabled)
+        {
+            first(base + 0);
+            second(base + 1);
+            if (focus) third(base + 2);
+        }
+        afterChoice();
+    }
+
+    function nestedCleanup(info)
+    {
+        var result = void;
+        if (info != void)
+        {
+            if (info.text !== void)
+                result = info.text;
+            if (info.enabled)
+            {
+                if (info.count >= 0)
+                    info.count++;
+                info.enabled = void;
+            }
+        }
+        return result;
+    }
+
+    function arrayLiteralForward(info)
+    {
+        consume([info.first, info.second, info.third]);
+    }
+
+    function memberLookupCleanup(info, dress)
+    {
+        if (dress !== void &&
+            (info.dresses == void || info.dresses[dress] == void))
+            dress = void;
+        return dress;
+    }
+
+    function conditionalDictionaryReturn(info, reverse)
+    {
+        if (info)
+            return %["x" => baseX + (reverse ? -info.x : info.x),
+                     "y" => baseY + info.y, "rev" => reverse];
+        else
+            return %["x" => baseX, "y" => baseY, "rev" => reverse];
+    }
+
+    // 三元条件中的赋值不能另留为空 if，必须回到各自的短路条件中。
+    function conditionalAssignmentReturn(text)
+    {
+        var index, normal = SplitNormal, simple = SplitSimple;
+        return (normal != "" && (index = text.indexOf(normal)) > 0) ? useNormal(index)
+            : (simple != "" && (index = text.indexOf(simple)) > 0) ? useSimple(index) : void;
+    }
+
+    // 前一个三元式汇合后复用临时寄存器构造嵌套字典，不应产生字典对象 Phi。
+    function nestedDictionaryAfterTernary(show, time, done)
+    {
+        opacity = show ? 0 : 255;
+        beginAction(%[
+            "opacity" => %[
+                "handler" => MoveAction,
+                "start" => _opacity,
+                "value" => show ? 255 : 0,
+                "time" => time
+            ]
+        ], done);
+    }
+
+    function stringConcatNestedAdd(line)
+    {
+        return "line: " + (line + 1) + "\n";
+    }
+
+    function distinctMemberFallback(info, defaults)
+    {
+        var value = info.value !== void ? +info.value : +defaults.value;
+        consume(value);
+    }
+
+    function nestedConditionalAssignment(owner)
+    {
+        if (owner !== void)
+        {
+            var info = owner.info;
+            if (owner.levels !== void)
+            {
+                offsetValue = info !== void ? info.offset : 0;
+                if (info !== void)
+                    zoomValue = info.zoom !== void ? info.zoom : 100;
+                else
+                    zoomValue = 100;
+            }
+            else
+            {
+                offsetValue = info !== void ? info.offset : 0;
+                if (info !== void)
+                    zoomValue = info.zoom !== void ? info.zoom : 100;
+                else
+                    zoomValue = 100;
+            }
+            consume(zoomValue);
+        }
+    }
+
+    // 外层互斥分支各自带一个可跳过的内层判断。第二个内层判断仍必须受
+    // vertical 保护，不能被错误拉平成缺少外层门控的 else-if。
+    function mutuallyExclusiveNestedBranches(vertical, resizeHeight, resizeWidth)
+    {
+        if (!vertical)
+        {
+            if (resizeHeight)
+                resizeHorizontal();
+        }
+        else
+        {
+            if (resizeWidth)
+                resizeVertical();
+        }
+        finishResize();
+    }
+
+    // 大型嵌套分派结束后的关闭键判断是独立公共尾部，不能被并入分派的 else-if。
+    function nestedDispatchSharedTail(canScroll, vertical, key, everypage)
+    {
+        if (canScroll)
+        {
+            if (vertical)
+            {
+                if (key == KEY_DOWN)
+                    nextPage();
+                else if (key == KEY_UP)
+                    prevPage();
+                else if (key == KEY_LEFT || key == KEY_PRIOR)
+                {
+                    if (everypage)
+                        nextPage();
+                    else
+                        scrollUp();
+                }
+                else if (key == KEY_RIGHT || key == KEY_NEXT)
+                {
+                    if (everypage)
+                        prevPage();
+                    else
+                        scrollDown();
+                }
+            }
+            else
+            {
+                if (key == KEY_DOWN)
+                {
+                    if (everypage)
+                        nextPage();
+                    else
+                        scrollUp();
+                }
+                else if (key == KEY_UP)
+                {
+                    if (everypage)
+                        prevPage();
+                    else
+                        scrollDown();
+                }
+                else if (key == KEY_LEFT || key == KEY_PRIOR)
+                    prevPage();
+                else if (key == KEY_RIGHT || key == KEY_NEXT)
+                    nextPage();
+            }
+        }
+
+        if (key == KEY_ESCAPE || key == KEY_RETURN || key == KEY_SPACE)
+            closeView();
+    }
+
+    function catchVariableInThrow()
+    {
+        try
+        {
+            failNow();
+        }
+        catch (e)
+        {
+            throw new Exception("failed: " + e.message);
+        }
+    }
+
+    function unusedCatchThenLocal(owner)
+    {
+        try
+        {
+            failNow();
+        }
+        catch (e)
+        {
+            noticeFailure();
+        }
+        var value = owner.value;
+        consume(value);
+    }
+
+    // 父循环包含子循环全部基本块时，子循环出口仍必须恢复为 break。
+    function nestedLoopExit(text)
+    {
+        var outer = 0;
+        while (outer < text.length)
+        {
+            var value = "";
+            while (outer < text.length)
+            {
+                var ch = text.charAt(outer);
+                if (ch == ",") break;
+                value += ch;
+                outer++;
+                continue;
+            }
+            consume(value);
+            outer++;
+        }
+    }
+
+    // 循环有多个直接退出边时，后一个 break 不能退化为空 else。
+    function validationMultipleBreaks(limit, textLength)
+    {
+        var pos = 0;
+        while (true)
+        {
+            var y = nextY();
+            if (y > limit) break;
+            if (pos >= textLength) break;
+            drawAt(y, pos);
+            pos++;
+        }
+        finishDraw();
+    }
+
+    // continue 条件链的另一侧可先执行正文再 break，正文不能被提升到循环外。
+    function validationLoopExitPayload(items)
+    {
+        for (var i = 0; i < items.count; i++)
+        {
+            var item = items[i];
+            if (item === void || item.disabled) continue;
+            if (item.prepare !== void) prepare(item);
+            consume(item);
+            break;
+        }
+        finishSearch();
+    }
+
+    // 相邻相等比较共享循环出口时，应恢复为 break，不能吸入出口后的赋值。
+    function validationLoopBreakChain(text)
+    {
+        var count = 0;
+        var matched = "";
+        var i;
+        for (i = 0; i < text.length; i++)
+        {
+            var ch = text[i];
+            if (ch >= "0" && ch <= "9")
+            {
+                count++;
+                continue;
+            }
+            else if (ch == "." || ch == "e")
+            {
+                matched = ch;
+                break;
+            }
+        }
+        var suffix = "";
+        consume(i, suffix, count, matched);
+    }
+
+    // 条件准备中的前置增量必须内联为 ++i，不能变成 i++ 或 do-while。
+    function validationPrefixConditionLoop(items, pos)
+    {
+        var count = items.count;
+        while (++pos < count)
+        {
+            if (items[pos] !== void)
+            {
+                consume(items[pos]);
+                break;
+            }
+        }
+        return pos;
+    }
+
+    // try 正常出口与循环出口重合时，EXTRY 跳转代表 try 内的 break。
+    function validationTrySuccessBreak(retry)
+    {
+        while (1)
+        {
+            try
+            {
+                saveNow();
+                break;
+            }
+            catch (e)
+            {
+                if (retry(e)) continue;
+                markFailed();
+                break;
+            }
+        }
+        finishSave();
+    }
+
+    // 共享条件节点先被一条边看到时，不能同时残留在“终点”和“条件块”集合中。
+    function validationSharedConditionDiamond(item)
+    {
+        if (item.a !== void && (item.b !== void || item.c !== void) && item.d !== void)
+        {
+            values = [];
+            if (item.b !== void) values[0] = item.b;
+            else if (item.c !== void) values[0] = item.c;
+            values[1] = item.d;
+        }
+        finishDiamond();
+    }
+
+    // 位标志的 TF/NF 方向必须保留逻辑取反，且共享正文条件链应从外层恢复。
+    function validationKeyDispatch(locked, key, shift, vertical)
+    {
+        var leftKey, rightKey;
+        if (vertical)
+        {
+            leftKey = KEY_RIGHT;
+            rightKey = KEY_LEFT;
+        }
+        else
+        {
+            leftKey = KEY_LEFT;
+            rightKey = KEY_RIGHT;
+        }
+
+        if (!locked && ((key == KEY_UP && !(shift & SHIFT_MASK)) ||
+                        key == leftKey || (key == KEY_TAB && (shift & SHIFT_MASK))))
+            selectPrev();
+        else if (!locked && (key == KEY_DOWN || key == rightKey ||
+                             (key == KEY_TAB && !(shift & SHIFT_MASK))))
+            selectNext();
+        else
+            processKey(key, shift);
+    }
+
+    // 入口赋值后的复合条件必须整体选择 then/else，不能只保留首段判断。
+    function validationPayloadDispatch(locked, link, linkType)
+    {
+        clickLock = false;
+        if (locked || link == -1)
+        {
+            if (hasClick()) processClick();
+            else checkKey();
+        }
+        else
+        {
+            if (link != -1 && linkType == TYPE_EDIT) tabNext();
+            else processLink(link);
+        }
+    }
+
+    function validationTerminalGuard(focusable, count)
+    {
+        if (!focusable || (!count && !hasClick()))
+            return fallbackKey();
+        dispatchKey();
+    }
+
+    function validationCombinedTarget(runLine, targetLine, runCount, targetCount)
+    {
+        if (runLine > targetLine ||
+            (runLine >= targetLine && runCount >= targetCount))
+            stopAtTarget();
+        continueTimer();
+    }
+
+    // 相等守卫后的 default 仍可能是一棵完整返回树，内层条件不能变成裸比较。
+    function validationNestedReturnDispatch(layer, backlay)
+    {
+        var base = backlay ? back : fore;
+        if (layer === void || layer == "base") return base.base;
+        if (layer[0] == "m")
+        {
+            if (layer == "message") return base.messages[currentNum];
+            return base.messages[+layer.substr(7)];
+        }
+        return base.layers[+layer];
+    }
+
+    // 外围守卫正文末端的叶子 if 必须先物化，递增不能被提升成无条件语句。
+    function validationGuardedLeafIncrement(info)
+    {
+        if (info != void && info.inc)
+        {
+            if (info.value >= 0) info.value++;
+            info.inc = void;
+        }
+        return info;
+    }
+
+    // case 正文中的外层守卫与内层 if/else 共用汇合点时，两层都必须保留。
+    function validationCaseNestedPayload(mode, face)
+    {
+        var result = [];
+        switch (mode)
+        {
+        case 3:
+            if (face != "")
+            {
+                if (face.indexOf(":"))
+                {
+                    var parts = face.split(":");
+                    for (var i = 0; i < parts.count; i++)
+                        result.add(parts[i]);
+                }
+                else
+                    result.add(face);
+            }
+            return result;
+        case 4:
+            return result;
+        }
+    }
+
+    // 外层 case 正文中的内层相等分派必须先取得区域所有权；否则 default
+    // 会被恢复成反向 if，并继续执行另一 case 的正文。
+    function validationNestedSwitchInCase(mode, kind)
+    {
+        switch (mode)
+        {
+        case 3:
+            var result = [];
+            switch (kind)
+            {
+            case "char":
+            case "disp":
+                acceptNamed(result, kind);
+                break;
+            default:
+                var parts = splitNamed(kind);
+                acceptParts(result, parts);
+                break;
+            }
+            return finishNamed(result);
+        case 4:
+            return void;
+        }
+    }
+
+    // 循环尾 switch 的某个 case 可在成功路径贯穿 default，失败路径则只
+    // break 当前分派；循环回边不能被误算成所有 case 都能到达 default。
+    function validationLoopSwitchDefaultFallthrough(items)
+    {
+        for (var i = 0; i < items.count; i++)
+        {
+            var item = items[i];
+            switch (item.kind)
+            {
+            case void:
+                rejectMissing(item);
+                break;
+            case "skip":
+                break;
+            case "copy":
+                var copied = copyItem(item);
+                if (copied === void) break;
+                item = copied;
+                // fall through
+            default:
+                var handler = handlers[item.kind];
+                if (handler !== void) handler(item);
+                break;
+            }
+        }
+    }
+
+    // 循环内两段守卫之间含 split 赋值时，字段条件仍应合并并保护整个载荷区。
+    function validationMultiStageLoop(lines)
+    {
+        var accepted = 0;
+        for (var i = 0; i < lines.count; i++)
+        {
+            var line = lines[i];
+            if (line != "" && line.charAt(0) != "#")
+            {
+                line = line.split("\t");
+                if (line[0] != "" && line[1] != "")
+                {
+                    accepted++;
+                    consume(line[0], line[1]);
+                }
+            }
+        }
+        return accepted;
+    }
+
+    // 前置短路分支会修改后续判断使用的状态；两个 if 必须保持顺序关系。
+    function validationPostStateRecheck(handler, value)
+    {
+        if (pendingState === void && typeof handler == "Object")
+        {
+            pendingState = "";
+            handler();
+        }
+        if (pendingState !== void)
+        {
+            pendingState = value;
+            consume(value);
+            return -2;
+        }
+        return -1;
+    }
+
+    // 循环体首项含赋值和提前返回时，真正的循环条件仍是尾部回边判断。
+    function validationDoWhileHeaderGuard(items, link, direction)
+    {
+        var first = link;
+        do
+        {
+            var target = items[link];
+            if (target === void || !isvalid target || target.visible && target.enabled)
+                return link;
+            if (direction > 0)
+            {
+                link++;
+                if (link >= items.count) link = 0;
+            }
+            else
+            {
+                link--;
+                if (link < 0) link = items.count - 1;
+            }
+        }
+        while (link != first);
+        return link;
+    }
+
+    // 一臂直接进入下一轮、另一臂包含子循环时，整个子循环仍属于条件正文。
+    function validationLoopContinueGuardedInnerLoop(base, names)
+    {
+        var total = 0;
+        for (var i = 0; i < names.count; i++)
+        {
+            var name = names[i];
+            if (name == "") continue;
+            if (typeof base[name] == "String")
+            {
+                var value = base[name];
+                for (var j = 0; j < value.length; j++)
+                {
+                    consume(value.charAt(j));
+                    total++;
+                }
+            }
+        }
+        return total;
+    }
+
+    // 成员后置自增传参时，调用必须接收旧值，且成员只递增一次。
+    function validationPostfixMemberArgument(items, index)
+    {
+        consume(number++);
+        consume(items[index]++);
+        return number + items[index];
+    }
+
+    // 共享决策节点必须整体恢复；父条件结束后还要保留独立的公共尾部。
+    function validationSharedDecisionDagPayload(layer, poseValue, defaultPose)
+    {
+        imageFile = "";
+        if (!drawPose(layer, poseValue) &&
+            (poseValue == defaultPose || !drawPose(layer, defaultPose)))
+            reportError();
+        afterDraw();
+    }
+
+    // 相同常量返回值不应在输出阶段被折叠成反向嵌套，顺序早退更准确地表达 CFG。
+    function validationSequentialConstantReturnGuards(value)
+    {
+        if (value === void) return 0;
+        var nextValue = next(value);
+        if (nextValue === void) return 0;
+        consume(nextValue);
+        return 0;
+    }
+
+    // 多个嵌套守卫共享函数尾返回时，局部区域不得夺走该返回块的所有权。
+    function validationSharedFinalReturn(table, key, shift)
+    {
+        if (table !== void)
+        {
+            var info = table[key], handler;
+            if ((info !== void) &&
+                (handler = info[+shift]) !== void &&
+                !(shift & 1))
+            {
+                handler();
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    // 纯局部初始化不是入口载荷，不能把外层区域和内层可选条件合成同一谓词。
+    function validationLocalPrefixNestedRegion(container, item)
+    {
+        var info;
+        var addflag = false;
+        if (container !== void)
+        {
+            if (item !== void)
+            {
+                var name = item.name;
+                if (info === void) info = container.get(name);
+            }
+            if (info === void)
+            {
+                info = container.get("default");
+                addflag = true;
+            }
+        }
+        if (info === void) return fallbackInfo(item);
+        consume(info, addflag);
+    }
+
+    // 两个条件共享回退载荷时，第一项失败和第二项失败都必须进入同一个 else。
+    function validationTwoPayloadFallback(primary, secondary)
+    {
+        var scale;
+        if (primary !== void && secondary !== void)
+            scale = primary / secondary;
+        else
+            scale = fallbackScale();
+        consume(scale);
+    }
+
+    // catch 中的无值 return 是提前退出，不能与函数末尾的隐式 return 一起省略。
+    function validationCatchVoidReturn(value)
+    {
+        try
+        {
+            value.load();
+        }
+        catch
+        {
+            invalidate value;
+            return void;
+        }
+        consume(value);
+    }
+
+    // EVAL 的结果仍会被后续 incontextof 和返回使用；EEXP 则只执行一次并丢弃结果。
+    function validationEvalResult(text, context)
+    {
+        var evaluated = text! incontextof context;
+        consume(evaluated);
+        return evaluated;
+    }
+
+    function validationEvalDiscard(text)
+    {
+        text!;
+        consume(text);
+    }
+
+    // 字符编码转换必须保留 #/$ 运算符，不能只留下未经转换的操作数。
+    function validationCharacterOperators(text, code)
+    {
+        var characterCode = #text;
+        var character = $code;
+        var nextCharacter = $(code + 1);
+        consume(characterCode, character, nextCharacter);
+        return [characterCode, character];
+    }
+
+    // 交换运算必须保留两个操作数的旧值，不能退化成覆盖式的连续赋值。
+    function validationLocalSwap(left, right)
+    {
+        left <-> right;
+        consume(left, right);
+    }
+
+    // 属性交换会多出一次属性读取，仍应折叠成一个原子的 <-> 表达式。
+    function validationPropertySwap(left, holder, key)
+    {
+        left <-> holder.value;
+        consume(left, holder.value);
+        left <-> holder.child.value;
+        consume(left, holder.child.value);
+        left <-> holder[key];
+        consume(left, holder[key]);
+        holder.reverse <-> left;
+        consume(holder.reverse, left);
+        holder[key] <-> left;
+        consume(holder[key], left);
+    }
+
+    // 两个属性的旧值必须先分别读取，再原子地交叉写回。
+    function validationPropertyPairSwap(holder, other, leftKey, rightKey)
+    {
+        holder.width <-> holder.height;
+        consume(holder.width, holder.height);
+        holder[leftKey] <-> other[rightKey];
+        consume(holder[leftKey], other[rightKey]);
+    }
+
+    // catch 入口会覆盖异常寄存器，不能让它伪造对 try 前交换临时槽的读取。
+    function validationSwapBeforeTry(value)
+    {
+        cached <-> value;
+        try
+        {
+            consume(value);
+        }
+        catch (e)
+        {
+            cached <-> value;
+            throw e;
+        }
+        cached <-> value;
+    }
+
+    // with 的控制对象只求值一次，多个成员读取必须共享同一个缓存值。
+    function validationSharedWithReceiver(link)
+    {
+        var x, y;
+        with (getPoint(link)) x = .x, y = .y;
+        consume(x, y);
+    }
+
+    // 函数值调用的结果进入短路条件时，不应再额外输出一条独立调用语句。
+    function validationCallableShortCircuit(holder)
+    {
+        var callback = holder.callback;
+        var process = callback(1) || callback(2);
+        consume(process);
+    }
+
+    // 短路链中的赋值必须留在首个守卫之后，守卫成员本身不能被重复求值。
+    function validationGuardedShortCircuitAssignment(limit)
+    {
+        var info;
+        var available = typeof System.getDisplayMonitors != "undefined" &&
+            (info = System.getDisplayMonitors()) !== void &&
+            info.count > limit;
+        consume(available, info);
+    }
+
+    // typeof switch 的选择值在 VM 中只计算一次，两标签也应恢复为一等 switch。
+    function validationTypeSwitch(value)
+    {
+        switch (typeof value)
+        {
+        case "Integer":
+            consumeInteger(value);
+            break;
+        case "String":
+            consumeString(value);
+            break;
+        default:
+            consumeOther(value);
+            break;
+        }
+    }
+
+    // 属性读取作为 switch 选择值时也只执行一次，并允许多个标签共用正文。
+    function validationPropertySwitch(value)
+    {
+        switch (value.kind)
+        {
+        case 1:
+        case 2:
+            return consumeNumber(value);
+        case 3:
+            return consumeThird(value);
+        default:
+            return consumeOther(value);
+        }
+    }
+
+    // 任意计算式选择值都应按定义指令身份恢复，不能只处理 typeof。
+    function validationComputedSwitch(value)
+    {
+        switch (value % 3)
+        {
+        case 0:
+            return consumeZero(value);
+        case 1:
+            return consumeOne(value);
+        default:
+            return consumeOther(value);
+        }
+    }
+
+    // 两次独立属性读取即使文本相同，也必须保留原来的重复求值语义。
+    function validationIndependentPropertyReads(value)
+    {
+        if (value.kind == 1)
+            consumeOne(value);
+        else if (value.kind == 2)
+            consumeTwo(value);
+    }
+
+    // case 标签本身可以是表达式，并按书写顺序求值。
+    function validationExpressionCaseSwitch(value, labels)
+    {
+        switch (value)
+        {
+        case labels.first:
+        case labels.alternate:
+            return consumeOne(value);
+        case labels.second:
+            return consumeTwo(value);
+        default:
+            return consumeOther(value);
+        }
+    }
+
+    // CP 建立的局部值快照可以证明两标签 switch 的选择值只读取一次。
+    function validationTwoLabelLocalSwitch(value, force)
+    {
+        var mode = value.kind;
+        if (force) mode = 0;
+        switch (mode)
+        {
+        case -1:
+            return consumeMinusOne(value);
+        case 1:
+            return consumeOne(value);
+        default:
+            return consumeOther(value);
+        }
+    }
+
+    // 终止型 case 后的未命中区域必须依靠收尾指令区分：这里确有 default，
+    // 其中的局部声明不能被错误移到 switch 之后。
+    function validationTerminatingSwitchWithDefaultDeclaration(value)
+    {
+        switch (typeof value)
+        {
+        case "String":
+            return consumeOne(value);
+        case "Integer":
+            return consumeTwo(value);
+        default:
+            var reason = "other";
+            return consumeOther(reason);
+        }
+    }
+
+    // 与上例形状相近，但未命中区域是 switch 后的顺序代码，不是 default。
+    function validationTerminatingSwitchWithoutDefault(value)
+    {
+        switch (typeof value)
+        {
+        case "String":
+            return consumeOne(value);
+        case "Integer":
+            return consumeTwo(value);
+        }
+        var result = consumeOther(value);
+        return result;
+    }
+
+    // 多个空 case 直接跳到公共出口时，仍要保留完整分派供 AST 恢复。
+    function validationSharedEmptyCases(value)
+    {
+        switch (value)
+        {
+        case -1:
+        case 1:
+            break;
+        case 2:
+            accept(value);
+            break;
+        default:
+            reject(value);
+            break;
+        }
+    }
+
+    // 文本相同但来自两条 CALL 指令的返回值必须各自保留一次求值。
+    function validationDistinctEquivalentReturns(value, stop)
+    {
+        if (stop)
+            return finishShared(value);
+        consumeOne(value);
+        return finishShared(value);
+    }
+
+    function validationSingleCaseSwitch(value)
+    {
+        switch (typeof value)
+        {
+        case "String":
+            return consumeOne(value);
+        default:
+            return value;
+        }
+    }
+
+    function validationSingleCaseBreakSwitch(value)
+    {
+        var result = void;
+        switch (typeof value)
+        {
+        case "String":
+            result = consumeOne(value);
+            break;
+        }
+        return result;
+    }
+
+    function validationSingleCaseSwitchContainingIf(value)
+    {
+        switch (typeof value)
+        {
+        case "String":
+            if (value == "target")
+                consumeOne(value);
+            break;
+        }
+        consumeOther(value);
+    }
+
+    // 内层单 case switch 拥有自己的 case/default 两级收尾，不能因为受外层
+    // 多 case switch 支配就被降级成普通 if。
+    function validationNestedSingleCaseDefaultSwitch(value)
+    {
+        switch (value.kind)
+        {
+        case "first":
+            switch (value.level)
+            {
+            case 0:
+                consumeOne(value);
+                break;
+            default:
+                consumeTwo(value);
+                break;
+            }
+            break;
+        case "second":
+            consumeOther(value);
+            break;
+        }
+    }
+
+    // default 与一个具名 case 共用正文时，该 case 条件的真假边会落到同一块；
+    // 标签仍必须保留，不能被当作无语义跳板折叠。
+    function validationDefaultSharingCaseBody(value)
+    {
+        switch (value.kind)
+        {
+        case "outer":
+            switch (value.align)
+            {
+            case "right":
+                consumeOne(value);
+                break;
+            default:
+            case "left":
+                consumeTwo(value);
+                break;
+            }
+            break;
+        case "other":
+            consumeOther(value);
+            break;
+        }
+    }
+
+    function validationMultiCaseSwitchContainingIf(value)
+    {
+        switch (value.kind)
+        {
+        case "first":
+            if (value.state == "yes")
+                consumeOne(value);
+            else if (value.state == "no")
+                consumeTwo(value);
+            break;
+        case "second":
+            consumeOther(value);
+            break;
+        }
+    }
+
+    // 同一个缓存计算式上的普通 if 不应仅凭一个 CEQ 被猜成 switch。
+    function validationEquivalentComputedIf(value)
+    {
+        if (typeof value == "String")
+            return consumeOne(value);
+        return value;
+    }
+
+    // 外层普通 if 的正文中即使包含真正的 switch，也不能把内层 switch 的
+    // 不可达收尾跳转误认为外层单 case switch 的来源证据。
+    function validationComputedIfContainingSwitch(value)
+    {
+        if (typeof value == "String")
+        {
+            switch (value)
+            {
+            case "first":
+                consumeOne(value);
+                break;
+            case "second":
+                consumeTwo(value);
+                break;
+            }
+        }
+        else
+        {
+            consumeOther(value);
+        }
+    }
+
+    // 连续 case 可以共享同一个 return 正文；最后一个比较不能先被恢复成
+    // “失败就空返回”的局部叶子，否则前一个标签到正文的跳板会一起丢失。
+    function validationSharedTerminalTypeCases(value)
+    {
+        switch (typeof value)
+        {
+        case "String":
+            return parseString(value);
+        case "Integer":
+        case "Real":
+            return makeNumber(value);
+        }
+    }
+
+    // 前置循环退出守卫不能抢先吞掉后面的完整类型分派。
+    function validationGuardedTypeSwitch(items)
+    {
+        var index = 0;
+        var item;
+        while ((item = items[index++]) !== void)
+        {
+            if (typeof item == "Object" && item.stop) break;
+            switch (typeof item)
+            {
+            case "Integer":
+                consumeInteger(item);
+                break;
+            case "String":
+                consumeString(item);
+                break;
+            }
+        }
+    }
+
+    // 不相交语句块可以复用同一 VM 槽，但两个 var 仍属于不同的词法作用域。
+    function validationBlockScopedSlotReuse(flag)
+    {
+        if (flag)
+        {
+            var branchValue = makeBranchValue();
+            consume(branchValue);
+        }
+        var followingValue = makeFollowingValue();
+        consume(followingValue);
+    }
+
+    // for 初始化节有独立作用域；循环结束后复用槽位的变量仍需重新声明。
+    function validationForScopedSlotReuse(items)
+    {
+        for (var loopValue = 0; loopValue < items.count; loopValue++)
+        {
+            consume(items[loopValue]);
+        }
+        var followingValue = makeFollowingValue();
+        consume(followingValue);
+    }
+
+    // 多路入口共享的短路尾项只应保留一次，不能在条件 Phi 两臂中复制调用。
+    function validationFactoredBooleanPhi(gate, first, second, tail, cached)
+    {
+        var result = gate && (first || second) && tail && (cached || probe());
+        consume(result);
+    }
+
+    // 三路值 Phi 的短路守卫不能因内层路径汇合而丢失。
+    function validationGuardedNestedTernary(fixCamera, level, env)
+    {
+        var selected = fixCamera
+            ? (env.cameraZoom > 100 && level < env.levels.count - 1
+                ? level + 1 : level)
+            : level;
+        consume(selected);
+    }
+
+    // 动态索引之后继续访问多层成员时，外层标识符不能截断复合接收者。
+    function validationNestedDynamicMember(table)
+    {
+        return table[0].core.currentPageName;
+    }
+
+    // 返回 flag 的三路调用 Phi 必须保留最外层守卫和公共回退调用。
+    function validationGuardedCallableReturn(enabled, getState)
+    {
+        return (enabled && (getState(KEY_RETURN) || getState(KEY_SPACE))) ||
+            getState(KEY_CONTROL);
+    }
+
+    // 首个 case 为空时，default 不能吞掉这个显式“不处理”分支。
+    function validationLeadingEmptyCase(style, mode)
+    {
+        switch (mode)
+        {
+        case MODE_NONE:
+            break;
+        case MODE_HORIZONTAL:
+            style |= STYLE_HORIZONTAL;
+            break;
+        case MODE_VERTICAL:
+            style |= STYLE_VERTICAL;
+            break;
+        default:
+        case MODE_BOTH:
+            style |= STYLE_HORIZONTAL | STYLE_VERTICAL;
+            break;
+        }
+        return style;
+    }
+
+    // 属性赋值仍是一个有返回值的表达式；后续调用必须消费被写入的同一个对象，
+    // 不能重新构造一个文本相同但身份不同的临时值。
+    function validationAssignedValueReceiver(target, source, index)
+    {
+        (target.values = []).assign(source.values);
+        (Dictionary.assign incontextof (target[index] = %[]))(source[index]);
+        (target.node = makeNode()).consume(source);
+    }
+
+    // with 控制对象会跨越条件块存活，其创建结果仍只能求值一次。
+    function validationCrossBlockReceiver(target, flag)
+    {
+        with (target.shared = makeNode())
+        {
+            if (flag) .first();
+            .second();
+        }
+    }
+
+    // 循环内的析取守卫可能有多条路径命中同一个提前返回；后一条路径中的
+    // 调用不能被局部的两段守卫恢复误当成公共尾部而丢失。
+    function validationAlternativeProbe(entries, ext, storage)
+    {
+        for (var i = 0, type; i < entries.count; i++)
+        {
+            type = entries[i].type;
+            if (type == "") continue;
+            var entry = entries[i];
+            switch (typeof entry.ext)
+            {
+            case "String":
+                if ((ext != "" && entry.ext == ext) ||
+                    (ext == "" && probe(storage, entry.ext) != "")) return type;
+                break;
+            case "Object":
+                if ((ext != "" && entry.ext.find(ext) >= 0) ||
+                    (ext == "" && probe(storage, entry.ext*) != "")) return type;
+                break;
+            }
+            if (checker(entry)) return type;
+        }
+    }
+
+    // 带调用的共享入口赋值只能求值一次；中间多块守卫的
+    // continue 不能让后续公共处理漏到守卫体内或反过来。
+    function validationCachedLoopBranch(source, autoMode)
+    {
+        var value;
+        for (;;)
+        {
+            if (source.count > 0)
+            {
+                value = source.shift();
+            }
+            else
+            {
+                value = nextValue();
+                if (value !== void)
+                {
+                    if (autoMode) consume(value);
+                    if (skipValue(value)) continue;
+                    if (targetLine !== void)
+                    {
+                        if (value.line > targetLine ||
+                            (value.line >= targetLine && value.count >= targetCount))
+                        {
+                            mark(value);
+                            if (stopValue(value)) return value;
+                        }
+                        continue;
+                    }
+                    if (source.count > 0)
+                    {
+                        source.add(value);
+                        continue;
+                    }
+                }
+            }
+            consumeFinal(value);
+        }
+    }
+
+    // 某个分派臂无论内部条件是否命中都会结束本轮；内层可选日志不能独占
+    // continue，未进入更新分支时也不能落入同层公共处理。
+    function validationLoopIterationCompletion(pendings, verbose)
+    {
+        for (;;)
+        {
+            var item = pendings.shift();
+            if (item.kind == "line")
+            {
+                if (currentLine != item.line)
+                {
+                    currentLine = item.line;
+                    currentCount = 0;
+                    if (verbose && debugLevel > 0) trace(item);
+                }
+                continue;
+            }
+            if (item.kind == "count")
+            {
+                currentCount++;
+                continue;
+            }
+            consumeFinal(item);
+        }
+    }
+
+    // do-while 的短路尾条件会分布在多个基本块中；正文内清除目标值的赋值
+    // 必须仍受原条件控制，不能被提升到循环条件之外。
+    function validationCompoundDoWhileTarget(pendings)
+    {
+        var i = 0, item;
+        do
+        {
+            item = pendings[i++];
+            if (item.line > targetLine ||
+                (item.line >= targetLine && item.count >= targetCount))
+            {
+                targetLine = void;
+            }
+        }
+        while (i < pendings.count && targetLine != void);
+        consumeFinal(i);
+    }
+
+    // 两段短路条件命中后先执行载荷再 break。退出块不属于自然循环集合，
+    // 仍必须保留为循环转移，不能因它最终到达函数末尾而当成普通汇合路径。
+    function validationLoopGuardedPayloadBreak(children, value)
+    {
+        for (var i = children.count - 1; i >= 0; i--)
+        {
+            var item = children[i];
+            if (typeof item.speed !== "undefined" && item.speed == value)
+            {
+                item.checked = true;
+                break;
+            }
+        }
+    }
+
+    // 多个 case 都可能在条件成立时提前返回，条件失败则 break 到同一个公共尾部。
+    // 公共尾部不能被最先处理的 case 独占，否则其他 case 会丢失 break 和后续调用。
+    function validationSwitchConditionalReturnAndContinuation(key, vertical)
+    {
+        switch (key)
+        {
+        case 1:
+            if (vertical) return stepLeft();
+            break;
+        case 2:
+            if (!vertical) return stepRight();
+            break;
+        case 3:
+            return moveHead();
+        }
+        finishMove();
+    }
+
+    // 外层 case 标签与共享正文中的三元判断读取同一个源码变量，但属于两次
+    // 独立的 VM 求值；正文条件不能被误当成外层分派的另一个标签。
+    function validationSharedCaseBodyWithIndependentPhi(mode)
+    {
+        var style = 0;
+        switch (mode)
+        {
+        case 1:
+        case 2:
+            style |= (mode == 1) ? 4 : 8;
+            style |= 16;
+            break;
+        case 3:
+            style |= 32;
+            break;
+        default:
+            style = -1;
+            break;
+        }
+        return style;
+    }
+
+    // 成员写入与后续读取是两个可观察操作；即使右值很简单，
+    // 也不能把判断改成对赋值表达式右值的直接比较。
+    function validationMemberAssignmentRead(value)
+    {
+        memberAssignmentState = value;
+        if (memberAssignmentState === void) return 0;
+        return 1;
+    }
+
+    // 多个顺序更新各自使用共享载荷的短路 OR。后一条 guard 不是前一条 OR 的
+    // 分支正文，但也不能导致前一条条件被拆成反向 AND。
+    function validationSequentialShortCircuitUpdates(target, source)
+    {
+        if (target.x === void || target.x > source.x)
+            target.x = source.x;
+        if (target.y === void || target.y > source.y)
+            target.y = source.y;
+        if (target.x2 === void || target.x2 < source.x2)
+            target.x2 = source.x2;
+        if (target.y2 === void || target.y2 < source.y2)
+            target.y2 = source.y2;
+    }
+
+    // 多个 switch case 的 guard 失败路径共用函数末尾隐式 return。每个 case
+    // 仍拥有自己的 break，default 正文中的嵌套双载荷判断也必须先完整物化。
+    function validationSwitchGuardedSharedVoid(mode, target, kind)
+    {
+        switch (mode)
+        {
+        case 1:
+            if (target !== void)
+            {
+                var values = [];
+                switch (kind)
+                {
+                case "empty":
+                    break;
+                default:
+                    if (target.face != "")
+                    {
+                        if (target.face.indexOf(":"))
+                        {
+                            var parts = target.face.split(":");
+                            for (var i = 0; i < parts.count; i++)
+                                values.add(parts[i]);
+                        }
+                        else
+                        {
+                            values.add(target.face);
+                        }
+                    }
+                    break;
+                }
+                return consume(values);
+            }
+            break;
+        case 2:
+            if (target !== void)
+                return consume(target);
+            break;
+        }
+    }
+
+    // 空分支经独立 JMP 跳板直达函数末尾时，另一臂中的完整嵌套判断仍必须
+    // 受最外层对象存在性条件保护，不能被提升成无条件执行。
+    function validationEmptyBranchAroundNested(target, mode)
+    {
+        if (target == null)
+        {
+        }
+        else
+        {
+            if (mode)
+                target.accept();
+            else
+                target.reject();
+        }
+    }
+
+    // 特殊实数必须按各自的 IEEE-754 位模式进入常量池，并恢复为规范关键字。
+    function validationSpecialRealConstants(kind)
+    {
+        switch (kind)
+        {
+        case 0: return NaN;
+        case 1: return Infinity;
+        case 2: return -Infinity;
+        }
+        return 1.25;
+    }
+
+    // 属性对象经过 incontextof 改绑后，读写必须分别保留 GETP/SETP 的一元 * 语义。
+    property forwardedValue
+    {
+        getter()
+        {
+            return *(&global.SemanticControlFlow.sharedValue incontextof this);
+        }
+        setter(value)
+        {
+            *(&global.SemanticControlFlow.sharedValue incontextof this) = value;
+        }
+    }
+
+    property sharedValue
+    {
+        getter() { return owner; }
+        setter(value) { owner = value; }
+    }
+}
+
+// 嵌套类必须作为外层类的成员写出，不能提升成同名全局类。
+class ValidationNestedOwner
+{
+    class Child
+    {
+        function getValue()
+        {
+            return 7;
+        }
+    }
+
+    function createChild()
+    {
+        return new ValidationNestedOwner.Child();
+    }
+}
+
+// 属性名只在所属类内唯一，两个类的同名属性都必须保留。
+class DuplicatePropertyOwner
+{
+    var stored;
+
+    property sharedValue
+    {
+        getter() { return stored; }
+        setter(value) { stored = value; }
+    }
+}
+
+// 顶层显式块中的 var 是局部槽，不能展平为全局对象成员。
+{
+    var topLevelScopeProbe = System.getArgument("-furikiri-scope-probe");
+    if (topLevelScopeProbe !== void)
+    {
+        Debug.message(topLevelScopeProbe);
     }
 }

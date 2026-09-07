@@ -27,7 +27,7 @@ namespace Furikiri.Echo.Pass
                 }
                 else
                 {
-                    foreach (var node in block.Statements)
+                    foreach (var node in block.Statements ?? Enumerable.Empty<IAstNode>())
                     {
                         switch (node)
                         {
@@ -85,6 +85,15 @@ namespace Furikiri.Echo.Pass
 
             for (var index = 0; index < block.Statements.Count; index++)
             {
+                if (index + 1 < block.Statements.Count &&
+                    TryFoldConditionalAssignmentsIntoReturn(
+                        block.Statements[index], block.Statements[index + 1]))
+                {
+                    block.Statements.RemoveAt(index);
+                    index--;
+                    continue;
+                }
+
                 NormalizeNode(block.Statements[index]);
 
                 if (index + 1 < block.Statements.Count &&
@@ -278,6 +287,195 @@ namespace Furikiri.Echo.Pass
             }
         }
 
+        /// <summary>
+        /// 三元返回的条件赋值有时仍以空 if 外壳保留在前一条语句中，例如先后
+        /// 计算两个分隔符位置，再由嵌套三元式选择返回值。将每次赋值放回对应
+        /// Phi 条件后即可删除外壳，恢复 `(p = indexOf(...)) &gt; 0 ? ...`，同时
+        /// 保持原有短路求值顺序。
+        /// </summary>
+        private static bool TryFoldConditionalAssignmentsIntoReturn(
+            IAstNode selectorNode, IAstNode returnNode)
+        {
+            if (selectorNode is not IfStatement selector ||
+                returnNode is not ExpressionStatement
+                {
+                    Expression: ReturnExpression { Return: PhiExpression rootPhi }
+                })
+            {
+                return false;
+            }
+
+            var assignments = new List<BinaryExpression>();
+            if (!CollectConditionalAssignmentShell(selector, assignments) || assignments.Count == 0)
+            {
+                return false;
+            }
+
+            var phis = new List<PhiExpression>();
+            for (var phi = rootPhi; phi != null; phi = phi.ElseBranch as PhiExpression)
+            {
+                if (!phi.IsConditional)
+                {
+                    return false;
+                }
+                phis.Add(phi);
+            }
+
+            if (phis.Count != assignments.Count)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < phis.Count; index++)
+            {
+                if (!ContainsTargetOrAssignment(
+                        phis[index].Condition.Condition, assignments[index].Left))
+                {
+                    return false;
+                }
+            }
+
+            for (var index = 0; index < phis.Count; index++)
+            {
+                var replaced = false;
+                phis[index].Condition.Condition = ReplaceFirstTarget(
+                    phis[index].Condition.Condition,
+                    assignments[index].Left,
+                    assignments[index],
+                    ref replaced);
+                if (!replaced)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool ContainsTargetOrAssignment(Expression expression, Expression target)
+        {
+            if (expression == null || SameTarget(expression, target))
+            {
+                return expression != null;
+            }
+
+            return expression switch
+            {
+                BinaryExpression { Op: BinaryOp.Assign } assignment
+                    when SameTarget(assignment.Left, target) => true,
+                BinaryExpression binary =>
+                    ContainsTargetOrAssignment(binary.Left, target) ||
+                    ContainsTargetOrAssignment(binary.Right, target),
+                UnaryExpression unary => ContainsTargetOrAssignment(unary.Target, target),
+                ConditionExpression condition =>
+                    ContainsTargetOrAssignment(condition.Condition, target),
+                _ => false
+            };
+        }
+
+        private static bool CollectConditionalAssignmentShell(
+            Statement statement, ICollection<BinaryExpression> assignments)
+        {
+            if (statement == null)
+            {
+                return true;
+            }
+
+            if (statement is IfStatement conditional)
+            {
+                CollectAssignments(UnwrapCondition(conditional.Condition), assignments);
+                return CollectConditionalAssignmentShell(conditional.Then, assignments) &&
+                       CollectConditionalAssignmentShell(conditional.Else, assignments);
+            }
+
+            if (statement is BlockStatement block)
+            {
+                return block.Statements.All(node => node switch
+                {
+                    IfStatement nested => CollectConditionalAssignmentShell(nested, assignments),
+                    ExpressionStatement { Expression: GotoExpression } => true,
+                    GotoExpression => true,
+                    _ => false
+                });
+            }
+
+            return false;
+        }
+
+        private static void CollectAssignments(
+            Expression expression, ICollection<BinaryExpression> assignments)
+        {
+            switch (expression)
+            {
+                case BinaryExpression { Op: BinaryOp.Assign } assignment:
+                    assignments.Add(assignment);
+                    break;
+                case BinaryExpression binary:
+                    CollectAssignments(binary.Left, assignments);
+                    CollectAssignments(binary.Right, assignments);
+                    break;
+                case UnaryExpression unary:
+                    CollectAssignments(unary.Target, assignments);
+                    break;
+                case ConditionExpression condition:
+                    CollectAssignments(condition.Condition, assignments);
+                    break;
+            }
+        }
+
+        private static Expression ReplaceFirstTarget(
+            Expression expression, Expression target, Expression replacement, ref bool replaced)
+        {
+            if (expression == null || replaced)
+            {
+                return expression;
+            }
+
+            if (expression is BinaryExpression { Op: BinaryOp.Assign } existingAssignment &&
+                SameTarget(existingAssignment.Left, target))
+            {
+                // 条件传播有时已经把同一个赋值对象放进 Phi 条件。此时再次把
+                // 赋值左值替换为赋值自身会构造循环 AST，并在声明分析时栈溢出。
+                replaced = true;
+                return expression;
+            }
+
+            if (SameTarget(expression, target))
+            {
+                replaced = true;
+                return replacement;
+            }
+
+            switch (expression)
+            {
+                case BinaryExpression binary:
+                    binary.Left = ReplaceFirstTarget(binary.Left, target, replacement, ref replaced);
+                    binary.Right = ReplaceFirstTarget(binary.Right, target, replacement, ref replaced);
+                    break;
+                case UnaryExpression unary:
+                    unary.Target = ReplaceFirstTarget(unary.Target, target, replacement, ref replaced);
+                    break;
+                case ConditionExpression condition:
+                    condition.Condition = ReplaceFirstTarget(
+                        condition.Condition, target, replacement, ref replaced);
+                    break;
+            }
+
+            return expression;
+        }
+
+        private static bool SameTarget(Expression first, Expression second)
+        {
+            return first is LocalExpression firstLocal && second is LocalExpression secondLocal &&
+                   firstLocal.Slot == secondLocal.Slot ||
+                   first is IdentifierExpression firstIdentifier &&
+                   second is IdentifierExpression secondIdentifier &&
+                   firstIdentifier.FullName == secondIdentifier.FullName ||
+                   first is LocalExpression or IdentifierExpression &&
+                   second is LocalExpression or IdentifierExpression &&
+                   first.ToString() == second.ToString();
+        }
+
         private static void NormalizeStatement(Statement statement)
         {
             switch (statement)
@@ -325,10 +523,22 @@ namespace Furikiri.Echo.Pass
             NormalizeStatement(ifStatement.Then);
             NormalizeStatement(ifStatement.Else);
 
-            if (IsEmpty(ifStatement.Then) && !IsEmpty(ifStatement.Else))
+            if (ifStatement.Else is BlockStatement { Statements.Count: 1 } elseBlock &&
+                elseBlock.Statements[0] is IfStatement elseIf)
+            {
+                // 单条 if 的 else 块没有额外作用域或顺序语句，直接写成 else if
+                // 更接近源码结构，也避免长分派产生逐层右移的“大括号楼梯”。
+                elseIf.IsElseIf = true;
+                ifStatement.Else = elseIf;
+            }
+
+            if (IsEmpty(ifStatement.Then) && !IsEmpty(ifStatement.Else) &&
+                !ifStatement.IsEqualityDispatch)
             {
                 // if (cond) {} else body 与 if (!cond) body 完全等价；统一后既避免
                 // 空分支，也能让后续共享 case 归一化看到真实分支体。
+                // 已由 CFG 证明的相等分派必须保留原方向到 switch 规范化阶段；
+                // 空 case 共用出口时若先反转为 != 守卫，会破坏 case 标签结构。
                 ifStatement.Condition = UnwrapCondition(ifStatement.Condition).Invert();
                 ifStatement.Then = ifStatement.Else;
                 ifStatement.Else = null;

@@ -33,6 +33,12 @@ namespace Furikiri.Emit
         public IRegisterData Data { get; internal set; }
 
         /// <summary>
+        /// 跳转指令解析后的目标；非跳转指令返回 null。
+        /// 该属性向只读审计公开控制流事实，不暴露内部寄存器编码。
+        /// </summary>
+        public Instruction BranchTarget => (Data as JumpData)?.Goto;
+
+        /// <summary>
         /// Can be jumped from which instructions
         /// </summary>
         public List<Instruction> JumpedFrom { get; internal set; }

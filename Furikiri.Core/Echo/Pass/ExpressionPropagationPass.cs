@@ -310,6 +310,7 @@ namespace Furikiri.Echo.Pass
                         {
                             return phi.ThenBranch;
                         }
+
                         return phi;
                     }
 

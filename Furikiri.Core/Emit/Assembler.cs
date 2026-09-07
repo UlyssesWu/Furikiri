@@ -74,7 +74,7 @@ namespace Furikiri.Emit
         {
             if (codeObject.ContextType == TjsContextType.Property)
             {
-                if (module.Properties.TryGetValue(codeObject.Name, out var property))
+                if (module.Properties.TryGetValue(codeObject, out var property))
                 {
                     var getter = property.Getter?.Object?.GetDisassembleSignatureString() ?? "<none>";
                     var setter = property.Setter?.Object?.GetDisassembleSignatureString() ?? "<none>";

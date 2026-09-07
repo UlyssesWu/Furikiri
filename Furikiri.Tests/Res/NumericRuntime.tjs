@@ -1,0 +1,28 @@
+// 验证数值类型、整数精度和正负零；结果由真实 TJS2 引擎执行产生。
+function integralReal() { return 1.0; }
+function zeroSign(negative) { return negative ? -0.0 : 0.0; }
+function wideInteger(next) { return next ? 9007199254740993 : 9007199254740992; }
+function wideMaximum() { return 9223372036854775807; }
+function wideMinimum() { return -9223372036854775808; }
+function specialReal(kind) {
+    switch (kind) {
+    case 0: return NaN;
+    case 1: return Infinity;
+    case 2: return -Infinity;
+    }
+    return 1.25;
+}
+var observations = [];
+observations.add(typeof integralReal());
+observations.add(typeof zeroSign(false));
+observations.add(string (1.0 / zeroSign(false)));
+observations.add(string (1.0 / zeroSign(true)));
+observations.add(string wideInteger(false));
+observations.add(string wideInteger(true));
+observations.add(string wideMaximum());
+observations.add(string wideMinimum());
+observations.add(typeof wideInteger(true));
+observations.add(string specialReal(0));
+observations.add(string specialReal(1));
+observations.add(string specialReal(2));
+global.__validationResult = observations.join("|");

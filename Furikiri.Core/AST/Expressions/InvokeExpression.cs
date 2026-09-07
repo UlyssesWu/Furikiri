@@ -76,9 +76,18 @@ namespace Furikiri.AST.Expressions
                     return true;
                 }
 
-                if (Instance is IdentifierExpression id && id.IdentifierType != IdentifierType.Normal)
+                if (Instance is IdentifierExpression id)
                 {
-                    return true;
+                    // -2 是隐式成员查找代理，本来就不应写出前缀；-1 则是源码
+                    // 明确使用的 this，是否隐藏由当前上下文决定。GLOBAL 指令也
+                    // 必须保留 global.，否则同名类成员可能截获调用。
+                    return id.IdentifierType switch
+                    {
+                        IdentifierType.ThisProxy => true,
+                        IdentifierType.This => id.HideInstance,
+                        IdentifierType.Global => false,
+                        _ => false
+                    };
                 }
 
                 return false;

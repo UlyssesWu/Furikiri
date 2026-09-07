@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 
 namespace Furikiri.Emit
@@ -178,7 +179,14 @@ namespace Furikiri.Emit
         public TjsVarType Type => TjsVarType.Int;
         public object Value => IntValue;
         public string DebugString => $"({InternalType.ToString().ToLowerInvariant()}){IntValue}";
-        public int IntValue { get; set; }
+        // DATA 中的 byte/short/int/long 只是存储压缩形式，运行时都是 64 位整数。
+        public long IntValue { get; set; }
+
+        public TjsInt(long val)
+        {
+            InternalType = TjsInternalType.Long;
+            IntValue = val;
+        }
 
         /// <summary>
         /// Int
@@ -212,7 +220,7 @@ namespace Furikiri.Emit
 
         public static implicit operator int(TjsInt i)
         {
-            return i.IntValue;
+            return checked((int)i.IntValue);
         }
 
         public static explicit operator TjsInt(int i)
@@ -222,7 +230,7 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            return IntValue.ToString();
+            return IntValue.ToString(CultureInfo.InvariantCulture);
         }
     }
 
@@ -231,8 +239,9 @@ namespace Furikiri.Emit
     {
         internal TjsInternalType InternalType { get; set; }
 
-        public TjsVarType Type => TjsVarType.Real;
-        public object Value => InternalType == TjsInternalType.Long ? LongValue : DoubleValue;
+        public TjsVarType Type => InternalType == TjsInternalType.Long ? TjsVarType.Int : TjsVarType.Real;
+        // 兼容旧 long 构造入口时必须先装箱，条件表达式的数值提升会舍入超过 2^53 的整数。
+        public object Value => InternalType == TjsInternalType.Long ? (object)LongValue : DoubleValue;
         public string DebugString => $"(real){Value}";
         public double DoubleValue { get; set; }
         public long LongValue { get; set; }
@@ -259,7 +268,7 @@ namespace Furikiri.Emit
 
         public static implicit operator double(TjsReal d)
         {
-            return d.DoubleValue;
+            return d.InternalType == TjsInternalType.Long ? d.LongValue : d.DoubleValue;
         }
 
         public static explicit operator TjsReal(double d)
@@ -269,7 +278,32 @@ namespace Furikiri.Emit
 
         public override string ToString()
         {
-            return Value.ToString();
+            if (InternalType == TjsInternalType.Long)
+            {
+                return LongValue.ToString(CultureInfo.InvariantCulture);
+            }
+
+            // TJS2 的源码关键字是 NaN / Infinity；运行时区域设置提供的
+            // “∞”等显示符号虽然有时能被词法器接受，却不是规范化源码，且
+            // 在不同系统语言下不稳定。有限实数也统一使用点号作为小数点。
+            if (double.IsNaN(DoubleValue))
+            {
+                return "NaN";
+            }
+            if (double.IsPositiveInfinity(DoubleValue))
+            {
+                return "Infinity";
+            }
+            if (double.IsNegativeInfinity(DoubleValue))
+            {
+                return "-Infinity";
+            }
+            var literal = DoubleValue.ToString("R", CultureInfo.InvariantCulture);
+            // 1 和 1.0 的 typeof 不同；-0 也会被词法器读成无符号的整数零。
+            // 保留小数点才能保持实数类型、负零及后续除法的符号。
+            return literal.IndexOf('.') < 0 && literal.IndexOf('E') < 0 && literal.IndexOf('e') < 0
+                ? literal + ".0"
+                : literal;
         }
     }
 

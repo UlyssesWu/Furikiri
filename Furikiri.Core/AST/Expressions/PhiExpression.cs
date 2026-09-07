@@ -133,10 +133,19 @@ namespace Furikiri.AST.Expressions
                 return ua.Op == ub.Op && AreSemanticallyEqual(ua.Target, ub.Target);
             }
 
-            // IdentifierExpression: compare by name
+            // 同名成员只有实例也相同才是同一个值。例如 `info.value` 与
+            // `defaults.value` 的 Name 都是 value，不能因此把三元式的回退分支折叠掉。
             if (a is IdentifierExpression ia && b is IdentifierExpression ib)
             {
-                return ia.FullName == ib.FullName;
+                return ia.Name == ib.Name &&
+                       ia.IdentifierType == ib.IdentifierType &&
+                       AreSemanticallyEqual(ia.Instance, ib.Instance);
+            }
+
+            if (a is PropertyAccessExpression pa && b is PropertyAccessExpression pb)
+            {
+                return AreSemanticallyEqual(pa.Instance, pb.Instance) &&
+                       AreSemanticallyEqual(pa.Property, pb.Property);
             }
 
             // For other types, use ToString comparison (not perfect but practical)

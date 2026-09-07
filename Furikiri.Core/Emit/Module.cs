@@ -24,12 +24,15 @@ namespace Furikiri.Emit
         public CodeObject TopLevel { get; set; }
         public List<CodeObject> Objects { get; set; }
         public Dictionary<CodeObject, Method> Methods { get; set; } = new Dictionary<CodeObject, Method>();
-        public Dictionary<string, Property> Properties { get; set; } = new Dictionary<string, Property>();
+        // 属性名只在所属类/对象内唯一。若按名称全局索引，
+        // 多个类的同名属性会相互覆盖，最终只能写出最后一个。
+        public Dictionary<CodeObject, Property> Properties { get; set; } =
+            new Dictionary<CodeObject, Property>();
 
         public void Resolve()
         {
             Methods = new Dictionary<CodeObject, Method>();
-            Properties = new Dictionary<string, Property>();
+            Properties = new Dictionary<CodeObject, Property>();
 
             //Method
             foreach (var method in Objects.Where(obj =>
@@ -43,7 +46,7 @@ namespace Furikiri.Emit
             //Property
             foreach (var prop in Objects.Where(obj => obj.ContextType == TjsContextType.Property))
             {
-                Properties[prop.Name] = prop.ResolveProperty(Methods.TryGet(prop.Getter), Methods.TryGet(prop.Setter));
+                Properties[prop] = prop.ResolveProperty(Methods.TryGet(prop.Getter), Methods.TryGet(prop.Setter));
             }
         }
 
@@ -222,7 +225,7 @@ namespace Furikiri.Emit
                             vars.Add(new TjsInt(Data.Ints[index]));
                             break;
                         case TjsInternalType.Long:
-                            vars.Add(new TjsReal(Data.Longs[index]));
+                            vars.Add(new TjsInt(Data.Longs[index]));
                             break;
 
                         case TjsInternalType.Unknown:

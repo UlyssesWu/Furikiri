@@ -1,0 +1,78 @@
+var trace = "";
+function probe(label, value) {
+    trace += label;
+    return value;
+}
+function decision(a, b, c, d) {
+    if ((a && probe("B", b)) || (c && probe("D", d))) trace += "T";
+    else trace += "F";
+    trace += "Z";
+}
+function loopTrace(limit, stop) {
+    var total = 0;
+    for (var i = 0; i < limit; i++) {
+        if (i == stop) break;
+        if (i % 2 == 0) {
+            trace += "E";
+            continue;
+        }
+        switch (i % 3) {
+        case 0:
+        case 1:
+            if (i > 4) trace += "H";
+            else trace += "L";
+            break;
+        default: trace += "D";
+        }
+        total += i;
+    }
+    trace += ":" + total;
+}
+function exceptionTrace(mode) {
+    try {
+        trace += "A";
+        if (mode == 0) return "R";
+        if (mode == 1) throw "problem";
+        trace += "B";
+    }
+    catch (error) {
+        trace += "C";
+        return "X";
+    }
+    trace += "D";
+    return "N";
+}
+function tailTrace(limit, gate) {
+    var count = 0;
+    do {
+        trace += "I";
+        count++;
+    } while (count < limit && probe("P", gate));
+    trace += ":" + count;
+}
+var results = [];
+for (var mask = 0; mask < 16; mask++) {
+    trace = "";
+    decision(mask & 1, mask & 2, mask & 4, mask & 8);
+    results.add(trace);
+}
+for (var limit = 0; limit < 9; limit++) {
+    for (var stop = -1; stop < 9; stop++) {
+        trace = "";
+        loopTrace(limit, stop);
+        results.add(trace);
+    }
+}
+for (var mode = 0; mode < 3; mode++) {
+    trace = "";
+    var value = exceptionTrace(mode);
+    results.add(trace + ":" + value);
+}
+for (var limit = 0; limit < 5; limit++) {
+    for (var gate = 0; gate < 2; gate++) {
+        trace = "";
+        tailTrace(limit, gate);
+        results.add(trace);
+    }
+}
+global.__validationResult = results.join("|");

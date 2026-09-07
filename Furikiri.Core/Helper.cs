@@ -420,6 +420,12 @@ namespace Furikiri
                 case BinaryOp.Div:
                 case BinaryOp.Mod:
                 case BinaryOp.Idiv:
+                case BinaryOp.BitAnd:
+                case BinaryOp.BitOr:
+                case BinaryOp.BitXor:
+                case BinaryOp.NumberShiftLeft:
+                case BinaryOp.NumberShiftRight:
+                case BinaryOp.BitShiftRight:
                     return true;
                 default:
                     return false;
@@ -436,6 +442,12 @@ namespace Furikiri
                 BinaryOp.Div => "/=",
                 BinaryOp.Mod => "%=",
                 BinaryOp.Idiv => "\\=",
+                BinaryOp.BitAnd => "&=",
+                BinaryOp.BitOr => "|=",
+                BinaryOp.BitXor => "^=",
+                BinaryOp.NumberShiftLeft => "<<=",
+                BinaryOp.NumberShiftRight => ">>=",
+                BinaryOp.BitShiftRight => ">>>=",
                 _ => op.ToSymbol(),
             };
         }
@@ -445,6 +457,7 @@ namespace Furikiri
             return op switch
             {
                 BinaryOp.Assign => "=",
+                BinaryOp.Swap => "<->",
                 BinaryOp.Add => "+",
                 BinaryOp.Sub => "-",
                 BinaryOp.Mul => "*",
@@ -505,11 +518,11 @@ namespace Furikiri
                 //2 is unary
                 case BinaryOp.Mul:
                 case BinaryOp.Div:
+                case BinaryOp.Idiv:
+                case BinaryOp.Mod:
                     return 3;
                 case BinaryOp.Add:
                 case BinaryOp.Sub:
-                case BinaryOp.Idiv:
-                case BinaryOp.Mod:
                     return 4;
                 case BinaryOp.NumberShiftLeft:
                 case BinaryOp.NumberShiftRight:
@@ -538,6 +551,7 @@ namespace Furikiri
                     return 12;
                 //13 is ?:
                 case BinaryOp.Assign:
+                case BinaryOp.Swap:
                     return 14;
                 default:
                     return 0;
@@ -568,6 +582,10 @@ namespace Furikiri
                     return "(number)"; //FIXME: fix this
                 case UnaryOp.ToByteArray:
                     return "(octet)"; //FIXME: fix this
+                case UnaryOp.ToCharacterCode:
+                    return "#";
+                case UnaryOp.FromCharacterCode:
+                    return "$";
                 case UnaryOp.IsTrue:
                     return "";
                 case UnaryOp.IsFalse:

@@ -86,6 +86,9 @@ namespace Furikiri.Echo.Visitors
                 case TryStatement tryStatement:
                     VisitTryStmt(tryStatement);
                     break;
+                case SwitchStatement switchStatement:
+                    VisitSwitchStmt(switchStatement);
+                    break;
                 case Statement statement:
                     VisitStmt(statement);
                     break;
@@ -137,6 +140,20 @@ namespace Furikiri.Echo.Visitors
 
         internal virtual void VisitTryStmt(TryStatement tryStmt)
         {
+        }
+
+        internal virtual void VisitSwitchStmt(SwitchStatement switchStmt)
+        {
+            Visit(switchStmt.Expression);
+            foreach (var @case in switchStmt.Cases)
+            {
+                foreach (var label in @case.Labels)
+                {
+                    Visit(label);
+                }
+                Visit(@case.Body);
+            }
+            Visit(switchStmt.Default);
         }
 
         internal virtual void VisitConditionExpr(ConditionExpression condition)

@@ -1,0 +1,64 @@
+var trace = "";
+class Meter {
+    var stored = 0;
+    var savedItems;
+    var selectorReads = 0;
+    property select {
+        getter() { trace += "Q;"; selectorReads++; return selectorReads % 2; }
+    }
+    property items {
+        setter(value) { trace += "I;"; value.add(42); savedItems = value; }
+        getter() { trace += "J;"; return savedItems; }
+    }
+    property value {
+        setter(n) { trace += "S" + n + ";"; stored = n * 2; }
+        getter() { trace += "G;"; return stored + 1; }
+    }
+}
+function assignmentThenRead(m) {
+    m.value = 3;
+    if (m.value == 7) trace += "T;";
+    else trace += "F;";
+}
+function assignedValue(m) { return m.value = 5; }
+function compoundUpdate(m) {
+    m.value += 2;
+    return m.value;
+}
+function standaloneRead(m) { m.value; }
+function discardedComparison(m) { m.value == 100; }
+function guardedRead(m, gate) { if (gate) m.value; }
+function cachedReceiver(m) { return (m.items = []).count; }
+function withReads(m, gate) {
+    with (m.items) {
+        .add(7);
+        if (gate) .add(8);
+        .add(9);
+    }
+}
+function withLoop(m, count) {
+    with (m.items) {
+        for (var i = 0; i < count; i++) .add(i);
+    }
+}
+function selectedReceiver(m) { return (m.select ? m.items : m.savedItems).count; }
+var m = new Meter();
+assignmentThenRead(m);
+trace += "A" + assignedValue(m) + ";";
+trace += "C" + compoundUpdate(m) + ";";
+standaloneRead(m);
+discardedComparison(m);
+guardedRead(m, false);
+guardedRead(m, true);
+trace += "N" + cachedReceiver(m) + ";";
+withReads(m, true);
+trace += "W" + m.savedItems.join(",") + ";";
+withLoop(m, 0);
+withLoop(m, 3);
+trace += "L" + m.savedItems.join(",") + ";";
+trace += "R" + selectedReceiver(m) + ";";
+var values = [10, 20, 30];
+var index = 0;
+var chosen = values[index++];
+trace += "V" + chosen + "," + index + ";";
+global.__validationResult = trace;

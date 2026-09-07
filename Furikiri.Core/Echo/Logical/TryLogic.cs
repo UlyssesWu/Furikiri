@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Linq;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
+using Furikiri.Emit;
 
 namespace Furikiri.Echo.Logical
 {
@@ -9,6 +11,11 @@ namespace Furikiri.Echo.Logical
     {
         public Block EnterTry { get; set; }
         public Block ExitTry { get; set; }
+
+        /// <summary>
+        /// try 的正常 EXTRY 出口同时也是所属循环出口时，源码语义是 try 内 break。
+        /// </summary>
+        public bool ExitTryBreaksLoop { get; set; }
 
         public List<Block> Body { get; set; }
 
@@ -92,6 +99,19 @@ namespace Furikiri.Echo.Logical
                     {
                         foreach (var stmt in block.Statements)
                         {
+                            // EXTRY 后跳到本 try 的公共出口只是离开保护区。循环
+                            // 结构化可能先把该 JMP 写成 continue/break；若保留，
+                            // 会跳过 try 后仍应执行的清理语句，重叠退出块还会重复输出。
+                            var exitsProtectedRegion =
+                                block.Instructions.Any(instruction =>
+                                    instruction.OpCode == OpCode.EXTRY) &&
+                                block.To.Contains(ExitTry);
+                            if (exitsProtectedRegion &&
+                                stmt is ContinueStatement or BreakStatement)
+                            {
+                                continue;
+                            }
+
                             // Skip CatchExpression and jump statements
                             if (!IsControlFlowNode(stmt, includeCatch: true))
                             {
@@ -100,6 +120,10 @@ namespace Furikiri.Echo.Logical
                         }
                     }
                 }
+            }
+            if (ExitTryBreaksLoop)
+            {
+                tryBlock.Statements.Add(new BreakStatement());
             }
             tryStatement.Try = tryBlock;
 

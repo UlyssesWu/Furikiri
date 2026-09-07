@@ -334,6 +334,9 @@ ASALocalRun/
 /Furikiri.Tests/Res/*
 !/Furikiri.Tests/Res/SemanticControlFlow.tjs
 !/Furikiri.Tests/Res/SemanticControlFlow.tjs.comp
+!/Furikiri.Tests/Res/NumericRuntime.tjs
+!/Furikiri.Tests/Res/PropertyRuntime.tjs
+!/Furikiri.Tests/Res/ControlFlowRuntime.tjs
 /IronTJS
 /KrkrSharp
 /bak
@@ -342,5 +345,4 @@ ASALocalRun/
 /RunTest/decompile-debug
 /RunTest/decompiled.tjs
 /decompile-debug
-/docs/validation.md
 /Furikiri.Tests/Res/*.comp

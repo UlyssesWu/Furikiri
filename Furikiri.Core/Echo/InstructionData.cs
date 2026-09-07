@@ -139,6 +139,12 @@ namespace Furikiri.Echo
                     //    }
                     //}
                     break;
+                case ENTRY:
+                    // ENTRY 的第二个操作数是异常对象的目标寄存器。正常路径
+                    // 不读取它，异常路径进入 catch 时由 VM 覆盖；若误记为 use，
+                    // try 前恰好复用该槽的临时值会被错误判为仍然活跃。
+                    Write.Add(ins.GetRegisterSlot(1));
+                    break;
                 case CCL:
                     Write.AddRange(Enumerable.Range(ins.GetRegisterSlot(0), ins.GetRegisterSlot(1)));
                     break;

@@ -11,6 +11,67 @@ namespace Furikiri.Echo.Pass
 {
     class ExpressionPass : IPass
     {
+        private readonly HashSet<(Instruction Instruction, InvokeExpression Constructor)>
+            _foldedCollectionWrites = new();
+        private readonly Dictionary<InvokeExpression, Instruction>
+            _collectionConstructorOrigins = new();
+        private readonly Dictionary<InvokeExpression, List<Instruction>>
+            _collectionWriteOrigins = new();
+        private readonly Queue<Block> _pendingBlocks = new();
+        private readonly HashSet<Block> _queuedBlocks = new();
+
+        /// <summary>
+        /// 记录一条 VM 指令产生的临时值身份。switch 的选择表达式只求值一次，
+        /// 后续多个比较块会反复读取同一临时槽；槽位会被复用，因此还必须保存
+        /// 定义指令位置，才能与源码中多次独立读取同一属性或表达式区分开。
+        /// </summary>
+        private static T MarkCachedEvaluation<T>(
+            T expression, short destination, Instruction instruction)
+            where T : Expression
+        {
+            if (expression != null && destination > Const.ArgBase)
+            {
+                expression.CachedTemporarySlot = destination;
+                expression.CachedEvaluationId = instruction.Line;
+            }
+
+            return expression;
+        }
+
+        /// <summary>
+        /// CP 把命名局部或参数读入临时寄存器时，临时值代表一次新的快照求值。
+        /// 不能直接在原 LocalExpression 上写缓存身份，否则该局部后续独立读取
+        /// 也会继承旧身份，被误认为仍在同一个 switch 中。
+        /// </summary>
+        private static Expression SnapshotCopiedEvaluation(
+            Expression source, short destination, Instruction instruction)
+        {
+            if (source == null || destination <= Const.ArgBase ||
+                source.CachedEvaluationId.HasValue)
+            {
+                return source;
+            }
+
+            Expression snapshot = source switch
+            {
+                LocalExpression local => new LocalExpression(local.VariableDef)
+                {
+                    DataType = local.DataType
+                },
+                IdentifierExpression identifier => new IdentifierExpression(
+                    identifier.Name, identifier.IdentifierType)
+                {
+                    Instance = identifier.Instance,
+                    HideInstance = identifier.HideInstance
+                },
+                ConstantExpression constant =>
+                    new ConstantExpression(constant.Variant),
+                _ => source
+            };
+
+            return MarkCachedEvaluation(snapshot, destination, instruction);
+        }
+
         public IdentifierExpression Global = new IdentifierExpression("global", IdentifierType.Global);
         public IdentifierExpression This = new IdentifierExpression("this", IdentifierType.This);
         public IdentifierExpression ThisProxy = new IdentifierExpression("", IdentifierType.ThisProxy);
@@ -18,6 +79,11 @@ namespace Furikiri.Echo.Pass
 
         public BlockStatement Process(DecompileContext context, BlockStatement statement)
         {
+            _foldedCollectionWrites.Clear();
+            _collectionConstructorOrigins.Clear();
+            _collectionWriteOrigins.Clear();
+            _pendingBlocks.Clear();
+            _queuedBlocks.Clear();
             var entry = context.EntryBlock;
             if (context.Object.ContextType == TjsContextType.TopLevel)
             {
@@ -80,6 +146,10 @@ namespace Furikiri.Echo.Pass
             }
 
             BlockProcess(context, entry, exps);
+            while (_pendingBlocks.Count > 0)
+            {
+                BlockProcess(context, _pendingBlocks.Dequeue());
+            }
 
             //foreach (var variable in exps.Where(exp => exp.Value.Type == AstNodeType.LocalExpression).Select(exp =>
             //{
@@ -166,9 +236,36 @@ namespace Furikiri.Echo.Pass
                 return true;
             }
 
-            var data = block.InstructionDatas?.FirstOrDefault(item =>
-                ReferenceEquals(item.Instruction, instruction));
-            return data?.LiveOut != null && !data.LiveOut.Contains(resultSlot);
+            var instructionIndex = block?.Instructions?.IndexOf(instruction) ?? -1;
+            if (instructionIndex < 0 || block.InstructionDatas == null ||
+                block.InstructionDatas.Count != block.Instructions.Count)
+            {
+                return false;
+            }
+
+            // 先沿当前基本块检查真实的 use-def 链。调用后紧跟 TT/TF 的短路条件
+            // 很常见；若只依赖近似活跃集，可能既输出独立调用，又在条件中再输出一次。
+            for (var index = instructionIndex + 1;
+                 index < block.InstructionDatas.Count;
+                 index++)
+            {
+                var data = block.InstructionDatas[index];
+                if (data.Read.Contains(resultSlot))
+                {
+                    return false;
+                }
+
+                if (data.Write.Contains(resultSlot))
+                {
+                    return true;
+                }
+            }
+
+            // 结果流出当前块时仍会被后继消费；仅在块尾确认已经死亡时才作为
+            // 丢弃结果的独立调用输出。
+            var definingData = block.InstructionDatas[instructionIndex];
+            return definingData.LiveOut != null &&
+                   !definingData.LiveOut.Contains(resultSlot);
         }
 
         public void BlockProcess(DecompileContext context, Block block,
@@ -209,6 +306,13 @@ namespace Furikiri.Echo.Pass
 
                         if (expsList.All(e => e != null))
                         {
+                            if (TryCollapseReenteredCollectionState(
+                                    block, expsList, out var collectionState))
+                            {
+                                finalStates[k] = collectionState;
+                                continue;
+                            }
+
                             var first = expsList.First();
                             if (expsList.All(e => e.Equals(first)))
                             {
@@ -341,6 +445,44 @@ namespace Furikiri.Echo.Pass
                     }
                 }
 
+                if (SwapPatternRecognizer.TryMatch(block, i, out var swap))
+                {
+                    var left = BuildSwapOperand(context, ex, swap.LeftKind,
+                        swap.LeftSlot, swap.LeftObjectSlot, swap.LeftMemberSlot,
+                        swap.LeftMemberPath);
+                    var right = BuildSwapOperand(context, ex, swap.RightKind,
+                        swap.RightValueSlot, swap.ObjectSlot, swap.MemberSlot,
+                        swap.MemberPath);
+
+                    expList.Add(new BinaryExpression(left, right, BinaryOp.Swap));
+                    if (swap.LeftKind == SwapOperandKind.Register)
+                    {
+                        ex[swap.LeftSlot] = left;
+                    }
+                    else
+                    {
+                        ex.Remove(swap.TemporarySlot);
+                    }
+
+                    if (swap.RightKind == SwapOperandKind.Register)
+                    {
+                        ex[swap.RightValueSlot] = right;
+                    }
+                    else if (swap.LeftKind == SwapOperandKind.Register)
+                    {
+                        // 局部与属性交换时，属性读取临时槽在交叉写回后不再有
+                        // 源码级身份；保留左值仅供同一块的后续状态折叠。
+                        ex[swap.RightValueSlot] = left;
+                    }
+                    else
+                    {
+                        ex.Remove(swap.RightValueSlot);
+                    }
+                    ex.Remove(swap.TemporarySlot);
+                    i += swap.InstructionCount - 1;
+                    continue;
+                }
+
                 switch (ins.OpCode)
                 {
                     case OpCode.NOP:
@@ -445,6 +587,15 @@ namespace Furikiri.Echo.Pass
                                 ex[dst] = flag.Invert();
                                 break;
                         }
+                        if (ShouldEmitStandaloneCall(block, ins, dst))
+                        {
+                            // 被丢弃的比较结果仍可能包含 getter；只保留其可观察求值，
+                            // 不把已经死亡的比较标志误恢复成新的控制条件。
+                            var effects = new List<Expression>();
+                            ExpressionEffectAnalysis.CollectObservableEffects(ex[dst], effects);
+                            foreach (var effect in effects) effect.RequiresStandaloneEvaluation = true;
+                            expList.AddRange(effects.Select(effect => new ExpressionStatement(effect)));
+                        }
                     }
                         break;
                     case OpCode.TT:
@@ -485,6 +636,8 @@ namespace Furikiri.Echo.Pass
                     case OpCode.STR:
                     case OpCode.NUM:
                     case OpCode.OCTET:
+                    case OpCode.ASC:
+                    case OpCode.CHR:
                     case OpCode.LNOT:
                     case OpCode.INC:
                     case OpCode.DEC:
@@ -524,6 +677,14 @@ namespace Furikiri.Echo.Pass
                                 break;
                             case OpCode.OCTET:
                                 op = UnaryOp.ToByteArray;
+                                break;
+                            case OpCode.ASC:
+                                // ASC 对应 TJS2 的 # 运算符：取得字符串首字符的编码。
+                                op = UnaryOp.ToCharacterCode;
+                                break;
+                            case OpCode.CHR:
+                                // CHR 对应 TJS2 的 $ 运算符：由字符编码生成字符。
+                                op = UnaryOp.FromCharacterCode;
                                 break;
                             case OpCode.LNOT:
                                 op = UnaryOp.Not;
@@ -572,6 +733,14 @@ namespace Furikiri.Echo.Pass
                         }
 
                         var u = new UnaryExpression(dst, op);
+                        if (dstSlot > Const.ArgBase)
+                        {
+                            // 一元运算结果保存在 VM 临时槽时记录同一次求值身份。
+                            // switch(typeof value) 后续会反复比较该槽，但源码中的
+                            // typeof 只执行一次，不能在每个 case 前重新展开。
+                            u.CachedTemporarySlot = (short)dstSlot;
+                            u.CachedEvaluationId = ins.Line;
+                        }
                         if (dstSlot > 0)
                         {
                             ex[dstSlot] = u;
@@ -607,6 +776,33 @@ namespace Furikiri.Echo.Pass
 
                         //var u = new UnaryExpression(new IdentifierExpression(name), op) {Instance = ex[obj]};
                         var u = new UnaryExpression(new IdentifierExpression(name) {Instance = ex[obj]}, op);
+                        if (res > Const.ArgBase)
+                        {
+                            u.CachedTemporarySlot = (short)res;
+                            u.CachedEvaluationId = ins.Line;
+                        }
+                        // 后置成员自增会先用 GPD 读取旧值，再以 INCPD/DECPD 丢弃新值。
+                        // 两条指令必须合成 `object.member++` 并写回旧值快照；若分别输出
+                        // `object.member++` 和随后读取 `object.member`，调用实参会提前一位。
+                        if (op is UnaryOp.Inc or UnaryOp.Dec && res == 0 && i > 0 &&
+                            block.Instructions[i - 1].OpCode == OpCode.GPD)
+                        {
+                            var snapshot = block.Instructions[i - 1];
+                            var snapshotSlot = snapshot.GetRegisterSlot(0);
+                            var snapshotObject = snapshot.GetRegisterSlot(1);
+                            if (snapshotSlot > Const.ArgBase && snapshotObject == obj &&
+                                string.Equals(snapshot.Data.AsString(), name,
+                                    StringComparison.Ordinal))
+                            {
+                                ex[snapshotSlot] = new UnaryExpression(
+                                    new IdentifierExpression(name) { Instance = ex[obj] }, op)
+                                {
+                                    IsPrefix = false
+                                };
+                                break;
+                            }
+                        }
+
                         if (res != 0) //copy to %res
                         {
                             u.IsPrefix = true; // INCPD/DECPD 存储操作后的新值，语义上为前置运算符
@@ -644,6 +840,31 @@ namespace Furikiri.Echo.Pass
                         }
 
                         var u = new UnaryExpression(new PropertyAccessExpression(ex[name], ex[obj]), op);
+                        if (res > Const.ArgBase)
+                        {
+                            u.CachedTemporarySlot = (short)res;
+                            u.CachedEvaluationId = ins.Line;
+                        }
+                        // 动态成员的后置自增使用 GPI + INCPI/DECPI 保存旧值，处理原则
+                        // 与直接成员一致。对象槽和键槽都必须相同，避免跨表达式合并。
+                        if (op is UnaryOp.Inc or UnaryOp.Dec && res == 0 && i > 0 &&
+                            block.Instructions[i - 1].OpCode == OpCode.GPI)
+                        {
+                            var snapshot = block.Instructions[i - 1];
+                            var snapshotSlot = snapshot.GetRegisterSlot(0);
+                            if (snapshotSlot > Const.ArgBase &&
+                                snapshot.GetRegisterSlot(1) == obj &&
+                                snapshot.GetRegisterSlot(2) == name)
+                            {
+                                ex[snapshotSlot] = new UnaryExpression(
+                                    new PropertyAccessExpression(ex[name], ex[obj]), op)
+                                {
+                                    IsPrefix = false
+                                };
+                                break;
+                            }
+                        }
+
                         if (res != 0) //copy to %res
                         {
                             u.IsPrefix = true; // INCPI/DECPI 存储操作后的新值，语义上为前置运算符
@@ -762,12 +983,13 @@ namespace Furikiri.Echo.Pass
                         }
                         else if (ex.ContainsKey(dstSlot))
                         {
-                            //dst = ex[dstSlot];
-                            ex[dstSlot] = src;
+                            ex[dstSlot] = SnapshotCopiedEvaluation(
+                                src, (short)dstSlot, ins);
                         }
                         else if (dstSlot != 0)
                         {
-                            ex[dstSlot] = src;
+                            ex[dstSlot] = SnapshotCopiedEvaluation(
+                                src, (short)dstSlot, ins);
                         }
                     }
                         break;
@@ -876,7 +1098,16 @@ namespace Furikiri.Echo.Pass
                                 break;
                         }
 
-                        BinaryExpression b = new BinaryExpression(dst, src, op) {IsDeclaration = declare};
+                        BinaryExpression b = new BinaryExpression(dst, src, op)
+                        {
+                            IsDeclaration = declare,
+                            // ADD/BOR 等寄存器指令会原地改写目标寄存器。临时寄存器
+                            // 仍可作为普通表达式传播；参数和命名局部则必须保留成
+                            // `x += y` / `x |= y` 一类副作用语句。
+                            IsSelfAssignment = appendToExpList
+                        };
+
+                        MarkCachedEvaluation(b, (short)dstSlot, ins);
 
                         if (saveToEx)
                         {
@@ -1071,20 +1302,27 @@ namespace Furikiri.Echo.Pass
                     case OpCode.MULP:
                         break;
                     case OpCode.EVAL:
+                    {
+                        var srcSlot = ins.GetRegisterSlot(0);
+                        if (ex.TryGetValue(srcSlot, out var evalTarget))
+                        {
+                            // EVAL 会把字符串执行结果写回原寄存器。后续 CHGTHIS、调用
+                            // 或赋值必须读取求值后的对象，不能继续使用原字符串表达式。
+                            ex[srcSlot] = new UnaryExpression(
+                                evalTarget, UnaryOp.Eval);
+                        }
+                    }
                         break;
                     case OpCode.EEXP:
                     {
                         var srcSlot = ins.GetRegisterSlot(0);
                         if (ex.TryGetValue(srcSlot, out var evalTarget))
                         {
+                            // EEXP 丢弃执行结果，只保留一次独立的可观察求值语句。
                             var evalExpr = new UnaryExpression(evalTarget, UnaryOp.Eval);
                             expList.Add(evalExpr);
                         }
                     }
-                        break;
-                    case OpCode.ASC:
-                        break;
-                    case OpCode.CHR:
                         break;
                     //Invoke
                     case OpCode.CALL:
@@ -1127,8 +1365,10 @@ namespace Furikiri.Echo.Pass
                             }
                         }
 
-                        ex[dst] = call;
-                        if (ShouldEmitStandaloneCall(block, ins, dst))
+                        ex[dst] = MarkCachedEvaluation(call, (short)dst, ins);
+                        if (!ExpressionValueIdentity.TryMaterializeCrossBlockInvocation(
+                                context, block, ins, dst, call, ex, expList) &&
+                            ShouldEmitStandaloneCall(block, ins, dst))
                         {
                             expList.Add(call);
                         }
@@ -1175,8 +1415,10 @@ namespace Furikiri.Echo.Pass
                             }
                         }
 
-                        ex[dst] = call;
-                        if (ShouldEmitStandaloneCall(block, ins, dst))
+                        ex[dst] = MarkCachedEvaluation(call, (short)dst, ins);
+                        if (!ExpressionValueIdentity.TryMaterializeCrossBlockInvocation(
+                                context, block, ins, dst, call, ex, expList) &&
+                            ShouldEmitStandaloneCall(block, ins, dst))
                         {
                             //Handle RegExp()._compile("//g/[^A-Za-z]")
                             if (callMethodName == Const.RegExpCompile)
@@ -1243,8 +1485,10 @@ namespace Furikiri.Echo.Pass
                             }
                         }
 
-                        ex[dst] = call;
-                        if (ShouldEmitStandaloneCall(block, ins, dst))
+                        ex[dst] = MarkCachedEvaluation(call, (short)dst, ins);
+                        if (!ExpressionValueIdentity.TryMaterializeCrossBlockInvocation(
+                                context, block, ins, dst, call, ex, expList) &&
+                            ShouldEmitStandaloneCall(block, ins, dst))
                         {
                             expList.Add(call);
                         }
@@ -1282,8 +1526,15 @@ namespace Furikiri.Echo.Pass
                             }
                         }
 
-                        ex[dst] = call;
-                        if (ShouldEmitStandaloneCall(block, ins, dst))
+                        ex[dst] = MarkCachedEvaluation(call, (short)dst, ins);
+                        if (IsCollectionCtor(call))
+                        {
+                            _collectionConstructorOrigins[call] = ins;
+                            _collectionWriteOrigins[call] = new List<Instruction>();
+                        }
+                        if (!ExpressionValueIdentity.TryMaterializeCrossBlockInvocation(
+                                context, block, ins, dst, call, ex, expList) &&
+                            ShouldEmitStandaloneCall(block, ins, dst))
                         {
                             expList.Add(call);
                         }
@@ -1296,7 +1547,14 @@ namespace Furikiri.Echo.Pass
                         var instance = ex[slot];
                         var name = ins.Data.AsString();
                         var newId = new IdentifierExpression(name) {Instance = instance};
-                        ex[dst] = newId;
+                        ex[dst] = MarkCachedEvaluation(newId, dst, ins);
+                        if (ExpressionValueIdentity.TryMaterializeRepeatedMemberReceiver(
+                                context, block, ins, dst, newId, ex, expList)) break;
+                        if (ShouldEmitStandaloneCall(block, ins, dst))
+                        {
+                            newId.RequiresStandaloneEvaluation = true;
+                            expList.Add(newId);
+                        }
                     }
                         break;
                     case OpCode.GPDS:
@@ -1316,7 +1574,14 @@ namespace Furikiri.Echo.Pass
                         var name = ins.GetRegisterSlot(2);
 
                         PropertyAccessExpression p = new PropertyAccessExpression(ex[name], ex[obj]);
-                        ex[dst] = p;
+                        ex[dst] = MarkCachedEvaluation(p, dst, ins);
+                        if (ExpressionValueIdentity.TryMaterializeRepeatedMemberReceiver(
+                                context, block, ins, dst, p, ex, expList)) break;
+                        if (ShouldEmitStandaloneCall(block, ins, dst))
+                        {
+                            p.RequiresStandaloneEvaluation = true;
+                            expList.Add(p);
+                        }
                     }
                         break;
                     case OpCode.GPIS:
@@ -1336,18 +1601,41 @@ namespace Furikiri.Echo.Pass
                         var name = ins.GetRegisterSlot(1);
                         var src = ins.GetRegisterSlot(2);
 
-                        // 如果目标是字典构造器，将键值对合并到构造器参数中
-                        // 这样 new Dict() + spis key, val 会变成 %[ key => val ]
+                        // 匿名集合由 NEW 建立后，编译器常用连续 SPIS 填充元素。
+                        // 这里直接并回同一个构造表达式，避免把同一临时对象展开成
+                        // `([])[0] = ...; setValue([]);` 这类语义错误的多个新数组。
                         if (ins.OpCode == OpCode.SPIS &&
-                            ex[obj] is InvokeExpression dictCtor &&
-                            dictCtor.InvokeType == InvokeType.Ctor &&
-                            IsCollectionCtor(dictCtor) &&
-                            dictCtor.MethodExpression is IdentifierExpression dictId &&
-                            dictId.FullName == "global.Dictionary")
+                            ex[obj] is InvokeExpression collectionCtor &&
+                            collectionCtor.InvokeType == InvokeType.Ctor &&
+                            IsCollectionCtor(collectionCtor) &&
+                            collectionCtor.MethodExpression is IdentifierExpression collectionId)
                         {
-                            dictCtor.Parameters.Add(ex[name]);  // key
-                            dictCtor.Parameters.Add(ex[src]);   // value
-                            break;
+                            // 合流块可能从多个前驱请求同一最终状态。同一条 SPIS 对
+                            // 同一个构造器只折叠一次；若递归重入产生了新的构造器实例，
+                            // 则必须为新实例重新聚合元素，不能留下空字典/数组。
+                            if (!_foldedCollectionWrites.Add((ins, collectionCtor)))
+                            {
+                                break;
+                            }
+
+                            _collectionWriteOrigins.TryAdd(
+                                collectionCtor, new List<Instruction>());
+                            _collectionWriteOrigins[collectionCtor].Add(ins);
+
+                            if (collectionId.FullName == "global.Dictionary")
+                            {
+                                collectionCtor.Parameters.Add(ex[name]);  // key
+                                collectionCtor.Parameters.Add(ex[src]);   // value
+                                break;
+                            }
+
+                            if (collectionId.FullName == "global.Array" &&
+                                ex[name] is ConstantExpression { Variant: TjsInt arrayIndex } &&
+                                arrayIndex.IntValue == collectionCtor.Parameters.Count)
+                            {
+                                collectionCtor.Parameters.Add(ex[src]);
+                                break;
+                            }
                         }
 
                         Expression left = new PropertyAccessExpression(ex[name], ex[obj]);
@@ -1401,6 +1689,19 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.SETP:
                     {
+                        var propertyObjectSlot = ins.GetRegisterSlot(0);
+                        var valueSlot = ins.GetRegisterSlot(1);
+                        if (ex.TryGetValue(propertyObjectSlot, out var propertyObject) &&
+                            ex.TryGetValue(valueSlot, out var value))
+                        {
+                            // SETP 与 GETP 分别对应属性对象的一元 * 写入和读取。
+                            // 属性对象可能先经过 CHGTHIS 改绑上下文，因此这里必须
+                            // 保留完整表达式，不能退化成普通成员赋值或直接忽略。
+                            var left = new UnaryExpression(
+                                propertyObject, UnaryOp.PropertyObject);
+                            expList.Add(new BinaryExpression(
+                                left, value, BinaryOp.Assign));
+                        }
                     }
                         break;
                     case OpCode.GETP:
@@ -1507,11 +1808,20 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
-            // 后处理：将赋值内联到后续调用参数中。
+            // 同一寄存器值被连续写入多个目标时，恢复为链式赋值，确保调用、构造
+            // 等右值只求值一次。
+            CollapseChainedAssignments(expList);
+
+            // 后处理：将赋值内联到后续调用的真实消费位置中。
             // 检测模式：expList[i] = BinaryExpression(Assign, left, right)，
-            // 且 expList[j>i] 是 InvokeExpression，其某个参数与 right 是同一引用。
-            // 此时将该参数替换为赋值表达式本身，实现 foo(obj.prop = val) 的内联。
-            InlineAssignmentIntoCallArgs(expList);
+            // 且 expList[j>i] 是 InvokeExpression，其接收者、方法表达式或参数与
+            // right 是同一节点。此时用完整赋值替换该次消费，既恢复赋值表达式的
+            // 返回值，也保证构造器、调用等有副作用的右值只执行一次。
+            ExpressionValueIdentity.InlineAssignmentsIntoCallConsumers(expList);
+
+            // with(call()) 会把同一次控制对象求值展开为多个相邻的成员读取。
+            // 在表达式阶段重新引入局部缓存，避免 getter/函数被重复执行。
+            HoistRepeatedMemberReceiverInvocations(context, expList);
 
             expList.RemoveAll(node => node is Expression exp && exp.Parent != null);
 
@@ -1519,83 +1829,348 @@ namespace Furikiri.Echo.Pass
             ex[Const.FlagReg] = flag;
             context.BlockFinalStates[block] = new Dictionary<int, Expression>(ex);
 
-            //Process next
+            // 后继改由工作队列推进，避免大型对象的一条长顺序 CFG 直接形成同样深度的
+            // C# 调用栈。汇合块若仍有较早的未处理前驱，方法开头的前驱恢复逻辑仍会
+            // 先补齐该路径；队列中的重复节点随后会因已有最终状态而直接返回。
             foreach (var succ in block.To)
             {
-                //BlockProcess(context, succ, new Dictionary<int, Expression>(ex)); //TODO: validate if deep copy ex is correct
-                BlockProcess(context, succ);
+                if (succ != null &&
+                    !context.BlockFinalStates.ContainsKey(succ) &&
+                    _queuedBlocks.Add(succ))
+                {
+                    _pendingBlocks.Enqueue(succ);
+                }
+            }
+
+        }
+
+        /// <summary>
+        /// 前向汇合块在补齐最后一个前驱时可能被递归重入。若重入已经执行了当前块
+        /// 的 SPIS，来自同一条 NEW 的某个集合副本会比另一个副本多出当前块字段，
+        /// 普通 Phi 合并便会把它误判为条件字典。这里只撤销这种“未来写入”：
+        /// 构造指令必须相同、既有写入序列必须是前缀，且所有额外写入都属于当前块。
+        /// 分支内部真实发生的集合修改来自前驱块，因此不会命中本规则。
+        /// </summary>
+        private bool TryCollapseReenteredCollectionState(
+            Block mergeBlock, IReadOnlyList<Expression> states,
+            out Expression collapsed)
+        {
+            collapsed = null;
+            var constructors = states.OfType<InvokeExpression>().ToList();
+            if (constructors.Count != states.Count || constructors.Count < 2 ||
+                constructors.Any(constructor => !IsCollectionCtor(constructor) ||
+                    !_collectionConstructorOrigins.ContainsKey(constructor) ||
+                    !_collectionWriteOrigins.ContainsKey(constructor)))
+            {
+                return false;
+            }
+
+            var origin = _collectionConstructorOrigins[constructors[0]];
+            if (constructors.Any(constructor =>
+                    !ReferenceEquals(_collectionConstructorOrigins[constructor], origin)))
+            {
+                return false;
+            }
+
+            var shortest = constructors
+                .OrderBy(constructor => _collectionWriteOrigins[constructor].Count)
+                .First();
+            var prefix = _collectionWriteOrigins[shortest];
+            if (constructors.All(constructor =>
+                    _collectionWriteOrigins[constructor].Count == prefix.Count))
+            {
+                return false;
+            }
+
+            foreach (var constructor in constructors)
+            {
+                var writes = _collectionWriteOrigins[constructor];
+                if (writes.Count < prefix.Count ||
+                    !writes.Take(prefix.Count).SequenceEqual(prefix) ||
+                    writes.Skip(prefix.Count).Any(instruction =>
+                        !mergeBlock.Instructions.Contains(instruction)))
+                {
+                    return false;
+                }
+            }
+
+            collapsed = shortest;
+            return true;
+        }
+
+        /// <summary>
+        /// VM 会把 `outer = inner = call()` 编译为一次 call 后连续两条属性/局部写入。
+        /// 表达式传播让两条赋值共享同一个右值 AST；若直接逐条输出，调用或构造器会
+        /// 被执行两次。按连续共享引用分组，从最先执行的内层赋值向外重新嵌套。
+        /// </summary>
+        private static void CollapseChainedAssignments(List<IAstNode> statements)
+        {
+            if (statements == null || statements.Count < 2)
+            {
+                return;
+            }
+
+            for (var index = 0; index < statements.Count - 1; index++)
+            {
+                if (statements[index] is not BinaryExpression first ||
+                    first.Op != BinaryOp.Assign)
+                {
+                    continue;
+                }
+
+                var sharedRight = first.Right;
+                var end = index + 1;
+                while (end < statements.Count &&
+                       statements[end] is BinaryExpression next &&
+                       next.Op == BinaryOp.Assign &&
+                       ReferenceEquals(next.Right, sharedRight))
+                {
+                    end++;
+                }
+
+                if (end == index + 1)
+                {
+                    continue;
+                }
+
+                // `var` 只能位于最外层赋值。编译器生成的链式声明满足此约束；
+                // 若遇到不合法的中间声明则保守保留原语句，避免生成嵌套 var。
+                if (statements.Skip(index).Take(end - index - 1)
+                    .OfType<BinaryExpression>().Any(assignment => assignment.IsDeclaration))
+                {
+                    continue;
+                }
+
+                first.Right.Parent = first;
+                Expression chain = first;
+                for (var current = index + 1; current < end; current++)
+                {
+                    var assignment = (BinaryExpression)statements[current];
+                    chain = new BinaryExpression(
+                        assignment.Left, chain, BinaryOp.Assign)
+                    {
+                        IsDeclaration = assignment.IsDeclaration
+                    };
+                }
+
+                statements[index] = chain;
+                statements.RemoveRange(index + 1, end - index - 1);
             }
         }
 
         /// <summary>
-        /// 将赋值表达式内联到后续调用参数中。
-        /// 当赋值的右侧表达式被后续调用作为参数使用时，
-        /// 将参数替换为整个赋值表达式（如 foo(a = expr)）。
-        /// 同时处理 ConditionExpression 中的调用（包括被 NOT 包装的情况）。
+        /// 恢复 `with (call())` 一类控制对象的单次求值。一个调用结果寄存器可能被
+        /// 多条成员读取指令共享；表达式状态中的这些读取会指向同一个调用节点。
+        /// 只按节点身份合并，两个文本相同但分别执行的调用不会被误认为同一次求值。
         /// </summary>
-        private static void InlineAssignmentIntoCallArgs(List<IAstNode> expList)
+        private static void HoistRepeatedMemberReceiverInvocations(
+            DecompileContext context, List<IAstNode> statements)
         {
-            for (int i = expList.Count - 2; i >= 0; i--)
+            if (context == null || statements == null || statements.Count == 0)
             {
-                if (expList[i] is not BinaryExpression assign || assign.Op != BinaryOp.Assign)
-                    continue;
+                return;
+            }
 
-                // 跳过真正的声明（不应内联 var a = x 到调用参数）
-                // 属性赋值（如 System.appLockKey = ...）虽可能被误标为声明，但仍可内联
-                if (assign.IsDeclaration &&
-                    assign.Left is IdentifierExpression leftId &&
-                    leftId.Instance == null)
-                    continue;
+            var occurrences = new List<(
+                InvokeExpression Invocation,
+                Action<Expression> Replace,
+                string Member,
+                int StatementIndex)>();
 
-                var right = assign.Right;
-                bool inlined = false;
-
-                // 向后查找使用同一引用的调用表达式
-                for (int j = i + 1; j < expList.Count && !inlined; j++)
+            void Walk(Expression expression, int statementIndex)
+            {
+                if (expression == null)
                 {
-                    if (expList[j] is InvokeExpression invoke)
-                    {
-                        if (TryInlineIntoInvoke(invoke, right, assign))
-                        {
-                            inlined = true;
-                        }
-                    }
+                    return;
+                }
 
-                    // 也检查 ConditionExpression 内部的 InvokeExpression
-                    // TF 指令会对表达式调用 Invert()，产生 UnaryExpression(Not, InvokeExpression)
-                    if (!inlined && expList[j] is ConditionExpression condExpr)
+                void RecordReceiver(
+                    InvokeExpression receiver, Action<Expression> replace, string member)
+                {
+                    occurrences.Add((receiver, replace, member ?? string.Empty, statementIndex));
+                    Walk(receiver.Instance, statementIndex);
+                    Walk(receiver.MethodExpression, statementIndex);
+                    foreach (var parameter in receiver.Parameters)
                     {
-                        // 从条件中提取 InvokeExpression（可能被 NOT 包装）
-                        var condTarget = condExpr.Condition;
-                        if (condTarget is UnaryExpression unary && unary.Op == UnaryOp.Not)
-                            condTarget = unary.Target;
-
-                        if (condTarget is InvokeExpression condInvoke &&
-                            TryInlineIntoInvoke(condInvoke, right, assign))
-                        {
-                            inlined = true;
-                        }
+                        Walk(parameter, statementIndex);
                     }
                 }
+
+                switch (expression)
+                {
+                    case IdentifierExpression identifier:
+                        if (identifier.Instance is InvokeExpression identifierReceiver)
+                        {
+                            RecordReceiver(identifierReceiver,
+                                replacement => identifier.Instance = replacement,
+                                identifier.Name);
+                        }
+                        else
+                        {
+                            Walk(identifier.Instance, statementIndex);
+                        }
+                        break;
+                    case PropertyAccessExpression property:
+                        if (property.Instance is InvokeExpression propertyReceiver)
+                        {
+                            RecordReceiver(propertyReceiver,
+                                replacement => property.Instance = replacement,
+                                property.Property?.ToString());
+                        }
+                        else
+                        {
+                            Walk(property.Instance, statementIndex);
+                        }
+                        Walk(property.Property, statementIndex);
+                        break;
+                    case InvokeExpression invocation:
+                        if (invocation.InvokeType == InvokeType.RegExpCompile)
+                        {
+                            // RegExp 构造器与紧随其后的 _compile 是一个正则字面量
+                            // 的 VM 展开形式，写出时会合并为 `/.../flags`。构造器实例
+                            // 不是第二次可见消费，不能因 AST 内部引用而额外缓存并输出。
+                            Walk(invocation.MethodExpression, statementIndex);
+                            foreach (var parameter in invocation.Parameters)
+                            {
+                                Walk(parameter, statementIndex);
+                            }
+                            break;
+                        }
+
+                        if (invocation.Instance is InvokeExpression invocationReceiver)
+                        {
+                            RecordReceiver(invocationReceiver,
+                                replacement => invocation.Instance = replacement,
+                                invocation.MethodName ?? invocation.MethodExpression?.ToString());
+                        }
+                        else
+                        {
+                            Walk(invocation.Instance, statementIndex);
+                        }
+                        Walk(invocation.MethodExpression, statementIndex);
+                        foreach (var parameter in invocation.Parameters)
+                        {
+                            Walk(parameter, statementIndex);
+                        }
+                        break;
+                    case BinaryExpression binary:
+                        Walk(binary.Left, statementIndex);
+                        Walk(binary.Right, statementIndex);
+                        break;
+                    case UnaryExpression unary:
+                        Walk(unary.Target, statementIndex);
+                        break;
+                    case ConditionExpression condition:
+                        Walk(condition.Condition, statementIndex);
+                        break;
+                    case ReturnExpression ret:
+                        Walk(ret.Return, statementIndex);
+                        break;
+                    case ThrowExpression thrown:
+                        Walk(thrown.Target, statementIndex);
+                        break;
+                    case DeleteExpression delete:
+                        Walk(delete.Instance, statementIndex);
+                        Walk(delete.IdentifierExpression, statementIndex);
+                        break;
+                    case PhiExpression phi:
+                        foreach (var possible in phi.PossibleExpressions)
+                        {
+                            Walk(possible, statementIndex);
+                        }
+                        break;
+                }
+            }
+
+            for (var index = 0; index < statements.Count; index++)
+            {
+                if (statements[index] is Expression expression)
+                {
+                    Walk(expression, index);
+                }
+            }
+
+            var groups = new List<List<(
+                InvokeExpression Invocation,
+                Action<Expression> Replace,
+                string Member,
+                int StatementIndex)>>();
+            foreach (var occurrence in occurrences)
+            {
+                var group = groups.FirstOrDefault(candidate =>
+                    ReferenceEquals(candidate[0].Invocation, occurrence.Invocation));
+                if (group == null)
+                {
+                    group = new List<(
+                        InvokeExpression Invocation,
+                        Action<Expression> Replace,
+                        string Member,
+                        int StatementIndex)>();
+                    groups.Add(group);
+                }
+                group.Add(occurrence);
+            }
+
+            var insertionOffset = 0;
+            foreach (var group in groups
+                         .Where(group => group.Count >= 2)
+                         .OrderBy(group => group.Min(item => item.StatementIndex)))
+            {
+                var variable = ExpressionValueIdentity.CreateSyntheticVariable(context);
+                var invocation = group[0].Invocation;
+                foreach (var occurrence in group)
+                {
+                    occurrence.Replace(new LocalExpression(variable));
+                }
+
+                var declaration = new BinaryExpression(
+                    new LocalExpression(variable), invocation, BinaryOp.Assign)
+                {
+                    IsDeclaration = true
+                };
+                statements.Insert(
+                    group.Min(item => item.StatementIndex) + insertionOffset,
+                    declaration);
+                insertionOffset++;
             }
         }
 
-        /// <summary>
-        /// 尝试将赋值表达式内联到调用的参数中。
-        /// </summary>
-        private static bool TryInlineIntoInvoke(InvokeExpression invoke, Expression right, BinaryExpression assign)
+        private static Expression BuildSwapOperand(
+            DecompileContext context, IReadOnlyDictionary<int, Expression> expressions,
+            SwapOperandKind kind, short registerSlot, short objectSlot,
+            short memberSlot, IReadOnlyList<string> memberPath)
         {
-            for (int k = 0; k < invoke.Parameters.Count; k++)
+            if (kind == SwapOperandKind.Register)
             {
-                if (ReferenceEquals(invoke.Parameters[k], right))
-                {
-                    invoke.Parameters[k] = assign;
-                    assign.Parent = invoke;
-                    return true;
-                }
+                return GetLocalExpression(context, registerSlot);
             }
 
-            return false;
+            var instance = expressions[objectSlot];
+            if (kind == SwapOperandKind.IndirectProperty)
+            {
+                if (memberPath != null)
+                {
+                    foreach (var memberName in memberPath)
+                    {
+                        instance = new IdentifierExpression(memberName)
+                        {
+                            Instance = instance
+                        };
+                    }
+                }
+                return new PropertyAccessExpression(
+                    expressions[memberSlot], instance);
+            }
+
+            Expression result = instance;
+            foreach (var memberName in memberPath)
+            {
+                result = new IdentifierExpression(memberName)
+                {
+                    Instance = result
+                };
+            }
+            return result;
         }
 
         private static LocalExpression GetLocalExpression(DecompileContext context, short slot)
@@ -1621,7 +2196,14 @@ namespace Furikiri.Echo.Pass
                 return;
             }
 
-            if (froms.Count > 3 && TryAnnotateMultiValueDecisionPhi(mergeBlock, froms, phi))
+            // 普通值的三路 Phi 必须先按完整决策图求值。仅用“某条件能否到达
+            // 哪些前驱”来划分内外层，在短路路径重新汇合时会把中间守卫漏掉。
+            // FlagReg 仍优先走下面更紧凑的布尔形态恢复，失败后再使用决策图。
+            if ((froms.Count > 3 ||
+                 froms.Count == 3 &&
+                 (phi.Slot != Const.FlagReg ||
+                  phi.PossibleExpressions.All(IsInvocationValue))) &&
+                TryAnnotateDecisionGraphPhi(mergeBlock, froms, phi))
             {
                 return;
             }
@@ -1629,6 +2211,18 @@ namespace Furikiri.Echo.Pass
             if (froms.Count == 3 && TryAnnotateNestedConditionalPhi(mergeBlock, froms, phi))
             {
                 return;
+            }
+
+            if (froms.Count == 3 && TryAnnotateDecisionGraphPhi(mergeBlock, froms, phi))
+            {
+                return;
+            }
+
+            static bool IsInvocationValue(Expression expression)
+            {
+                return expression is InvokeExpression ||
+                       expression is PhiExpression nested &&
+                       nested.PossibleExpressions.All(IsInvocationValue);
             }
 
             if (froms.Count != 2)
@@ -2183,7 +2777,7 @@ namespace Furikiri.Echo.Pass
             return false;
         }
 
-        private static bool TryAnnotateMultiValueDecisionPhi(
+        private static bool TryAnnotateDecisionGraphPhi(
             Block mergeBlock, List<Block> froms, PhiExpression phi)
         {
             var values = new Dictionary<Block, Expression>();
@@ -2231,8 +2825,42 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
+            bool DominatesMerge(Block candidate)
+            {
+                // 从 merge 的每个入口反向搜索；遇到 candidate 就截断该路径。
+                // 若还能到达 CFG 入口，说明存在绕过 candidate 的求值路径，
+                // 以它为根构造出的表达式必然会遗漏那条路径上的守卫。
+                var reverse = new Stack<Block>(froms.Distinct());
+                var visited = new HashSet<Block>();
+                while (reverse.Count > 0)
+                {
+                    var current = reverse.Pop();
+                    if (current == candidate || !visited.Add(current))
+                    {
+                        continue;
+                    }
+
+                    if (current.From.Count == 0)
+                    {
+                        return false;
+                    }
+
+                    foreach (var previous in current.From)
+                    {
+                        reverse.Push(previous);
+                    }
+                }
+
+                return true;
+            }
+
             foreach (var root in candidates.OrderByDescending(block => block.Start))
             {
+                if (!DominatesMerge(root))
+                {
+                    continue;
+                }
+
                 var visiting = new HashSet<Block>();
                 (Expression Expression, HashSet<Block> Used)? Build(Block current)
                 {

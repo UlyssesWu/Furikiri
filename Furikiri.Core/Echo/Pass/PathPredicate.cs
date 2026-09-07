@@ -1,6 +1,6 @@
-using System;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
+using System.Collections.Generic;
 
 namespace Furikiri.Echo.Pass
 {
@@ -75,9 +75,34 @@ namespace Furikiri.Echo.Pass
 
             var trueExpression = whenTrue.Expression;
             var falseExpression = whenFalse.Expression;
-            if (AreEquivalent(trueExpression, falseExpression))
+            if (ExpressionStructuralComparer.AreEquivalent(trueExpression, falseExpression))
             {
                 return From(trueExpression);
+            }
+
+            // A ? (X op C) : (Y op C) => (A ? X : Y) op C。
+            // 只提取两个分支最右侧的公共项：分支判定、X/Y、C 的求值顺序
+            // 与原字节码一致；任意位置的交换律提取可能移动带调用的表达式。
+            if (TryCombineWithCommonTrailingFactor(
+                    condition, trueExpression, falseExpression,
+                    BinaryOp.LogicOr, out var commonFactored) ||
+                TryCombineWithCommonTrailingFactor(
+                    condition, trueExpression, falseExpression,
+                    BinaryOp.LogicAnd, out commonFactored))
+            {
+                return From(commonFactored);
+            }
+
+            // A ? X : (B && X) || Y
+            //   => ((A || B) && X) || (!A && Y)。
+            // 这是短路条件编译后常见的 Shannon 展开。要求 A 稳定、B 位于 X
+            // 之前且整项位于 Y 之前，从而不会改变调用的先后或执行次数。
+            if (TryFactorGuardedAlternative(
+                    condition, trueExpression, falseExpression, out var guardedFactored) ||
+                TryFactorGuardedAlternative(
+                    condition.Invert(), falseExpression, trueExpression, out guardedFactored))
+            {
+                return From(guardedFactored);
             }
 
             // A ? (X || Y) : X  =>  (A && Y) || X。
@@ -127,11 +152,143 @@ namespace Furikiri.Echo.Pass
                 BinaryOp.LogicOr));
         }
 
+        private static bool TryCombineWithCommonTrailingFactor(
+            Expression condition,
+            Expression trueExpression,
+            Expression falseExpression,
+            BinaryOp op,
+            out Expression result)
+        {
+            result = null;
+            if (!TrySplitTrailingFactor(trueExpression, op,
+                    out var trueCore, out var trueTail) ||
+                !TrySplitTrailingFactor(falseExpression, op,
+                    out var falseCore, out var falseTail) ||
+                !ExpressionStructuralComparer.AreEquivalent(trueTail, falseTail))
+            {
+                return false;
+            }
+
+            var combinedCore = Combine(condition, From(trueCore), From(falseCore));
+            if (combinedCore?.Expression == null)
+            {
+                return false;
+            }
+
+            result = CombineBoolean(combinedCore.Expression, trueTail, op);
+            return true;
+        }
+
+        private static bool TryFactorGuardedAlternative(
+            Expression commonCondition,
+            Expression commonExpression,
+            Expression alternative,
+            out Expression result)
+        {
+            result = null;
+            if (!IsStableAssumption(commonCondition))
+            {
+                return false;
+            }
+
+            var terms = new List<Expression>();
+            CollectBooleanTerms(alternative, BinaryOp.LogicOr, terms);
+            if (terms.Count == 0 ||
+                !TrySplitTrailingFactor(terms[0], BinaryOp.LogicAnd,
+                    out var guard, out var guardedExpression) ||
+                !ExpressionStructuralComparer.AreEquivalent(
+                    guardedExpression, commonExpression))
+            {
+                return false;
+            }
+
+            var guardedCommon = CombineBoolean(
+                CombineBoolean(commonCondition, guard, BinaryOp.LogicOr),
+                commonExpression,
+                BinaryOp.LogicAnd);
+
+            if (terms.Count == 1)
+            {
+                result = guardedCommon;
+                return true;
+            }
+
+            var remainder = RebuildBooleanTerms(terms, 1, BinaryOp.LogicOr);
+            result = CombineBoolean(
+                guardedCommon,
+                CombineBoolean(commonCondition.Invert(), remainder, BinaryOp.LogicAnd),
+                BinaryOp.LogicOr);
+            return true;
+        }
+
+        private static bool TrySplitTrailingFactor(
+            Expression expression, BinaryOp op, out Expression core, out Expression factor)
+        {
+            core = null;
+            factor = null;
+            if (expression is not BinaryExpression binary || binary.Op != op)
+            {
+                return false;
+            }
+
+            core = binary.Left;
+            factor = binary.Right;
+            return true;
+        }
+
+        private static void CollectBooleanTerms(
+            Expression expression, BinaryOp op, ICollection<Expression> terms)
+        {
+            if (expression is BinaryExpression binary && binary.Op == op)
+            {
+                CollectBooleanTerms(binary.Left, op, terms);
+                CollectBooleanTerms(binary.Right, op, terms);
+                return;
+            }
+
+            terms.Add(expression);
+        }
+
+        private static Expression RebuildBooleanTerms(
+            IReadOnlyList<Expression> terms, int start, BinaryOp op)
+        {
+            var result = terms[start];
+            for (var i = start + 1; i < terms.Count; i++)
+            {
+                result = CombineBoolean(result, terms[i], op);
+            }
+
+            return result;
+        }
+
         private static Expression CombineBoolean(Expression left, Expression right, BinaryOp op)
         {
-            if (AreEquivalent(left, right))
+            if (ExpressionStructuralComparer.AreEquivalent(left, right))
             {
                 return left;
+            }
+
+            // `A && (...)` 的右侧只会在 A 为真时求值，`A || (...)` 则只会在
+            // A 为假时求值。路径合并容易把已经确定的 A/!A 再写进右侧分支，
+            // 形成 `A && (B || !A && C)` 一类冗余式。仅对不含调用、赋值的
+            // 稳定条件代入已知真值，既缩短谓词，也不改变副作用求值次数。
+            if (IsStableAssumption(left))
+            {
+                var simplifiedRight = SimplifyUnderAssumption(
+                    right, left, op == BinaryOp.LogicAnd);
+                if (simplifiedRight.Constant == (op == BinaryOp.LogicAnd))
+                {
+                    return left;
+                }
+
+                if (simplifiedRight.Expression != null)
+                {
+                    right = simplifiedRight.Expression;
+                    if (ExpressionStructuralComparer.AreEquivalent(left, right))
+                    {
+                        return left;
+                    }
+                }
             }
 
             var absorbingOp = op == BinaryOp.LogicOr ? BinaryOp.LogicAnd : BinaryOp.LogicOr;
@@ -147,6 +304,72 @@ namespace Furikiri.Echo.Pass
         }
 
         /// <summary>
+        /// 在已知某个稳定条件真/假的前提下折叠逻辑树。返回常量时不直接生成
+        /// TJS 字面量，而由调用方结合外层短路运算应用恒等律。
+        /// </summary>
+        private static PathPredicate SimplifyUnderAssumption(
+            Expression expression, Expression assumption, bool assumptionValue)
+        {
+            if (ExpressionStructuralComparer.AreEquivalent(expression, assumption))
+            {
+                return assumptionValue ? True() : False();
+            }
+
+            var inverted = assumption.Invert();
+            if (ExpressionStructuralComparer.AreEquivalent(expression, inverted))
+            {
+                return assumptionValue ? False() : True();
+            }
+
+            if (expression is not BinaryExpression binary ||
+                binary.Op is not (BinaryOp.LogicAnd or BinaryOp.LogicOr))
+            {
+                return From(expression);
+            }
+
+            var left = SimplifyUnderAssumption(
+                binary.Left, assumption, assumptionValue);
+            var right = SimplifyUnderAssumption(
+                binary.Right, assumption, assumptionValue);
+            if (binary.Op == BinaryOp.LogicAnd)
+            {
+                if (left.Constant == false || right.Constant == false) return False();
+                if (left.Constant == true) return right;
+                if (right.Constant == true) return left;
+            }
+            else
+            {
+                if (left.Constant == true || right.Constant == true) return True();
+                if (left.Constant == false) return right;
+                if (right.Constant == false) return left;
+            }
+
+            if (left.Expression == null || right.Expression == null)
+            {
+                return From(expression);
+            }
+
+            return From(binary.Op == BinaryOp.LogicAnd
+                ? left.Expression.And(right.Expression)
+                : left.Expression.Or(right.Expression));
+        }
+
+        private static bool IsStableAssumption(Expression expression)
+        {
+            return expression switch
+            {
+                ConstantExpression or LocalExpression or IdentifierExpression => true,
+                UnaryExpression unary when unary.Op is not (UnaryOp.Inc or UnaryOp.Dec or
+                    UnaryOp.Invalidate or UnaryOp.Eval) => IsStableAssumption(unary.Target),
+                BinaryExpression binary when binary.Op is not BinaryOp.Assign &&
+                                             !binary.IsSelfAssignment &&
+                                             !binary.Op.CanSelfAssign() =>
+                    IsStableAssumption(binary.Left) && IsStableAssumption(binary.Right),
+                _ => false
+            };
+        }
+
+        /// <summary>
         /// 从同一逻辑运算树中删除一个公共因子，并返回剩余表达式。
         /// 递归处理结合律展开后的多项条件，例如 X || Y || Z。
         /// </summary>
@@ -159,13 +382,13 @@ namespace Furikiri.Echo.Pass
                 return false;
             }
 
-            if (AreEquivalent(binary.Left, factor))
+            if (ExpressionStructuralComparer.AreEquivalent(binary.Left, factor))
             {
                 remainder = binary.Right;
                 return true;
             }
 
-            if (AreEquivalent(binary.Right, factor))
+            if (ExpressionStructuralComparer.AreEquivalent(binary.Right, factor))
             {
                 remainder = binary.Left;
                 return true;
@@ -186,11 +409,5 @@ namespace Furikiri.Echo.Pass
             return false;
         }
 
-        private static bool AreEquivalent(Expression left, Expression right)
-        {
-            return ReferenceEquals(left, right) ||
-                   left != null && right != null && left.GetType() == right.GetType() &&
-                   string.Equals(left.ToString(), right.ToString(), StringComparison.Ordinal);
-        }
     }
 }
