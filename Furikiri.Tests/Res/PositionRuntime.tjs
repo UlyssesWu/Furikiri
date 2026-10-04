@@ -1,0 +1,47 @@
+function apply(actions, skip, hidden) {
+    var trace="", seen=%[];
+    var count=actions!==void?actions.count:0;
+    for(var i=0;i<count;i++) {
+        var item=actions[i];
+        if(item===void) {trace+="V";continue;}
+        if(typeof item=="Integer") {trace+="I";continue;}
+        var name=item[0], value=item[1];
+        if((value instanceof "Array" && !skip) || (value!==void && !hidden)) {
+            if(!seen[name] || value===void) {trace+="D";seen[name]=1;}
+            if(value instanceof "Array") {trace+="A";continue;}
+            if(value!==void && typeof value!="Object") {
+                if(typeof value!="String") {
+                    var x=item.count>2?item[2]:0;
+                    var y=item.count>3?item[3]:0;
+                    trace+=name+":"+value+":"+x+":"+y+";";
+                    continue;
+                }
+                if(value.charAt(0)=="#") trace+=value.substr(1);
+            }
+        }
+    }
+    return trace;
+}
+var actions=[["x",-200],["x",200],["zoom",150],["act",[1]],void,1,["str","#hello"],["obj",%[]]];
+global.__validationResult="";
+for(var flags=0;flags<4;flags++) {
+    if(flags) global.__validationResult+="|";
+    global.__validationResult+=apply(actions,!!(flags&1),!!(flags&2));
+}
+var probeTrace="";
+function probe(label,value) {probeTrace+=label;return value;}
+function sharedConditionalBody(a,b,c,d,inner) {
+    var result="";
+    for(var n=0;n<2;n++) {
+        if((probe("A",a)&&probe("B",b)) || (probe("C",c)&&probe("D",d))) {
+            if(inner || n==0) result+="P";
+            result+="T";
+        }
+    }
+    return result;
+}
+for(var mask=0;mask<32;mask++) {
+    probeTrace="";
+    var value=sharedConditionalBody(!!(mask&1),!!(mask&2),!!(mask&4),!!(mask&8),!!(mask&16));
+    global.__validationResult+="|"+probeTrace+":"+value;
+}

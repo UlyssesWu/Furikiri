@@ -35,9 +35,12 @@ namespace Furikiri.Echo.Language
         internal IReadOnlyCollection<string> HoistedDeclarations =>
             _hoistedDeclarations.OrderBy(name => name, StringComparer.Ordinal).ToArray();
 
+        private bool _vmLocalsOnly;
+
         internal HashSet<BinaryExpression> Analyze(
-            BlockStatement body, bool allowMethodLocalHoisting = true)
+            BlockStatement body, bool allowMethodLocalHoisting = true, bool vmLocalsOnly = false)
         {
+            _vmLocalsOnly = vmLocalsOnly;
             Walk(body);
             if (!allowMethodLocalHoisting)
             {
@@ -316,8 +319,9 @@ namespace Furikiri.Echo.Language
             Walk(binary.Right);
         }
 
-        private static string TryGetDeclaredName(Expression expression)
+        private string TryGetDeclaredName(Expression expression)
         {
+            if (_vmLocalsOnly && expression is not LocalExpression) return null;
             return expression switch
             {
                 LocalExpression local => local.ToString(),

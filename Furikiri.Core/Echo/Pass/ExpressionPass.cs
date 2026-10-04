@@ -117,7 +117,10 @@ namespace Furikiri.Echo.Pass
             }
 
             // create array params if needed
-            var hasUnnamedArray = context.Object.FuncDeclUnnamedArgArrayBase > 0; //not sure
+            var hasUnnamedArray = context.Object.FuncDeclUnnamedArgArrayBase > 0 ||
+                context.Blocks.SelectMany(block => block.Instructions)
+                    .SelectMany(instruction => instruction.Registers).OfType<RegisterParameter>()
+                    .Any(parameter => parameter.ParameterExpand == FuncParameterExpand.FatUnnamedExpand);
             var hasCollapseArray = context.Object.FuncDeclCollapseBase >= 0;
             if (hasCollapseArray)
             {
@@ -268,6 +271,25 @@ namespace Furikiri.Echo.Pass
                    !definingData.LiveOut.Contains(resultSlot);
         }
 
+        private static void AddExpandedArgument(InvokeExpression call, RegisterParameter parameter,
+            Dictionary<int, Expression> expressions)
+        {
+            // The operand of an unnamed expansion is padding, not a register.
+            if (parameter.ParameterExpand == FuncParameterExpand.FatUnnamedExpand)
+            {
+                call.Parameters.Add(new IdentifierExpression("*") { Parent = call });
+                return;
+            }
+            var argument = expressions[parameter.GetSlot()];
+            if (parameter.ParameterExpand == FuncParameterExpand.FatExpand)
+            {
+                call.SpreadParameterIndices ??= new HashSet<int>();
+                call.SpreadParameterIndices.Add(call.Parameters.Count);
+            }
+            argument.Parent = call;
+            call.Parameters.Add(argument);
+        }
+
         public void BlockProcess(DecompileContext context, Block block,
             Dictionary<int, Expression> exps = null)
         {
@@ -290,7 +312,7 @@ namespace Furikiri.Echo.Pass
             //merge final states from Froms
             if (exps == null)
             {
-                var fromsExceptSelf = block.From.Where(b => b != block && context.BlockFinalStates.ContainsKey(b)).ToList();
+                var fromsExceptSelf = block.From.Where(b => b != block && context.BlockFinalStates.ContainsKey(b)).Distinct().ToList();
                 if (fromsExceptSelf.Count > 1)
                 {
                     var finalStates = new Dictionary<int, Expression>();
@@ -911,6 +933,12 @@ namespace Furikiri.Echo.Pass
                             src = GetLocalExpression(context, srcSlot);
                         }
 
+                        if (ExpressionValueIdentity.TrySnapshotCopiedLocal(
+                                context, block, ins, dstSlot, srcSlot, src, ex, expList))
+                        {
+                            break;
+                        }
+
                         Expression dst = null;
                         if (dstSlot <= Const.ArgBase)
                         {
@@ -1340,19 +1368,7 @@ namespace Furikiri.Echo.Pass
                         {
                             foreach (var reg in ins.Registers.Skip(3).OfType<RegisterParameter>())
                             {
-                                var pSlot = reg.GetSlot();
-                                if (ex.TryGetValue(pSlot, out var arg))
-                                {
-                                    // 检测展开参数标记
-                                    if (reg.ParameterExpand == FuncParameterExpand.FatExpand)
-                                    {
-                                        call.SpreadParameterIndices ??= new HashSet<int>();
-                                        call.SpreadParameterIndices.Add(call.Parameters.Count);
-                                    }
-
-                                    arg.Parent = call;
-                                    call.Parameters.Add(arg);
-                                }
+                                AddExpandedArgument(call, reg, ex);
                             }
                         }
                         else
@@ -1390,19 +1406,7 @@ namespace Furikiri.Echo.Pass
                         {
                             foreach (var reg in ins.Registers.Skip(4).OfType<RegisterParameter>())
                             {
-                                var pSlot = reg.GetSlot();
-                                if (ex.TryGetValue(pSlot, out var arg))
-                                {
-                                    // 检测展开参数标记
-                                    if (reg.ParameterExpand == FuncParameterExpand.FatExpand)
-                                    {
-                                        call.SpreadParameterIndices ??= new HashSet<int>();
-                                        call.SpreadParameterIndices.Add(call.Parameters.Count);
-                                    }
-
-                                    arg.Parent = call;
-                                    call.Parameters.Add(arg);
-                                }
+                                AddExpandedArgument(call, reg, ex);
                             }
                         }
                         else
@@ -1460,19 +1464,7 @@ namespace Furikiri.Echo.Pass
                         {
                             foreach (var reg in ins.Registers.Skip(4).OfType<RegisterParameter>())
                             {
-                                var pSlot = reg.GetSlot();
-                                if (ex.TryGetValue(pSlot, out var arg))
-                                {
-                                    // 检测展开参数标记
-                                    if (reg.ParameterExpand == FuncParameterExpand.FatExpand)
-                                    {
-                                        call.SpreadParameterIndices ??= new HashSet<int>();
-                                        call.SpreadParameterIndices.Add(call.Parameters.Count);
-                                    }
-
-                                    arg.Parent = call;
-                                    call.Parameters.Add(arg);
-                                }
+                                AddExpandedArgument(call, reg, ex);
                             }
                         }
                         else
@@ -1508,12 +1500,7 @@ namespace Furikiri.Echo.Pass
                         {
                             foreach (var reg in ins.Registers.Skip(3).OfType<RegisterParameter>())
                             {
-                                var pSlot = reg.GetSlot();
-                                if (ex.TryGetValue(pSlot, out var arg))
-                                {
-                                    arg.Parent = call;
-                                    call.Parameters.Add(arg);
-                                }
+                                AddExpandedArgument(call, reg, ex);
                             }
                         }
                         else
@@ -1548,6 +1535,8 @@ namespace Furikiri.Echo.Pass
                         var name = ins.Data.AsString();
                         var newId = new IdentifierExpression(name) {Instance = instance};
                         ex[dst] = MarkCachedEvaluation(newId, dst, ins);
+                        if (ExpressionValueIdentity.TrySnapshotMemberBeforeWrite(
+                                context, block, ins, dst, newId, ex, expList)) break;
                         if (ExpressionValueIdentity.TryMaterializeRepeatedMemberReceiver(
                                 context, block, ins, dst, newId, ex, expList)) break;
                         if (ShouldEmitStandaloneCall(block, ins, dst))
@@ -1565,6 +1554,8 @@ namespace Furikiri.Echo.Pass
                         var name = ins.Data.AsString();
                         var property = new IdentifierExpression(name) {Instance = instance};
                         ex[dst] = new UnaryExpression(property, UnaryOp.PropertyRef);
+                        ExpressionValueIdentity.TrySnapshotMemberBeforeWrite(
+                            context, block, ins, dst, ex[dst], ex, expList);
                     }
                         break;
                     case OpCode.GPI:
@@ -1575,6 +1566,8 @@ namespace Furikiri.Echo.Pass
 
                         PropertyAccessExpression p = new PropertyAccessExpression(ex[name], ex[obj]);
                         ex[dst] = MarkCachedEvaluation(p, dst, ins);
+                        if (ExpressionValueIdentity.TrySnapshotMemberBeforeWrite(
+                                context, block, ins, dst, p, ex, expList)) break;
                         if (ExpressionValueIdentity.TryMaterializeRepeatedMemberReceiver(
                                 context, block, ins, dst, p, ex, expList)) break;
                         if (ShouldEmitStandaloneCall(block, ins, dst))
@@ -1591,6 +1584,8 @@ namespace Furikiri.Echo.Pass
                         var name = ins.GetRegisterSlot(2);
                         var access = new PropertyAccessExpression(ex[name], ex[obj]);
                         ex[dst] = new UnaryExpression(access, UnaryOp.PropertyRef);
+                        ExpressionValueIdentity.TrySnapshotMemberBeforeWrite(
+                            context, block, ins, dst, ex[dst], ex, expList);
                     }
                         break;
                     case OpCode.SPI:
@@ -1639,6 +1634,10 @@ namespace Furikiri.Echo.Pass
                         }
 
                         Expression left = new PropertyAccessExpression(ex[name], ex[obj]);
+                        if (ins.OpCode == OpCode.SPIS)
+                        {
+                            left = new UnaryExpression(left, UnaryOp.PropertyRef);
+                        }
                         BinaryExpression b = new BinaryExpression(left,
                             ex[src], BinaryOp.Assign);
                         expList.Add(b); //there is no other way to find this expression
@@ -1657,7 +1656,9 @@ namespace Furikiri.Echo.Pass
                         var ident = new IdentifierExpression(ins.Data.AsString())
                             {Instance = isClassMemberDeclaration ? null : ex[objSlot]};
                         Expression left = ident;
-                        bool isPropertyRef = ins.OpCode == OpCode.SPDS && objSlot != Const.ThisReg && objSlot != Const.ThisProxyReg;
+                        bool isPropertyRef = ins.OpCode == OpCode.SPDS && !isClassMemberDeclaration &&
+                            (context.Object.ContextType != TjsContextType.TopLevel ||
+                             objSlot != Const.ThisReg && objSlot != Const.ThisProxyReg);
                         if (isPropertyRef)
                         {
                             left = new UnaryExpression(ident, UnaryOp.PropertyRef);
@@ -1669,7 +1670,8 @@ namespace Furikiri.Echo.Pass
                             b.IsDeclaration = true;
                         }
                         //check declare (SPDS with PropertyRef is never a declaration)
-                        if (!isPropertyRef && context.Object.ContextType == TjsContextType.TopLevel)
+                        if (!isPropertyRef && context.Object.ContextType == TjsContextType.TopLevel &&
+                            (objSlot == Const.ThisReg || objSlot == Const.ThisProxyReg))
                         {
                             b.IsDeclaration = true;
                             if (!context.RegisteredMembers.ContainsKey(ident.Name))
@@ -2226,6 +2228,15 @@ namespace Furikiri.Echo.Pass
             }
 
             if (froms.Count != 2)
+            {
+                return;
+            }
+
+            // A flag-producing predecessor can also branch onward to the other
+            // predecessor. Its value applies only to its edge into the merge,
+            // not to every path entering it: (A || B) && C needs C after B=true.
+            if (phi.Slot == Const.FlagReg &&
+                TryAnnotateDecisionGraphPhi(mergeBlock, froms, phi))
             {
                 return;
             }

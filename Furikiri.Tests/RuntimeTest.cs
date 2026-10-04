@@ -19,6 +19,116 @@ public class RuntimeTest
         AppContext.BaseDirectory, "..", "..", "..", ".."));
 
     [TestMethod]
+    public void GamePatternsPreserveArgumentForwardingAndTopLevelScope()
+    {
+        AssertRuntimeRoundTrip("GamePatternsRuntime.tjs",
+            "fixed:B:C;A:B:C;D:B:C;dynamic:B:C;M:B:C;S:B:C;scope:B:C;G;42:42;O7;C7;5:-:v:9:4:9:obj;undefined:1:0:undefined:undefined:1;QAB:QCD;6BA:9;12:1p3:1pn:0;F:AB:B:CD:D:E:F;3:0;HaHbXY:XY:Ha;image:Ymargin:image:Nmargin;ACCACCPECR;visibility:0;resource:1::1:0:1::LLLCL:42;boolean:0;groups:found:yes;missing:no;;prepare:text0text1;obj0obj1;null0null1;01;;iterations:LCV;checkpoint:SEESESE:0;loop-checkpoint:PSEPEPSEPSETI;numbers::1:T:H:K:1W:1KW:1K2H3T4W5K6H7T8:;swap:7:3:LGRGLSRS:3:7:LGRGLSRS:3:LGLGLSLS;fallthrough:0");
+    }
+
+    [TestMethod]
+    public void SharedConditionalBodiesPreservePositionAndShortCircuitUpdates()
+    {
+        const string values = "Dx:-200:0:0;x:200:0:0;Dzoom:150:0:0;DAVIDhelloD";
+        var results = new List<string> { values, values, "DAVI", "VI" };
+        for (var mask = 0; mask < 32; mask++)
+        {
+            var trace = "";
+            bool Probe(string label, bool value) { trace += label; return value; }
+            var result = "";
+            for (var n = 0; n < 2; n++)
+            {
+                if ((Probe("A", (mask & 1) != 0) && Probe("B", (mask & 2) != 0)) ||
+                    (Probe("C", (mask & 4) != 0) && Probe("D", (mask & 8) != 0)))
+                {
+                    if ((mask & 16) != 0 || n == 0) result += "P";
+                    result += "T";
+                }
+            }
+            results.Add(trace + ":" + result);
+        }
+        AssertRuntimeRoundTrip("PositionRuntime.tjs", string.Join("|", results));
+    }
+
+    [TestMethod]
+    public void SharedReturnDecisionsPreserveFallbackAndShortCircuitEffects()
+    {
+        var results = new List<string>();
+        for (var present = 0; present < 2; present++)
+        foreach (var ext in new[] { ".AMV", ".PSB", ".BMB", ".MTN", "" })
+        for (var mask = 0; mask < 64; mask++)
+        {
+            var trace = "";
+            bool Probe(string label, bool value) { trace += label; return value; }
+            var alternate = (mask & 4) != 0 ? "still" : "";
+            var result = "missing";
+            if (present != 0)
+            {
+                result = alternate;
+                if (((mask & 1) != 0 && (mask & 2) == 0) || alternate == "")
+                {
+                    var exists = (mask & 8) != 0;
+                    var motion = (mask & 16) != 0;
+                    if (!exists) trace += "W";
+                    if ((ext != ".PSB" && ext != ".BMB" && ext != ".MTN") ||
+                        (ext == ".MTN" && exists && Probe("M", motion)) ||
+                        (ext == ".PSB" && exists && Probe("P", motion)) ||
+                        (ext == ".BMB" && exists && Probe("B", (mask & 32) != 0)))
+                        result = "animated";
+                }
+            }
+            results.Add(trace + ":" + result);
+        }
+        AssertRuntimeRoundTrip("ImageReturnRuntime.tjs", string.Join("|", results));
+    }
+
+    [TestMethod]
+    public void NestedLoopGuardsPreserveExitAndAssignmentEffects()
+    {
+        var results = new List<string>();
+        foreach (var input in new[] { "Z", ".", "d", "c", "", "X" })
+        for (var limit = 0; limit < 4; limit++)
+        {
+            var left = "abcd";
+            var right = input;
+            var previous = -1;
+            int? found = null;
+            var count = 0;
+            var savedLeft = left;
+            var savedRight = right;
+            for (var line = 0; line < 2; line++)
+            {
+                if (line < 1 && right != "")
+                {
+                    while (left.Length > 0 &&
+                           (found = ".dcbaX".IndexOf(right[0])) >= 0 && previous != found)
+                    {
+                        var soft = ".dc".IndexOf(right[0]) >= 0;
+                        if (soft && ++count >= limit)
+                        {
+                            left = savedLeft;
+                            right = savedRight;
+                            break;
+                        }
+                        right = left[^1] + right;
+                        left = left[..^1];
+                        previous = found.Value;
+                        if (!soft) { savedLeft = left; savedRight = right; }
+                    }
+                }
+                left += "X";
+            }
+            results.Add($"{left}:{right}:{previous}:{found}:{count}");
+        }
+        AssertRuntimeRoundTrip("TextWrapRuntime.tjs", string.Join("|", results));
+    }
+
+    [TestMethod]
+    public void NestedNamedFunctionsPreserveScopeAndDefaults()
+    {
+        AssertRuntimeRoundTrip("NestedFunctionRuntime.tjs", "12:13;40:50;17:70:undefined;42;42:10:15;31:7");
+    }
+
+    [TestMethod]
     public void NumericConstantsPreserveRuntimeTypesAndValues()
     {
         AssertRuntimeRoundTrip("NumericRuntime.tjs",

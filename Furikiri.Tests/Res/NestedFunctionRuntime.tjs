@@ -1,0 +1,59 @@
+var trace = "";
+function first(a = 2) {
+    function local(x = 3) { return x + 10; }
+    trace += local(a) + ":" + local() + ";";
+    return local;
+}
+function second(a = 4) {
+    function local(x = 5) { return x * 10; }
+    trace += local(a) + ":" + local() + ";";
+    return local;
+}
+var f = first();
+var g = second();
+trace += f(7) + ":" + g(7) + ":" + (typeof global.local);
+function proxy(x) {
+    function local() {
+        class Box {
+            var value;
+            function Box(x) { value = x; }
+        }
+    }
+    return new local.Box(x);
+}
+trace += ";" + proxy(42).value;
+class Left {
+    var left = 11;
+    function Left() {}
+}
+class Right {
+    var right = 22;
+    function Right() {}
+}
+class Both extends Left, Right {
+    function Both() { global.Left.Left(); global.Right.Right(); }
+    function read(x = 3) {
+        function local(x = 4) { return x + 1; }
+        return left + right + local(x) + local();
+    }
+    property computed {
+        getter() {
+            var local = function(x = 5) { return x * 2; };
+            return local();
+        }
+        setter(x) {
+            var local = function(x) { return x + 7; };
+            left = local(x);
+        }
+    }
+}
+var both = new Both();
+trace += ";" + both.read() + ":" + both.computed;
+both.computed = 8;
+trace += ":" + both.left;
+function metadata(x = 7) {
+    property value { getter() { return 31; } }
+    return x;
+}
+trace += ";" + metadata.value + ":" + metadata();
+global.__validationResult = trace;

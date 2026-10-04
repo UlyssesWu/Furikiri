@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.IO;
@@ -36,7 +36,7 @@ namespace Furikiri.Echo.Language
         public Dictionary<Method, BlockStatement> MethodRefs = new Dictionary<Method, BlockStatement>();
         public Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)> PropertyRefs =
             new Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)>();
-        public Dictionary<CodeObject, Expression> ClassSuperExpressions = new Dictionary<CodeObject, Expression>();
+        public Dictionary<CodeObject, List<Expression>> ClassSuperExpressions = new Dictionary<CodeObject, List<Expression>>();
         public Dictionary<CodeObject, BlockStatement> ClassBodies = new Dictionary<CodeObject, BlockStatement>();
 
         /// <summary>
@@ -63,7 +63,7 @@ namespace Furikiri.Echo.Language
             }
         }
 
-        private void WriteSignature(Method method, Dictionary<string, Expression> defaults = null)
+        private void WriteSignature(Method method, Dictionary<string, Expression> defaults = null, bool anonymous = false)
         {
             if (method.Object.ContextType == TjsContextType.TopLevel)
             {
@@ -73,7 +73,7 @@ namespace Furikiri.Echo.Language
             //_formatter.WriteKeyword(method.Object.ContextType.ContextTypeName());
             _formatter.WriteKeyword("function");
             _formatter.WriteSpace();
-            if (method.Object.ContextType == TjsContextType.Function)
+            if (method.Object.ContextType == TjsContextType.Function && !anonymous)
             {
                 _formatter.WriteIdentifier(method.Name);
             }
@@ -103,6 +103,7 @@ namespace Furikiri.Echo.Language
             if (block?.Statements == null || paramList.Count == 0) return defaults;
 
             var paramNames = new HashSet<string>(paramList.Select(p => p.ToString()));
+            var lastDefaultIndex = -1;
 
             foreach (var stmt in block.Statements)
             {
@@ -139,6 +140,15 @@ namespace Furikiri.Echo.Language
 
                     if (defaultExpr == null) break;
 
+                    var parameterIndex = paramList.FindIndex(parameter => parameter.ToString() == paramName);
+                    var availableParameters = paramList.Take(parameterIndex)
+                        .Select(parameter => parameter.ToString()).ToHashSet();
+                    // Signature defaults are compiled before later parameters
+                    // enter scope. Body guards may depend on all parameters.
+                    if (parameterIndex <= lastDefaultIndex ||
+                        !CanWriteParameterDefault(defaultExpr, availableParameters)) break;
+                    lastDefaultIndex = parameterIndex;
+
                     defaults[paramName] = defaultExpr;
                     _defaultParamStmtsToSkip.Add(stmt);
                 }
@@ -149,6 +159,26 @@ namespace Furikiri.Echo.Language
             }
 
             return defaults;
+        }
+
+        private static bool CanWriteParameterDefault(Expression expression, HashSet<string> availableParameters)
+        {
+            bool Check(Expression value) => CanWriteParameterDefault(value, availableParameters);
+            return expression switch
+            {
+                null => true,
+                LocalExpression local => local.IsParameter && availableParameters.Contains(local.Name),
+                ConstantExpression constant => constant.Variant is not TjsCodeObject,
+                IdentifierExpression identifier => Check(identifier.Instance),
+                BinaryExpression binary => Check(binary.Left) && Check(binary.Right),
+                UnaryExpression unary => Check(unary.Target),
+                PropertyAccessExpression property => Check(property.Instance) && Check(property.Property),
+                ConditionExpression condition => Check(condition.Condition),
+                PhiExpression phi => Check(phi.Condition?.Condition) && Check(phi.ThenBranch) && Check(phi.ElseBranch),
+                InvokeExpression invoke => Check(invoke.Instance) && Check(invoke.MethodExpression) &&
+                    !invoke.HasOmittedArguments && invoke.Parameters.All(Check),
+                _ => false
+            };
         }
 
         /// <summary>
@@ -206,12 +236,15 @@ namespace Furikiri.Echo.Language
         /// </summary>
         /// <param name="method"></param>
         /// <param name="block"></param>
-        public void WriteFunction(Method method, BlockStatement block)
+        public void WriteFunction(Method method, BlockStatement block, bool anonymous = false)
         {
+            var previousDefaults = _defaultParamStmtsToSkip.ToArray();
             var paramList = GetParameterList(method);
             var defaults = ExtractDefaultParams(paramList, block);
-            WriteSignature(method, defaults);
-            WriteMethodBody(block, method.Object.ContextType != TjsContextType.TopLevel);
+            WriteSignature(method, defaults, anonymous);
+            WriteMethodBody(block, method.Object.ContextType != TjsContextType.TopLevel, method.Object);
+            _defaultParamStmtsToSkip.Clear();
+            foreach (var statement in previousDefaults) _defaultParamStmtsToSkip.Add(statement);
         }
 
         public void WriteProperty(Property property, BlockStatement getterBlock, BlockStatement setterBlock)
@@ -231,7 +264,7 @@ namespace Furikiri.Echo.Language
                 _formatter.WriteToken("(");
                 WriteParamList(setterParams, new Dictionary<string, Expression>());
                 _formatter.WriteToken(")");
-                WriteMethodBody(setterBlock, true);
+                WriteMethodBody(setterBlock, true, property.Setter.Object);
                 _formatter.WriteLine();
             }
 
@@ -239,7 +272,7 @@ namespace Furikiri.Echo.Language
             {
                 _formatter.WriteKeyword("getter");
                 _formatter.WriteToken("()");
-                WriteMethodBody(getterBlock, true);
+                WriteMethodBody(getterBlock, true, property.Getter.Object);
                 _formatter.WriteLine();
             }
 
@@ -263,14 +296,19 @@ namespace Furikiri.Echo.Language
             _formatter.WriteKeyword("class");
             _formatter.WriteSpace();
             _formatter.WriteIdentifier(classObj.Name);
-            if (ClassSuperExpressions != null && ClassSuperExpressions.TryGetValue(classObj, out var superExpr) &&
-                superExpr != null)
+            if (ClassSuperExpressions != null && ClassSuperExpressions.TryGetValue(classObj, out var superExpressions) &&
+                superExpressions.Count > 0)
             {
-                _currentClassSuperFullName = GetExpressionFullName(superExpr);
+                _currentClassSuperFullName = superExpressions.Count == 1
+                    ? GetExpressionFullName(superExpressions[0]) : null;
                 _formatter.WriteSpace();
                 _formatter.WriteKeyword("extends");
                 _formatter.WriteSpace();
-                Visit(superExpr);
+                for (var index = 0; index < superExpressions.Count; index++)
+                {
+                    if (index > 0) _formatter.Write(", ");
+                    Visit(superExpressions[index]);
+                }
             }
 
             _formatter.WriteStartBlock();
@@ -381,7 +419,7 @@ namespace Furikiri.Echo.Language
             _formatter.WriteToken("(");
             WriteParamList(paramList, defaults);
             _formatter.WriteToken(")");
-            WriteMethodBody(block, true);
+            WriteMethodBody(block, true, method.Object);
             _formatter.WriteLine();
         }
 
@@ -402,7 +440,7 @@ namespace Furikiri.Echo.Language
                 _formatter.WriteToken("(");
                 WriteParamList(setterParams, new Dictionary<string, Expression>());
                 _formatter.WriteToken(")");
-                WriteMethodBody(setterBlock, true);
+                WriteMethodBody(setterBlock, true, property.Setter.Object);
                 _formatter.WriteLine();
             }
 
@@ -410,7 +448,7 @@ namespace Furikiri.Echo.Language
             {
                 _formatter.WriteKeyword("getter");
                 _formatter.WriteToken("()");
-                WriteMethodBody(getterBlock, true);
+                WriteMethodBody(getterBlock, true, property.Getter.Object);
                 _formatter.WriteLine();
             }
 
@@ -425,7 +463,7 @@ namespace Furikiri.Echo.Language
         /// </summary>
         /// <param name="block"></param>
         /// <param name="braces"></param>
-        private void WriteMethodBody(BlockStatement block, bool braces)
+        private void WriteMethodBody(BlockStatement block, bool braces, CodeObject owner = null)
         {
             var prevInTopLevelBody = _inTopLevelBody;
             var prevDeclaredLocals = new HashSet<string>(_declaredLocals);
@@ -457,6 +495,37 @@ namespace Furikiri.Echo.Language
             {
                 _formatter.WriteStartBlock();
             }
+
+            var ownerDefaults = _defaultParamStmtsToSkip.ToArray();
+            if (owner != null && braces && ClassBodies != null)
+            {
+                foreach (var nestedClass in ClassBodies.Keys.Where(candidate => candidate.Parent == owner))
+                {
+                    WriteClass(nestedClass);
+                    _formatter.WriteLine();
+                }
+            }
+            if (owner != null && braces && MethodRefs != null)
+            {
+                foreach (var nestedMethod in MethodRefs.Where(candidate =>
+                             candidate.Key.Object.Parent == owner &&
+                             candidate.Key.Object.ContextType == TjsContextType.Function))
+                {
+                    WriteFunction(nestedMethod.Key, nestedMethod.Value);
+                    _formatter.WriteLine();
+                }
+            }
+
+            if (owner != null && braces && PropertyRefs != null)
+            {
+                foreach (var property in PropertyRefs.Where(candidate => candidate.Key.Parent == owner))
+                {
+                    WriteProperty(property.Key, property.Value.Getter, property.Value.Setter);
+                    _formatter.WriteLine();
+                }
+            }
+            _defaultParamStmtsToSkip.Clear();
+            foreach (var skipped in ownerDefaults) _defaultParamStmtsToSkip.Add(skipped);
 
             foreach (var name in _hoistedLocalDeclarations)
             {
@@ -603,6 +672,18 @@ namespace Furikiri.Echo.Language
             var treatAsDeclaration = bin.IsDeclaration ||
                                      (_validDeclarations?.Contains(bin) ?? false);
 
+            // A recovered lexical block must not turn script-object members
+            // into locals. Such members can be read by other loaded scripts.
+            if (_inTopLevelBody && _insideRecoveredTopLevelScope && bin.IsDeclaration &&
+                bin.Op == BinaryOp.Assign && bin.Left is IdentifierExpression member &&
+                member.Instance is IdentifierExpression { IdentifierType: IdentifierType.This or IdentifierType.ThisProxy })
+            {
+                _formatter.WriteIdentifier("this." + member.Name);
+                _formatter.Write(" = ");
+                Visit(bin.Right);
+                return;
+            }
+
             // 类字段声明属于类体语法，不应套用当前方法的局部变量活跃性结果。
             // 外层方法在写出嵌套类时仍保留自己的声明分析集合，若先查询该集合，
             // `var member;` 会被错误压缩成没有声明意义的 `member;`。
@@ -639,8 +720,8 @@ namespace Furikiri.Echo.Language
                     shouldEmitVar = false;
                 }
 
-                if (bin.Left is IdentifierExpression id && id.Instance is IdentifierExpression instance &&
-                    !instance.HideInstance)
+                if (bin.Left is IdentifierExpression { Instance: not null } id &&
+                    id.Instance is not IdentifierExpression { HideInstance: true })
                 {
                     //this is to prevent adding `var` before `System.var = a;`
                     //do nothing
@@ -1096,13 +1177,15 @@ namespace Furikiri.Echo.Language
             }
 
             _formatter.WriteIdentifier("super");
-            _formatter.WriteToken(".");
             if (invoke.MethodExpression != null)
             {
+                _formatter.WriteToken("[");
                 Visit(invoke.MethodExpression);
+                _formatter.WriteToken("]");
             }
             else
             {
+                _formatter.WriteToken(".");
                 _formatter.WriteIdentifier(invoke.Method);
             }
 
@@ -1110,6 +1193,8 @@ namespace Furikiri.Echo.Language
             for (var i = 0; i < invoke.Parameters.Count; i++)
             {
                 Visit(invoke.Parameters[i]);
+                if (invoke.SpreadParameterIndices?.Contains(i) == true)
+                    _formatter.WriteToken("*");
                 if (i < invoke.Parameters.Count - 1)
                 {
                     _formatter.Write(", ");
@@ -1178,7 +1263,7 @@ namespace Furikiri.Echo.Language
 
         private static bool NeedsMemberAccessParentheses(Expression expression)
         {
-            return expression is BinaryExpression or ConditionExpression ||
+            return expression is BinaryExpression or ConditionExpression or UnaryExpression ||
                    expression is InvokeExpression { InvokeType: InvokeType.Ctor };
         }
 
@@ -1196,7 +1281,18 @@ namespace Furikiri.Echo.Language
                 var method = MethodRefs.FirstOrDefault(m => m.Key.Object == obj.Object);
                 if (method.Key != null && method.Key.IsLambda)
                 {
-                    WriteFunction(method.Key, method.Value);
+                    WriteFunction(method.Key, method.Value, anonymous: true);
+                    return;
+                }
+                if (obj.Object.ContextType is TjsContextType.Function or TjsContextType.Class)
+                {
+                    _formatter.WriteIdentifier(obj.Object.Name);
+                    return;
+                }
+                if (obj.Object.ContextType == TjsContextType.Property)
+                {
+                    _formatter.WriteToken("&");
+                    _formatter.WriteIdentifier(obj.Object.Name);
                     return;
                 }
             }
@@ -1357,8 +1453,19 @@ namespace Furikiri.Echo.Language
                         ? new HashSet<BinaryExpression>(ReferenceEqualityComparer.Instance)
                         : new HashSet<BinaryExpression>(
                             previousValidDeclarations, ReferenceEqualityComparer.Instance);
-                    var scopedDeclarations = new LocalDeclarationAnalysis().Analyze(
-                        scopedBlock, false);
+                    var scopedAnalysis = new LocalDeclarationAnalysis();
+                    var scopedDeclarations = scopedAnalysis.Analyze(scopedBlock, vmLocalsOnly: true);
+                    var previousHoisted = _hoistedLocalDeclarations;
+                    _hoistedLocalDeclarations = scopedAnalysis.HoistedDeclarations.ToArray();
+                    _validDeclarations.RemoveWhere(declaration => declaration.Left is LocalExpression);
+                    foreach (var name in scopedAnalysis.HoistedDeclarations)
+                    {
+                        _formatter.WriteKeyword("var");
+                        _formatter.WriteSpace();
+                        _formatter.WriteIdentifier(name);
+                        _formatter.WriteToken(";");
+                        _formatter.WriteLine();
+                    }
                     foreach (var localDeclaration in scopedDeclarations.Where(
                                  declaration => declaration.Left is LocalExpression))
                     {
@@ -1367,6 +1474,7 @@ namespace Furikiri.Echo.Language
                         _validDeclarations.Add(localDeclaration);
                     }
                     VisitBlockStmt(scopedBlock);
+                    _hoistedLocalDeclarations = previousHoisted;
                     _validDeclarations = previousValidDeclarations;
                     _insideRecoveredTopLevelScope = previousInsideScope;
                     _formatter.WriteEndBlock();
@@ -1434,7 +1542,16 @@ namespace Furikiri.Echo.Language
                     var lifetimeEnd = block.Statements.Count;
                     for (var i = startIndex + 1; i < block.Statements.Count; i++)
                     {
-                        if (AstNodeDeclaresLocalSlot(block.Statements[i], local.Slot))
+                        // A definition inside a conditional is an update on only
+                        // one path, not the end of the preceding local's lifetime.
+                        var directDefinition = block.Statements[i] switch
+                        {
+                            BinaryExpression binary => binary,
+                            ExpressionStatement { Expression: BinaryExpression binary } => binary,
+                            _ => null
+                        };
+                        if (directDefinition is { Op: BinaryOp.Assign, IsDeclaration: true,
+                                Left: LocalExpression declared } && declared.Slot == local.Slot)
                         {
                             lifetimeEnd = i;
                             break;

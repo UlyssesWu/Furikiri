@@ -1,0 +1,28 @@
+function wrap(left,right,marks,weak,limit) {
+    var previous=-1, found, count=0, savedLeft=left, savedRight=right, len;
+    for(var line=0;line<2;line++) {
+    if(line<1 && right!="") {
+    while((len=left.length)>0 && (found=marks.indexOf(right.charAt(0)))>=0 && previous!=found) {
+        var soft=weak.indexOf(right.charAt(0))>=0;
+        if(soft) {
+            count++;
+            if(count>=limit) {left=savedLeft;right=savedRight;break;}
+        }
+        right=left.charAt(len-1)+right;
+        left=left.substr(0,len-1);
+        previous=found;
+        if(!soft) {savedLeft=left;savedRight=right;}
+    }
+    }
+    left+="X";
+    }
+    return left+":"+right+":"+previous+":"+found+":"+count;
+}
+global.__validationResult="";
+var inputs=["Z", ".", "d", "c", "", "X"];
+for(var input=0;input<inputs.count;input++) {
+    for(var limit=0;limit<4;limit++) {
+        if(global.__validationResult!="") global.__validationResult+="|";
+        global.__validationResult+=wrap("abcd",inputs[input],".dcbaX",".dc",limit);
+    }
+}

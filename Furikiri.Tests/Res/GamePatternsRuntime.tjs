@@ -1,0 +1,491 @@
+var trace = "";
+function collect(a, b, c) { return a + ":" + b + ":" + c; }
+function forward(callback, *) { return callback("fixed", *); }
+function all(*) { return collect(*); }
+var obj = %["call" => collect];
+function direct(x, *) { return obj.call(x, *); }
+function indirect(key, *) { return obj[key]("dynamic", *); }
+class Box {
+    var value;
+    function Box(a, b, c) { value = collect(a, b, c); }
+}
+function make(a, *) { return new Box(a, *); }
+function spread(a) { return new Box(a*); }
+trace += forward(collect, "B", "C") + ";";
+trace += all("A", "B", "C") + ";";
+trace += direct("D", "B", "C") + ";";
+trace += indirect("call", "B", "C") + ";";
+trace += make("M", "B", "C").value + ";";
+trace += spread(["S", "B", "C"]).value + ";";
+{
+    var f = collect;
+    if (global.trace == "") f = void;
+    trace += f("scope", "B", "C");
+}
+property once {
+    getter() { trace += ";G"; &once = 42; return 42; }
+}
+trace += ";" + once + ":" + once;
+class Owner {
+    var target;
+    function observe() { trace += ";O" + target.value; }
+    function consume(x) { trace += ";C" + x; }
+    function Owner(x) {
+        target = x;
+        observe();
+        consume(x.value);
+    }
+}
+new Owner(%["value" => 7]);
+function transform(items, fallback) {
+    var output = [];
+    for (var i = 0; i < items.count; i++) {
+        var item = items[i];
+        switch (typeof item) {
+        case "String":
+            if (item.indexOf(":") < 0) {
+                if (item != "-") continue;
+            } else {
+                var parts = item.split(":");
+                var value = parts[0];
+                var caption = parts[1];
+                var name = parts.count > 2 ? parts[2] : void;
+                var group = parts.count > 3 && +parts[3] > 0 ? +parts[3] : fallback;
+                item = %["name" => name, "caption" => caption, "group" => group, "prop" => %[]];
+                if (value.charAt(0) == "*") {
+                    value = value.substr(1);
+                    item.prop.def = value;
+                }
+                item.prop.value = value;
+            }
+            break;
+        case "Object": break;
+        default: continue;
+        }
+        output.add(item);
+    }
+    return output;
+}
+var converted = transform(["skip", "-", "*v:C", "w:D:N:4", "x:E:N:0", %["caption" => "obj"], 7], 9);
+trace += ";" + converted.count + ":" + converted[0] + ":" + converted[1].prop.def + ":" + converted[1].group;
+trace += ":" + converted[2].group + ":" + converted[3].group + ":" + converted[4].caption;
+function guarded(item, value, key = "value", group) {
+    if (item !== void) {
+        if (group !== void && (item.group != group || !item.radio)) return;
+        if (typeof item.fallback != "undefined" && value == "") value = item.fallback;
+        if (typeof item[key] != "undefined") item.checked = item[key] == value;
+    }
+}
+guarded(void, "");
+var empty = %[];
+guarded(empty, "");
+trace += ";" + typeof empty.checked;
+var defaulted = %["value" => "a", "fallback" => "a"];
+guarded(defaulted, "");
+trace += ":" + defaulted.checked;
+var plain = %["value" => "a"];
+guarded(plain, "");
+trace += ":" + plain.checked;
+var grouped = %["value" => "a", "group" => 3, "radio" => false];
+guarded(grouped, "a", "value", 2);
+trace += ":" + typeof grouped.checked;
+guarded(grouped, "a", "value", 3);
+trace += ":" + typeof grouped.checked;
+grouped.radio = true;
+guarded(grouped, "a", "value", 3);
+trace += ":" + grouped.checked;
+class Parent {
+    var prefix = "P";
+    function Parent() {}
+    function join(a, b) { return prefix + a + b; }
+}
+class Child extends Parent {
+    function Child() { super.Parent(); prefix = "Q"; }
+    function dynamic(key, *) { return super[key](*); }
+    function expanded(values) { return super.join(values*); }
+}
+var child = new Child();
+trace += ";" + child.dynamic("join", "A", "B") + ":" + child.expanded(["C", "D"]);
+function laterDefault(item, key, value) {
+    if (item === void) item = %[key => value];
+    return item[key];
+}
+function orderedDefaults(a, b) {
+    if (b === void) b = (trace += "B", 4);
+    if (a === void) a = (trace += "A", b + 1);
+    return a + b;
+}
+trace += ";" + laterDefault(void, "x", 6);
+var defaultSum = orderedDefaults();
+trace += ":" + defaultSum;
+function pick(flag) { trace += "p"; return flag ? 2 : void; }
+function dispatch(kind, found) {
+    var target = void;
+    if (kind == "all" || (target = pick(found)) !== void) {
+        var items = [1, 2];
+        if (kind == "all") target = 1;
+        else items = [3];
+        if (items.count > 0) {
+            for (var i = 0; i < items.count; i++) trace += items[i];
+        }
+    } else trace += "n";
+    return target !== void;
+}
+trace += ";";
+var dispatchResult = dispatch("all", false);
+trace += ":" + dispatchResult;
+dispatchResult = dispatch("one", true);
+trace += ":" + dispatchResult;
+dispatchResult = dispatch("none", false);
+trace += ":" + dispatchResult;
+global.__validationResult = trace;
+function fallthrough(value) {
+    var result = "";
+    switch (value) {
+    case -5: result += "A";
+    case -4: result += "B"; break;
+    case -3: result += "C";
+    case -2: result += "D"; break;
+    case -1: result += "E"; break;
+    default: result += "F";
+    }
+    return result;
+}
+var cases = [];
+for (var n = -6; n <= 0; n++) cases.add(fallthrough(n));
+global.__validationResult += ";" + cases.join(":");
+function splitConverted(value) { return (string(value)).split(" ").count; }
+function inspectType(value) { return (typeof value).indexOf("String"); }
+global.__validationResult += ";" + splitConverted("a b c") + ":" + inspectType("x");
+function loopInExit(items) {
+    var result = "";
+    for (var i = 0; i < items.count; i++) {
+        if (items[i] == "") {
+            for (var j = i + 1; j < items.count; j++) {
+                var value = items[j];
+                if (value != "") {
+                    switch (value) {
+                    case "x": result += "X"; break;
+                    case "y": result += "Y"; break;
+                    default: result += "?";
+                    }
+                }
+            }
+            break;
+        }
+        result += "H" + items[i];
+    }
+    return result;
+}
+global.__validationResult += ";" + loopInExit(["a", "b", "", "x", "y"]);
+global.__validationResult += ":" + loopInExit(["", "x", "y"]) + ":" + loopInExit(["a"]);
+function savedReceiver(flag) {
+    var object = %["file" => "image", "extra" => "margin", "options" => flag];
+    var result = "";
+    with (object) {
+        result += (.options ? "Y" : "N");
+        object = .file;
+        result += .extra;
+    }
+    return object + ":" + result;
+}
+global.__validationResult += ";" + savedReceiver(true) + ":" + savedReceiver(false);
+var guardTrace = "";
+function guardCheck(value) { guardTrace += "C"; return value; }
+function optionalGuard(info) {
+    if ((info.enabled == "" || guardCheck(info.enabled)) &&
+        (info.confirm == "" || guardCheck(info.caption != "" ? info.caption : 1))) {
+        if (info.extra !== void) guardTrace += "E";
+        if (info.left !== void || info.right !== void) guardTrace += "A";
+    }
+}
+function optionalReturn(info) {
+    if (info.enabled == "" || guardCheck(info.enabled)) {
+        if (info.extra !== void) guardTrace += "E";
+        if (guardCheck(info.stop) === void) {
+            if (info.left === void && info.right === void) { guardTrace += "R"; return -4; }
+            guardTrace += "P";
+            return 0;
+        }
+    }
+    return 0;
+}
+optionalGuard(%["left"=>1]);
+optionalGuard(%["enabled"=>1,"left"=>1,"confirm"=>1]);
+optionalGuard(%["enabled"=>0,"left"=>1]);
+optionalReturn(%["left"=>1]);
+optionalReturn(%["extra"=>1]);
+global.__validationResult += ";" + guardTrace;
+function updateVisibility(shown, wasHidden, wasClear, tint, exclusive, skip) {
+    var result = "S";
+    if (shown) {
+        if (wasHidden) {
+            result += "R";
+            if (tint) result += "T";
+            result += "I";
+            if (exclusive) result += "X";
+        }
+        if (wasClear) result += "F";
+    }
+    if (!skip && shown == wasHidden) result += "A";
+    result += "U";
+    return result;
+}
+var visibilityFailures = 0;
+for (var bits = 0; bits < 64; bits++) {
+    var shown = !!(bits & 1), hidden = !!(bits & 2), clear = !!(bits & 4);
+    var tint = !!(bits & 8), exclusive = !!(bits & 16), skip = !!(bits & 32);
+    var expected = "S";
+    if (shown && hidden) expected += "R" + (tint ? "T" : "") + "I" + (exclusive ? "X" : "");
+    if (shown && clear) expected += "F";
+    if (!skip && shown == hidden) expected += "A";
+    expected += "U";
+    if (updateVisibility(shown, hidden, clear, tint, exclusive, skip) != expected) visibilityFailures++;
+}
+global.__validationResult += ";visibility:" + visibilityFailures;
+var selectedFile, loadedFile, resourceTrace = "";
+function resourceExists(value) { return value == "prefix:found"; }
+function sameResource(left, right) { return left === right; }
+function loadResource(success) { resourceTrace += "L"; return success; }
+function clearResource() { resourceTrace += "C"; }
+function refreshResource(input, reload, success) {
+    if (input !== void) selectedFile = input;
+    if (selectedFile != "") {
+        var selected = void;
+        if (typeof selectedFile == "String") {
+            selected = "prefix:" + selectedFile;
+            if (!resourceExists(selected)) selected = selectedFile;
+        } else selected = selectedFile;
+        if (!sameResource(loadedFile, selected) || reload) {
+            if (loadResource(success)) {
+                loadedFile = selected;
+                return 1;
+            } else {
+                clearResource();
+                return 0;
+            }
+        }
+    }
+}
+var refreshResults = [];
+refreshResults.add(refreshResource("found", false, true));
+refreshResults.add(refreshResource(void, false, true));
+refreshResults.add(refreshResource(void, true, true));
+refreshResults.add(refreshResource("missing", false, false));
+refreshResults.add(refreshResource(42, false, true));
+refreshResults.add(refreshResource("", true, true));
+global.__validationResult += ";resource:" + refreshResults.join(":") + ":" + resourceTrace + ":" + loadedFile;
+var booleanTrace = "";
+function booleanProbe(label, value) { booleanTrace += label; return value; }
+function joinedOr(a, b, c) {
+    return (booleanProbe("A", a) || booleanProbe("B", b)) && booleanProbe("C", c);
+}
+function joinedAnd(a, b, c) {
+    return (booleanProbe("A", a) && booleanProbe("B", b)) || booleanProbe("C", c);
+}
+var orTraces = ["AB", "AC", "ABC", "AC", "AB", "AC", "ABC", "AC"];
+var andTraces = ["AC", "ABC", "AC", "AB", "AC", "ABC", "AC", "AB"];
+var booleanFailures = 0;
+for (var bits = 0; bits < 8; bits++) {
+    var a = !!(bits & 1), b = !!(bits & 2), c = !!(bits & 4);
+    booleanTrace = "";
+    if (joinedOr(a,b,c) != ((a | b) & c)) booleanFailures++;
+    if (booleanTrace != orTraces[bits]) booleanFailures++;
+    booleanTrace = "";
+    if (joinedAnd(a,b,c) != ((a & b) | c)) booleanFailures++;
+    if (booleanTrace != andTraces[bits]) booleanFailures++;
+}
+global.__validationResult += ";boolean:" + booleanFailures;
+function classifyNames(items, known) {
+    var result = "";
+    for (var i = 0; i < items.count; i++) {
+        var name = items[i];
+        if (name == "" || known[name] === void) {
+            if (name != "") result += "missing:" + name + ";";
+            continue;
+        }
+        result += "found:" + name + ";";
+    }
+    return result;
+}
+function prepareResources(items) {
+    var result = "";
+    for (var i = 0; i < items.count; i++) {
+        var item = items[i], config = void;
+        switch (typeof item) {
+        case "void":
+            if (i == 0) continue;
+        case "String":
+            config = %["detail" => item];
+            break;
+        case "Object":
+            if (item) config = item;
+            else config = %["detail" => "null"];
+            break;
+        }
+        if (config === void) throw new Exception("Missing configuration");
+        for (var j = 0; j < 2; j++) result += string(config.detail) + j;
+        result += ";";
+    }
+    return result;
+}
+function dispatchIterations(items) {
+    var result = "";
+    for (var i = 0; i < items.count; i++) {
+        var item = items[i];
+        if (item.kind == "line") {
+            if (item.changed) result += "L";
+            continue;
+        }
+        if (item.kind == "count") {
+            result += "C";
+            continue;
+        }
+        result += "V";
+    }
+    return result;
+}
+global.__validationResult += ";groups:" + classifyNames(["", "yes", "no"], %["yes" => 1]);
+global.__validationResult += ";prepare:" + prepareResources([void,"text",%["detail"=>"obj"],null,void]);
+global.__validationResult += ";iterations:" + dispatchIterations([
+    %["kind"=>"line","changed"=>true], %["kind"=>"line"], %["kind"=>"count"], %["kind"=>"value"]]);
+function storeCheckpoint(skip, item) {
+    var result = "";
+    if (!skip || item.force !== void) result += "S";
+    return result + "E";
+}
+function sharedReturnOr(a,b) {
+    var result = "";
+    if (a || booleanProbe("B", b)) result += "S";
+    return result + "E";
+}
+function sharedReturnNotOr(a,b) {
+    var result = "";
+    if (!a || booleanProbe("B", b)) result += "S";
+    return result + "E";
+}
+function sharedReturnAnd(a,b) {
+    var result = "";
+    if (a && booleanProbe("B", b)) result += "S";
+    return result + "E";
+}
+function sharedReturnNotAnd(a,b) {
+    var result = "";
+    if (!a && booleanProbe("B", b)) result += "S";
+    return result + "E";
+}
+var sharedReturnFailures=0;
+for (var mask=0;mask<4;mask++) {
+    var a=!!(mask&1),b=!!(mask&2);
+    booleanTrace="";
+    if (sharedReturnOr(a,b) != ((a|b)?"SE":"E") || booleanTrace != (a?"":"B")) sharedReturnFailures++;
+    booleanTrace="";
+    if (sharedReturnNotOr(a,b) != (((!a)|b)?"SE":"E") || booleanTrace != (a?"B":"")) sharedReturnFailures++;
+    booleanTrace="";
+    if (sharedReturnAnd(a,b) != ((a&b)?"SE":"E") || booleanTrace != (a?"B":"")) sharedReturnFailures++;
+    booleanTrace="";
+    if (sharedReturnNotAnd(a,b) != (((!a)&b)?"SE":"E") || booleanTrace != (a?"":"B")) sharedReturnFailures++;
+}
+global.__validationResult += ";checkpoint:" + storeCheckpoint(0,%[]) + storeCheckpoint(1,%[]) + storeCheckpoint(0,%["force"=>1]) + storeCheckpoint(1,%["force"=>1]) + ":" + sharedReturnFailures;
+function loopCheckpoint(skip, item) {
+    var repeat = 1, result = "";
+    while (repeat) {
+        repeat = 0;
+        switch (typeof item) {
+        case "Integer": result += "I"; break;
+        case "Object":
+            if (typeof item.point != "Integer") { result += "T"; continue; }
+            result += "P";
+            if (!skip || item.force !== void) result += "S";
+            return result + "E";
+        }
+    }
+    return result;
+}
+global.__validationResult += ";loop-checkpoint:" + loopCheckpoint(0,%["point"=>0]) + loopCheckpoint(1,%["point"=>0]) + loopCheckpoint(0,%["point"=>0,"force"=>1]) + loopCheckpoint(1,%["point"=>0,"force"=>1]) + loopCheckpoint(0,%[]) + loopCheckpoint(0,1);
+
+    function switchLoop(number, digits, smallUnits, largeUnits)
+    {
+        var out = "";
+        var nonzero = false;
+        var position = number.length - 1;
+        for (var i = 0; i < number.length; i++, position--)
+        {
+            var unit = position & 3;
+            var digit = +number[i];
+            switch (unit)
+            {
+            case 0:
+                if (digit != 0) out += digits[digit], nonzero = true;
+                if (nonzero && position) out += largeUnits[position >> 2];
+                nonzero = false;
+                break;
+            case 1:
+            case 2:
+            case 3:
+                if (digit != 0)
+                {
+                    if (digit != 1 || (unit == 3 && position > 4))
+                        out += digits[digit] + smallUnits[unit];
+                    else
+                        out += smallUnits[unit];
+                    nonzero = true;
+                }
+                break;
+            }
+        }
+        return out;
+    }
+
+
+var numberTrace="";
+var numberValues = ["0","1","10","100","1000","10000","10000000","12345678"];
+for(var valueIndex=0;valueIndex<numberValues.count;valueIndex++)
+    numberTrace += switchLoop(numberValues[valueIndex],["0","1","2","3","4","5","6","7","8","9"],["","T","H","K"],["","W"]) + ":";
+global.__validationResult += ";numbers:" + numberTrace;
+var swapTrace="";
+class SwapBox {
+    var stored, label;
+    function SwapBox(n,s) { stored=n;label=s; }
+    property value {
+        getter() { swapTrace += label+"G"; return stored; }
+        setter(n) { swapTrace += label+"S";stored=n; }
+    }
+}
+function swapMembers(a,b) { a.value <-> b.value; }
+function swapIndices(a,b,key) { a[key] <-> b[key]; }
+var swapLeft=new SwapBox(3,"L"), swapRight=new SwapBox(7,"R");
+swapMembers(swapLeft,swapRight);
+global.__validationResult += ";swap:"+swapLeft.stored+":"+swapRight.stored+":"+swapTrace;
+swapTrace="";
+swapIndices(swapLeft,swapRight,"value");
+global.__validationResult += ":"+swapLeft.stored+":"+swapRight.stored+":"+swapTrace;
+swapTrace="";
+swapMembers(swapLeft,swapLeft);
+global.__validationResult += ":"+swapLeft.stored+":"+swapTrace;
+function multiBlockFallthrough(mode, keep, gate) {
+    var result="", active=1;
+    switch(mode) {
+    case "init": return "I";
+    case "term":
+        result+="C";
+        if(keep) active=0;
+        if(gate) result+="S";
+        else result+="Q";
+        result+="T";
+    case "end":
+        if(active) result+="D";
+        result+="E";
+        return result;
+    default: return "U";
+    }
+}
+var fallthroughFailures=0;
+for(var mask=0;mask<4;mask++) {
+    var keep=!!(mask&1),gate=!!(mask&2);
+    if(multiBlockFallthrough("term",keep,gate) != "C"+(gate?"S":"Q")+"T"+(keep?"":"D")+"E") fallthroughFailures++;
+    if(multiBlockFallthrough("end",keep,gate)!="DE") fallthroughFailures++;
+    if(multiBlockFallthrough("init",keep,gate)!="I") fallthroughFailures++;
+    if(multiBlockFallthrough("other",keep,gate)!="U") fallthroughFailures++;
+}
+global.__validationResult += ";fallthrough:"+fallthroughFailures;

@@ -1,0 +1,30 @@
+function probe(label, value) { global.trace += label; return value; }
+function selectImage(present, scene, skip, alternate, ext, exists, motion, bishamon) {
+    if (present) {
+        if ((scene && !skip) || alternate == "") {
+            if (!exists) global.trace += "W";
+            if ((ext != ".PSB" && ext != ".BMB" && ext != ".MTN") ||
+                (ext == ".MTN" && exists && probe("M", motion)) ||
+                (ext == ".PSB" && exists && probe("P", motion)) ||
+                (ext == ".BMB" && exists && probe("B", bishamon))) {
+                return "animated";
+            }
+        }
+        return alternate;
+    }
+    return "missing";
+}
+var extensions = [".AMV", ".PSB", ".BMB", ".MTN", ""];
+global.__validationResult = "";
+for (var present = 0; present < 2; present++) {
+    for (var ext = 0; ext < extensions.count; ext++) {
+        for (var mask = 0; mask < 64; mask++) {
+            global.trace = "";
+            var result = selectImage(present, !!(mask & 1), !!(mask & 2),
+                (mask & 4) ? "still" : "", extensions[ext], !!(mask & 8),
+                !!(mask & 16), !!(mask & 32));
+            if (global.__validationResult != "") global.__validationResult += "|";
+            global.__validationResult += global.trace + ":" + result;
+        }
+    }
+}

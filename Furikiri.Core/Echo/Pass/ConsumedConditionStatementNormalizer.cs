@@ -48,7 +48,7 @@ namespace Furikiri.Echo.Pass
             };
         }
 
-        private static bool ContainsEquivalent(Expression expression, Expression target)
+        internal static bool ContainsEquivalent(Expression expression, Expression target)
         {
             if (expression == null || target == null)
             {
@@ -56,6 +56,14 @@ namespace Furikiri.Echo.Pass
             }
 
             if (ExpressionStructuralComparer.AreEquivalent(expression, target))
+            {
+                return true;
+            }
+
+            if (expression is PhiExpression phi &&
+                (ContainsEquivalent(phi.Condition?.Condition, target) ||
+                 ContainsEquivalent(phi.ThenBranch, target) ||
+                 ContainsEquivalent(phi.ElseBranch, target)))
             {
                 return true;
             }

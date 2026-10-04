@@ -337,6 +337,11 @@ ASALocalRun/
 !/Furikiri.Tests/Res/NumericRuntime.tjs
 !/Furikiri.Tests/Res/PropertyRuntime.tjs
 !/Furikiri.Tests/Res/ControlFlowRuntime.tjs
+!/Furikiri.Tests/Res/NestedFunctionRuntime.tjs
+!/Furikiri.Tests/Res/GamePatternsRuntime.tjs
+!/Furikiri.Tests/Res/PositionRuntime.tjs
+!/Furikiri.Tests/Res/TextWrapRuntime.tjs
+!/Furikiri.Tests/Res/ImageReturnRuntime.tjs
 /IronTJS
 /KrkrSharp
 /bak

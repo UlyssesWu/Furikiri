@@ -16,6 +16,104 @@ namespace Furikiri.Echo.Pass
     /// </summary>
     internal static class ExpressionValueIdentity
     {
+        internal static bool TrySnapshotMemberBeforeWrite(
+            DecompileContext context, Block block, Instruction instruction,
+            int resultSlot, Expression read,
+            IDictionary<int, Expression> expressions, List<IAstNode> statements)
+        {
+            if (resultSlot <= 0) return false;
+            var direct = instruction.OpCode is OpCode.GPD or OpCode.GPDS;
+            var pending = new Stack<(Block Block, int Index, bool Changed)>();
+            var visited = new HashSet<(Block Block, int Index, bool Changed)>();
+            pending.Push((block, block.Instructions.IndexOf(instruction) + 1, false));
+            var needsSnapshot = false;
+            while (pending.Count > 0)
+            {
+                var position = pending.Pop();
+                if (!visited.Add(position)) continue;
+                var current = position.Block;
+                if (current.InstructionDatas == null ||
+                    current.InstructionDatas.Count != current.Instructions.Count) return false;
+                var changed = position.Changed;
+                var killed = false;
+                for (var index = position.Index; index < current.Instructions.Count; index++)
+                {
+                    var candidate = current.Instructions[index];
+                    var data = current.InstructionDatas[index];
+                    if (data.Read.Contains(resultSlot))
+                    {
+                        // Definitions on only one side of a merge belong to Phi
+                        // recovery; do not make their temporary unconditionally visible.
+                        if (current != block && current.Dominator?[block.Id] != true) return false;
+                        needsSnapshot |= changed;
+                    }
+                    if (data.Write.Contains(resultSlot)) { killed = true; break; }
+                    changed |= candidate.OpCode switch
+                    {
+                        OpCode.SPD or OpCode.SPDE or OpCode.SPDEH or OpCode.SPDS =>
+                            !direct || string.Equals(instruction.Data.AsString(),
+                                candidate.Data.AsString(), StringComparison.Ordinal),
+                        OpCode.SPI or OpCode.SPIE or OpCode.SPIS => true,
+                        _ => false
+                    };
+                }
+                if (!killed)
+                    foreach (var successor in current.To) pending.Push((successor, 0, changed));
+            }
+            if (!needsSnapshot) return false;
+            // Member receivers may alias. Preserve the value read before a
+            // possible overwrite, including both halves of a member swap.
+            var variable = CreateSyntheticVariable(context);
+            expressions[resultSlot] = new LocalExpression(variable);
+            statements.Add(new BinaryExpression(new LocalExpression(variable), read, BinaryOp.Assign)
+            {
+                IsDeclaration = true
+            });
+            return true;
+        }
+
+        internal static bool TrySnapshotCopiedLocal(
+            DecompileContext context, Block block, Instruction instruction,
+            int resultSlot, int sourceSlot, Expression read,
+            IDictionary<int, Expression> expressions, List<IAstNode> statements)
+        {
+            if (resultSlot <= 0 || sourceSlot > Const.ArgBase) return false;
+            var pending = new Stack<(Block Block, int Index, bool Changed)>();
+            var visited = new HashSet<(Block Block, int Index, bool Changed)>();
+            pending.Push((block, block.Instructions.IndexOf(instruction) + 1, false));
+            var needsSnapshot = false;
+            while (pending.Count > 0 && !needsSnapshot)
+            {
+                var position = pending.Pop();
+                if (!visited.Add(position)) continue;
+                var current = position.Block;
+                var changed = position.Changed;
+                var killed = false;
+                for (var index = position.Index; index < current.Instructions.Count; index++)
+                {
+                    var data = current.InstructionDatas[index];
+                    if (changed && data.Read.Contains(resultSlot))
+                    {
+                        needsSnapshot = true;
+                        break;
+                    }
+                    if (data.Write.Contains(resultSlot)) { killed = true; break; }
+                    changed |= data.Write.Contains(sourceSlot);
+                }
+                if (!killed)
+                    foreach (var successor in current.To) pending.Push((successor, 0, changed));
+            }
+            if (!needsSnapshot) return false;
+            // A copied register retains the old value even when its source local is reassigned.
+            var variable = CreateSyntheticVariable(context);
+            expressions[resultSlot] = new LocalExpression(variable);
+            statements.Add(new BinaryExpression(new LocalExpression(variable), read, BinaryOp.Assign)
+            {
+                IsDeclaration = true
+            });
+            return true;
+        }
+
         internal static bool TryMaterializeRepeatedMemberReceiver(
             DecompileContext context, Block block, Instruction instruction,
             int resultSlot, Expression read, IDictionary<int, Expression> expressions,
@@ -147,7 +245,7 @@ namespace Furikiri.Echo.Pass
                 // 真正的局部声明不能嵌入表达式；属性赋值即使被标记为声明，
                 // 仍然可以作为调用消费的返回值。
                 if (assign.IsDeclaration &&
-                    assign.Left is IdentifierExpression { Instance: null })
+                    assign.Left is LocalExpression or IdentifierExpression { Instance: null })
                 {
                     continue;
                 }
@@ -163,16 +261,18 @@ namespace Furikiri.Echo.Pass
                         returned.Return, right, assign,
                         value => returned.Return = value, returned);
                 }
-                for (var scan = index + 1;
-                     scan < statements.Count && !inlined;
-                     scan++)
+                // A later call may observe the assigned member. Never delay
+                // its write past an intervening statement, even when the RHS
+                // shares an expression identity with a subsequent argument.
+                if (!inlined)
                 {
-                    if (statements[scan] is InvokeExpression invoke)
+                    var next = statements[index + 1];
+                    if (next is InvokeExpression invoke)
                     {
                         inlined = TryInlineIntoInvoke(invoke, right, assign);
                     }
 
-                    if (!inlined && statements[scan] is ConditionExpression condition)
+                    if (!inlined && next is ConditionExpression condition)
                     {
                         var target = condition.Condition;
                         if (target is UnaryExpression { Op: UnaryOp.Not } unary)

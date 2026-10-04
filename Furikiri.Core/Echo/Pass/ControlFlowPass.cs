@@ -30,12 +30,16 @@ namespace Furikiri.Echo.Pass
             HideRedundantDecisionShells();
             InlineAssignmentsIntoConditionalPhiGuards();
             HideCollapsedPhiConditions();
+            InlineLocalAssignmentsIntoComparisons();
             HoistLinearCachedInvocationEqualityChains();
             IntervalAnalysisDoWhilePass();
 
             // 先处理循环内部条件。若外围 if/try 先运行，会把尚未物化的循环基本块
             // 当成自己的普通分支并隐藏，最终造成循环体被提到循环外。
-            foreach (var loop in context.LoopSet.OrderBy(loop => loop.Blocks.Count))
+            // A loop inside an outer loop's break arm is outside that outer
+            // natural-loop set. Process later headers first so the exit arm
+            // sees the complete nested loop instead of consuming its raw body.
+            foreach (var loop in context.LoopSet.OrderByDescending(loop => loop.Header.Start))
             {
                 // 父自然循环的 Blocks 会包含子循环全部基本块。父循环若提前在这些块上
                 // 恢复 if，会把子循环体当成父循环的普通分支并搬到子循环语句之外。
@@ -67,6 +71,23 @@ namespace Furikiri.Echo.Pass
 
             // 循环外的 try 可能包住已经物化的完整循环，留到所有循环完成后收集。
             BuildTry(entry => !_context.LoopSet.Any(loop => loop.Contains(entry)));
+
+            // Recover complete return decisions before individual comparisons can
+            // claim a shared success arm and strand the remaining paths.
+            foreach (var root in _context.Blocks.OrderBy(block => block.Start))
+            {
+                if (root.Hidden || !root.Statements.IsCondition() ||
+                    _context.LoopSet.Any(loop => loop.Contains(root))) continue;
+                var condition = root.Statements.GetCondition();
+                if (DecisionDagAnalyzer.TryAnalyzeReturnGuard(_context, _graph, root, out var plan) &&
+                    plan.Decisions.Count > 1 &&
+                    plan.Decisions.Any(block => block != root && block.From.Count > 1) &&
+                    TerminalConditionChainPlanner.IsSimpleTerminalReturnBlock(plan.BodyTarget))
+                {
+                    var returnLogic = DecisionDagMaterializer.Materialize(plan);
+                    root.Statements.Replace(condition, returnLogic.Simplify().ToStatement());
+                }
+            }
 
             // 相等分派是一整片区域，必须早于叶子守卫和普通 if 物化。后者若先
             // 从外围条件收集正文，会把尚未恢复的 case 链连同路径谓词一起吞入，
@@ -538,6 +559,9 @@ namespace Furikiri.Echo.Pass
 
                 foreach (var first in outer.To.Where(HasPayloadArmJoiningSibling).ToList())
                 {
+                    // A shared body may also be reached by an earlier OR arm.
+                    // It belongs to that full decision, not to this final test alone.
+                    if (first.Dominator == null || !first.Dominator[outer.Id]) continue;
                     var fallback = outer.To.First(target => target != first);
                     var firstCondition = first.Statements.GetCondition();
                     var firstTrue = _context.BlockTable[firstCondition.TrueBranch];
@@ -723,8 +747,11 @@ namespace Furikiri.Echo.Pass
                 candidate?.Statements?.OfType<ReturnExpression>()
                     .Any(returnExpression => returnExpression.Return != null) == true;
 
-            static bool IsSideEffectArm(Block candidate) =>
+            bool IsSideEffectArm(Block candidate) =>
                 candidate != null && HasBranchPayload(candidate) &&
+                // A shared payload reached directly from the parent belongs to
+                // an OR chain, not an independently nested leaf condition.
+                candidate.Dominator?[block.Id] == true &&
                 !candidate.Statements.Any(statement =>
                     statement is ReturnExpression or ThrowExpression);
 
@@ -1093,21 +1120,19 @@ namespace Furikiri.Echo.Pass
                         continue;
                     }
 
-                    var hasConditionalPhiAssignment =
-                        normalizedTrue.Statements.OfType<BinaryExpression>().Any(binary =>
-                            binary.Op == BinaryOp.Assign &&
-                            ContainsConditionalPhi(binary.Right));
+                    var hasConditionalPhiConsumer =
+                        normalizedTrue.Statements.OfType<Expression>().Any(ContainsConditionalPhi);
                     if (hasLeadingPayload && !hasLeadingSelfAssignment &&
-                        !hasConditionalPhiAssignment)
+                        !hasConditionalPhiConsumer)
                     {
                         continue;
                     }
 
                     // 带前置语句的扩展形态只处理已折叠进 return 的短路值，或
-                    // 后继中已经形成条件 Phi 赋值的三元式。其他普通分支仍交给
+                    // 后继表达式中已经形成条件 Phi 的三元式。其他普通分支仍交给
                     // 原有控制流恢复，否则可能把比较结果误当左值。
                     if (hasLeadingPayload &&
-                        !hasConditionalPhiAssignment &&
+                        !hasConditionalPhiConsumer &&
                         !normalizedTrue.Statements.OfType<ReturnExpression>()
                             .Any(returnExpression => returnExpression.Return != null))
                     {
@@ -1119,7 +1144,7 @@ namespace Furikiri.Echo.Pass
                         // 普通纯条件块隐藏但保留条件节点，供后续迭代穿透更外层
                         // 折叠图。若后继已包含条件 Phi，条件求值已经进入三元式，
                         // 必须删除原节点，避免它被再次结构化成空 if 并抢先隐藏主体。
-                        if (hasConditionalPhiAssignment)
+                        if (hasConditionalPhiConsumer)
                         {
                             block.Statements.Remove(condition);
                         }
@@ -1129,7 +1154,7 @@ namespace Furikiri.Echo.Pass
                     {
                         // 条件前可能还有 `value += step` 一类真实语句，不能连同
                         // 条件壳一起隐藏。条件若有副作用则保留其求值，否则删除。
-                        if (!hasConditionalPhiAssignment &&
+                        if (!hasConditionalPhiConsumer &&
                             ExpressionEffectAnalysis.HasObservableEffect(
                                 condition.Condition))
                         {
@@ -1378,14 +1403,19 @@ namespace Furikiri.Echo.Pass
                     passthroughBlocks?.Add(current);
                     result = Normalize(current.To[0]);
                 }
-                else if (current.Statements.IsCondition() && current.To.Count == 2)
+                else if ((current.Statements.IsCondition() || current.Hidden && current.Statements.Count == 0) &&
+                         current.To.Count == 2)
                 {
                     var condition = current.Statements.GetCondition();
-                    if (!ExpressionEffectAnalysis.HasObservableEffect(
-                            condition?.Condition))
+                    var normalizedFirst = Normalize(current.To[0]);
+                    var normalizedSecond = Normalize(current.To[1]);
+                    var consumedByPhi = normalizedFirst == normalizedSecond &&
+                        normalizedFirst.Statements.OfType<BinaryExpression>().Any(assignment =>
+                            assignment.Op == BinaryOp.Assign && ContainsConditionalPhi(assignment.Right) &&
+                            ConsumedConditionStatementNormalizer.ContainsEquivalent(
+                                assignment.Right, condition?.Condition));
+                    if (!ExpressionEffectAnalysis.HasObservableEffect(condition?.Condition) || consumedByPhi)
                     {
-                        var normalizedFirst = Normalize(current.To[0]);
-                        var normalizedSecond = Normalize(current.To[1]);
                         if (normalizedFirst == normalizedSecond)
                         {
                             passthroughBlocks?.Add(current);
@@ -1660,10 +1690,19 @@ namespace Furikiri.Echo.Pass
                     continue;
                 }
 
+                // A failed guard leaving the current loop is a break, not an empty
+                // branch. Let the loop-aware condition chain preserve that transfer.
+                if (containingLoop != null && !containingLoop.Contains(skip))
+                {
+                    continue;
+                }
+
                 var bodyRegion = body.To.Contains(skip)
                     ? new List<Block> { body }
                     : CollectDominatedBranchRegion(root, body, skip, true);
                 if (bodyRegion.Count == 0 ||
+                    containingLoop != null &&
+                    !CanReachWithoutLoopBackEdge(body, skip, containingLoop.Header) ||
                     !AllPathsReachOrTerminateAt(body, skip,
                         containingLoop))
                 {
@@ -2125,6 +2164,32 @@ namespace Furikiri.Echo.Pass
             }
 
             return false;
+        }
+
+        private void InlineLocalAssignmentsIntoComparisons()
+        {
+            foreach (var block in _context.Blocks.Where(candidate => !candidate.Hidden))
+            {
+                if (block.Statements?.Count != 2 ||
+                    block.Statements[0] is not BinaryExpression { Op: BinaryOp.Assign, Left: LocalExpression } assignment ||
+                    block.Statements[1] is not ConditionExpression condition ||
+                    condition.Condition is not BinaryExpression comparison ||
+                    !ReferencesAssignmentTarget(comparison.Left, assignment.Left) ||
+                    comparison.Left is not LocalExpression ||
+                    ReferencesAssignmentTarget(comparison.Right, assignment.Left) ||
+                    !block.From.Any(predecessor => predecessor.Statements?.GetCondition() != null &&
+                        predecessor.To.Any(target => target != block && block.To.Contains(target))) ||
+                    assignment.IsDeclaration && !HasEarlierDominatingDeclaration(block, assignment))
+                    continue;
+
+                // Evaluate the assignment exactly once, before the comparison's
+                // other operand. This exposes assignment-bearing short circuits
+                // without treating the assigned branch as an independent body.
+                assignment.IsDeclaration = false;
+                comparison.Left = assignment;
+                assignment.Parent = comparison;
+                block.Statements.RemoveAt(0);
+            }
         }
 
         private void InlineLoopHeaderAssignment(Block conditionBlock, ref Expression condition)
@@ -2929,7 +2994,14 @@ namespace Furikiri.Echo.Pass
                     return false;
                 }
 
-                var result = current.To.All(Visit);
+                var nestedLoop = _context.LoopSet.FirstOrDefault(candidate =>
+                    candidate != loop && candidate.Header == current && candidate.MaterializedStatement != null);
+                // A materialized loop is one statement. Its backedges do not
+                // return to the surrounding loop; inspect its exits instead.
+                var successors = nestedLoop == null ? current.To : nestedLoop.Blocks
+                    .SelectMany(block => block.To).Where(target => !nestedLoop.Contains(target))
+                    .Distinct().ToList();
+                var result = successors.Count > 0 && successors.All(Visit);
                 visiting.Remove(current);
                 memo[current] = result;
                 return result;
@@ -3280,7 +3352,29 @@ namespace Furikiri.Echo.Pass
             {
                 var multiWay = TryStructureMultiWayConditionChain(
                     root, conditionBlocks, terminalList, passthroughBlocks, out logic);
-                return multiWay;
+                if (multiWay) return true;
+
+                // A shared success entry can begin its own conditional body.
+                // Recover that strictly nested region before retrying the outer
+                // predicate; structuring an OR arm first would lose the other
+                // incoming path to the shared entry.
+                foreach (var nested in conditionBlocks.Where(candidate =>
+                             candidate != root && !candidate.Hidden &&
+                             candidate.Dominator?[root.Id] == true)
+                         .OrderBy(candidate => candidate.Start))
+                {
+                    var join = FindIfPostDominator(nested);
+                    var condition = nested.Statements.GetCondition();
+                    if (condition == null || join == null || join == chainPostDominator ||
+                        join == nested || join.Dominator?[nested.Id] != true)
+                        continue;
+                    if (TryStructureConditionChain(nested, condition, out var nestedLogic))
+                    {
+                        nested.Statements.Replace(condition, nestedLogic.Simplify().ToStatement());
+                        return TryStructureConditionChain(root, rootCondition, out logic, multiWayOnly);
+                    }
+                }
+                return false;
             }
 
             Block bodyTarget;
@@ -3674,6 +3768,8 @@ namespace Furikiri.Echo.Pass
             // 不能到达它的出口都直接终止函数，就把它当作本条件链的公共后继。
             // 这样 continueWork 会留在 if 外，而不是被误塞进最后一个 else。
             Block normalContinuation = null;
+            // Stop at the original join: a path through that join and then to
+            // return is ordinary continuation, not an early terminating arm.
             if (!_context.LoopSet.Any(loop => loop.Contains(root)))
             {
                 normalContinuation = terminals
@@ -3681,7 +3777,7 @@ namespace Furikiri.Echo.Pass
                         other != candidate && CanReach(other, candidate)))
                     .Where(candidate => terminals.All(other =>
                         other == candidate || CanReach(other, candidate) ||
-                        AllPathsTerminateBefore(other, candidate)))
+                        AllPathsTerminateBefore(other, postDominator)))
                     .OrderBy(candidate => candidate.Start)
                     .FirstOrDefault();
                 if (normalContinuation != null)
@@ -3711,6 +3807,19 @@ namespace Furikiri.Echo.Pass
                 {
                     gatedTarget.Statements.Replace(
                         gatedCondition, gatedLogic.Simplify().ToStatement());
+                }
+
+                // The entry guard may finish before the rest of the gated
+                // region. Materialize every remaining decision before taking
+                // the outer body snapshot.
+                var initialGatedRegion = CollectDominatedBranchRegion(
+                    root, gatedTarget, postDominator, true);
+                StructureNestedConditionChains(initialGatedRegion);
+                foreach (var candidate in initialGatedRegion.OrderByDescending(block => block.Start))
+                {
+                    var nestedCondition = candidate.Hidden ? null : candidate.Statements.GetCondition();
+                    if (nestedCondition != null && StructureIfElse(candidate, out var nestedLogic))
+                        candidate.Statements.Replace(nestedCondition, nestedLogic.Simplify().ToStatement());
                 }
 
                 var gatedRegion = CollectDominatedBranchRegion(
@@ -3776,6 +3885,15 @@ namespace Furikiri.Echo.Pass
                     ? new List<Block>()
                     : CollectDominatedBranchRegion(root, target, postDominator, true));
             if (initialRegions.Any(pair => pair.Key != postDominator && pair.Value.Count == 0))
+            {
+                return false;
+            }
+
+            // Sequential branches can share a tail before the outer join.
+            // Flattening them into mutually exclusive arms would run that tail
+            // on only one path. Leave overlapping regions to nested recovery.
+            if (initialRegions.Values.SelectMany(region => region)
+                .GroupBy(block => block).Any(group => group.Count() > 1))
             {
                 return false;
             }
@@ -4220,7 +4338,10 @@ namespace Furikiri.Echo.Pass
                 defaultTarget != postDominator &&
                 groups.Any(group =>
                     ReachesDefaultWithoutNextIteration(group.Target)) &&
-                groups.All(group => AllPathsReachOrTerminateAt(group.Target, defaultTarget));
+                (groups.All(group => AllPathsReachOrTerminateAt(group.Target, defaultTarget)) ||
+                 !hasCompilerDefaultEvidence && containingLoop != null &&
+                 !groups.Any(group => IsContinueTarget(group.Target, containingLoop)) &&
+                 groups.All(group => AllPathsReachOrTerminateAt(group.Target, defaultTarget, containingLoop)));
             if (caseBlocks.Count == 1 && defaultIsNormalContinuation &&
                 !SwitchCompilationPatternAnalyzer.IsSingleCaseSwitch(
                     _context, root))
@@ -4288,6 +4409,33 @@ namespace Furikiri.Echo.Pass
             {
                 return false;
             }
+
+            var sharedTails = containingLoop == null ||
+                              postDominator != containingLoop.Header &&
+                              !IsContinueTarget(postDominator, containingLoop)
+                ? new List<Block>() : _context.Blocks
+                .Where(candidate => !candidate.Hidden && candidate != postDominator &&
+                    initialRegions.Values.Any(region => region.Contains(candidate)) &&
+                    candidate.Dominator != null && candidate.Dominator[root.Id] &&
+                    candidate.To.Count == 1 &&
+                    (candidate.To[0] == postDominator ||
+                     IsContinueTarget(postDominator, containingLoop) &&
+                     IsContinueTarget(candidate.To[0], containingLoop)) &&
+                    !IsContinueTarget(candidate, containingLoop) &&
+                    candidate.Statements.GetCondition() == null && HasBranchPayload(candidate) &&
+                    groups.Count(group => CanReachWithoutLoopBackEdge(
+                        group.Target, candidate, containingLoop.Header)) > 1).ToList();
+            foreach (var tail in sharedTails)
+            {
+                // Every outgoing edge ends this iteration. Keep that transfer
+                // when a nested branch captures a copy of the shared payload.
+                if (!tail.Statements.Any(node => node is ContinueStatement))
+                    tail.Statements.Add(new ContinueStatement());
+            }
+            var sharedTailStatements = sharedTails.ToDictionary(tail => tail,
+                tail => tail.Statements.Where(node => node is not GotoExpression)
+                    .Select(node => node is Expression expression
+                        ? (IAstNode)new ExpressionStatement(expression) : node).ToList());
 
             // 外层 case 正文中可以继续包含完整的相等分派。若先按普通嵌套
             // 条件物化，空 case 跳板会被合并成反向 &&，default 正文随后与
@@ -4428,8 +4576,10 @@ namespace Furikiri.Echo.Pass
                     }
 
                     var isPayloadLeaf =
-                        leafTrue.To.Contains(leafFalse) && HasBranchPayload(leafTrue) ||
-                        leafFalse.To.Contains(leafTrue) && HasBranchPayload(leafFalse);
+                        leafTrue.To.Contains(leafFalse) && HasBranchPayload(leafTrue) &&
+                            leafTrue.Dominator?[candidate.Id] == true ||
+                        leafFalse.To.Contains(leafTrue) && HasBranchPayload(leafFalse) &&
+                            leafFalse.Dominator?[candidate.Id] == true;
                     if (isPayloadLeaf &&
                         StructureIfElse(candidate, out var leafLogic))
                     {
@@ -4489,6 +4639,10 @@ namespace Furikiri.Echo.Pass
                 }
             }
 
+            // Preserve complete short-circuit chains inside each case before
+            // materializing leaves; a shared payload may bypass the last test.
+            StructureNestedConditionChains(initialRegions.Values.SelectMany(region => region));
+
             // 先从 case 区域尾部恢复内层 if。case 入口只覆盖首个条件，后续的
             // 短路判断通常位于共享后继块；若直接物化入口，这些后继会以裸比较
             // 输出，真正受控的副作用语句则被隐藏掉。
@@ -4528,6 +4682,53 @@ namespace Furikiri.Echo.Pass
                          defaultTarget != postDominator
                     ? new List<Block>()
                     : CollectDominatedBranchRegion(root, group.Target, postDominator, true));
+
+            var sharedBodies = new Dictionary<Block, BlockStatement>();
+            if (sharedTails.Count > 0)
+            {
+                foreach (var group in groups)
+                {
+                    var body = new BlockStatement(regions[group.Target]
+                        .Except(sharedTails).ToList(), true);
+                    foreach (var tail in sharedTails.Where(tail =>
+                                 CanReachWithoutLoopBackEdge(group.Target, tail, containingLoop.Header)))
+                    {
+                        body.Statements.AddRange(sharedTailStatements[tail]);
+                    }
+                    sharedBodies[group.Target] = body;
+                }
+            }
+
+            // A case can reach the next case through several conditional blocks.
+            // The shared successor is not dominated by the first case, so inspect
+            // every region exit rather than only the case entry's direct edges.
+            var directFallthroughs = groups
+                .SelectMany(group => regions[group.Target].Append(group.Target)
+                    .SelectMany(block => block.To).Distinct()
+                    .Select(target => (From: group.Target, To: target)))
+                .Where(edge => edge.From != edge.To &&
+                    groups.Any(group => group.Target == edge.To) &&
+                    AllPathsReachOrTerminateAt(edge.From, edge.To, containingLoop) &&
+                    !regions[edge.From].Contains(edge.To)).ToDictionary(edge => edge.From, edge => edge.To);
+            if (directFallthroughs.Count > 0)
+            {
+                var snapshots = groups.ToDictionary(group => group.Target,
+                    group => sharedBodies.TryGetValue(group.Target, out var body)
+                        ? body : new BlockStatement(regions[group.Target], true));
+                foreach (var group in groups)
+                {
+                    var body = new BlockStatement();
+                    var visited = new HashSet<Block>();
+                    var target = group.Target;
+                    do
+                    {
+                        if (!visited.Add(target))
+                            throw new InvalidOperationException("Cyclic case fallthrough.");
+                        body.Statements.AddRange(snapshots[target].Statements);
+                    } while (directFallthroughs.TryGetValue(target, out target));
+                    sharedBodies[group.Target] = body;
+                }
+            }
 
             LogicalBlock defaultBlock = new LogicalBlock { Type = LogicalBlockType.None };
             if (defaultTarget != postDominator)
@@ -4587,6 +4788,12 @@ namespace Furikiri.Echo.Pass
                     }
                 };
 
+                if (sharedBodies.TryGetValue(group.Target, out var sharedBody))
+                {
+                    currentLogic.Then.Type = LogicalBlockType.Statement;
+                    currentLogic.Then.Statement = sharedBody;
+                }
+
                 if (nested != null)
                 {
                     currentLogic.Else.Type = LogicalBlockType.Logical;
@@ -4611,6 +4818,10 @@ namespace Furikiri.Echo.Pass
             }
 
             logic = nested;
+            if (sharedBodies.Count > 0)
+            {
+                regions.Values.SelectMany(region => region).Concat(sharedTails).Distinct().ToList().SafeHide();
+            }
             return logic != null;
         }
 
@@ -5074,6 +5285,25 @@ namespace Furikiri.Echo.Pass
 
             var initialThen = CollectBranch(thenEntry, regionPlan?.ThenBlocks);
             var initialElse = CollectBranch(elseEntry, regionPlan?.ElseBlocks);
+            if (containingLoop != null && postDominator != containingLoop.Header &&
+                !IsContinueTarget(postDominator, containingLoop))
+            {
+                // A branch can bypass the chosen normal continuation by falling
+                // directly into the loop latch. Once laid out before that
+                // continuation, the fallthrough needs an explicit continue.
+                foreach (var tail in initialThen.Concat(initialElse).Distinct().Where(candidate =>
+                             !candidate.Hidden && candidate.To.Count == 1 &&
+                             !CanReachWithoutLoopBackEdge(postDominator, candidate, containingLoop.Header) &&
+                             !IsContinueTarget(candidate, containingLoop) &&
+                             (candidate.To[0] == containingLoop.Header ||
+                              IsContinueTarget(candidate.To[0], containingLoop)) &&
+                             candidate.Statements.GetCondition() == null &&
+                             !candidate.Statements.Any(node => node is
+                                 ContinueStatement or ReturnExpression or ThrowExpression)))
+                {
+                    tail.Statements.Add(new ContinueStatement());
+                }
+            }
             var materializationPlan = IfRegionMaterializationAnalyzer.Analyze(
                 thenEntry, elseEntry, postDominator, initialThen, initialElse);
 
@@ -5788,7 +6018,9 @@ namespace Furikiri.Echo.Pass
         internal bool StructureIfElse(Block block, out IfLogic outIf)
         {
             outIf = null;
-            if (block == null || !_structuringBlocks.Add(block.Id))
+            // Earlier chains can consume entries still present in a caller's
+            // candidate snapshot. Structuring them again steals shared bodies.
+            if (block == null || block.Hidden || !_structuringBlocks.Add(block.Id))
             {
                 return false;
             }
@@ -5824,7 +6056,7 @@ namespace Furikiri.Echo.Pass
             {
                 logic = null;
                 crossedBoundary = false;
-                if (block == null || !_structuringBlocks.Add(block.Id))
+                if (block == null || block.Hidden || !_structuringBlocks.Add(block.Id))
                 {
                     return false;
                 }

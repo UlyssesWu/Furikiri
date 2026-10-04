@@ -77,7 +77,7 @@ namespace Furikiri.Echo
             Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)> propertyBlocks =
                 new Dictionary<Property, (BlockStatement Getter, BlockStatement Setter)>();
             var classObjects = Script.Objects.Where(o => o.ContextType == TjsContextType.Class).ToList();
-            var classSuperExpressions = new Dictionary<CodeObject, Expression>();
+            var classSuperExpressions = new Dictionary<CodeObject, List<Expression>>();
             var classBodies = new Dictionary<CodeObject, BlockStatement>();
 
             methods.Add(Script.Methods[Script.TopLevel], DecompileObject(Script.TopLevel));
@@ -116,25 +116,33 @@ namespace Furikiri.Echo
                     continue;
                 }
 
-                var superBlock = DecompileObject(classObj.SuperClass);
-                Expression superExpr = null;
-                if (superBlock?.Statements != null)
+                var getter = classObj.SuperClass;
+                var pointers = getter.SuperClassGetterPointer;
+                var starts = pointers?.Length > 0 ? pointers : new[] { 0 };
+                var expressions = new List<Expression>();
+                for (var index = 0; index < starts.Length; index++)
                 {
-                    foreach (var statement in superBlock.Statements)
-                    {
-                        if (statement is ExpressionStatement exprStmt && exprStmt.Expression is ReturnExpression ret &&
-                            ret.Return != null)
-                        {
-                            superExpr = ret.Return;
-                            break;
-                        }
-                    }
+                    // Each superclass proxy entry is an independent function.
+                    // A CFG rooted at zero cannot reach the later entries.
+                    var start = starts[index];
+                    var end = index + 1 < starts.Length ? starts[index + 1] : getter.Code.Length;
+                    if (start < 0 || end <= start || end > getter.Code.Length)
+                        throw new InvalidDataException("Invalid superclass proxy entry range.");
+                    var entry = new CodeObject(getter.Script, getter.Name, (int)getter.ContextType,
+                        getter.Code.Skip(start).Take(end - start).ToArray(), getter.Variants,
+                        getter.MaxVariableCount, getter.VariableReserveCount, getter.MaxFrameCount,
+                        getter.FuncDeclArgCount, getter.FuncDeclUnnamedArgArrayBase,
+                        getter.FuncDeclCollapseBase, false, Array.Empty<long>(), Array.Empty<int>())
+                    { Parent = getter.Parent };
+                    var superBlock = DecompileObject(entry);
+                    var expression = superBlock.Statements.OfType<ExpressionStatement>()
+                        .Select(statement => statement.Expression).OfType<ReturnExpression>()
+                        .Select(ret => ret.Return).FirstOrDefault(value => value != null);
+                    if (expression == null)
+                        throw new InvalidDataException("Superclass proxy has no return expression.");
+                    expressions.Add(expression);
                 }
-
-                if (superExpr != null)
-                {
-                    classSuperExpressions[classObj] = superExpr;
-                }
+                classSuperExpressions[classObj] = expressions;
             }
 
             // Build property blocks before class/function emission so class writer can inline
@@ -170,7 +178,7 @@ namespace Furikiri.Echo
             // 嵌套类由所属类递归写出。若在这里也按对象表平铺，`Outer.Inner` 会被错误
             // 变成全局 `Inner`，虽然文本仍能编译，运行时的成员查找却已经改变。
             var rootClasses = classObjects
-                .Where(classObj => classObj.Parent?.ContextType != TjsContextType.Class)
+                .Where(classObj => classObj.Parent == Script.TopLevel)
                 .ToList();
             foreach (var classObj in rootClasses)
             {
@@ -193,7 +201,7 @@ namespace Furikiri.Echo
                     continue;
                 }
 
-                if (m.Key.Object.Parent?.ContextType == TjsContextType.Class)
+                if (m.Key.Object.Parent?.ContextType != TjsContextType.TopLevel)
                 {
                     continue;
                 }
@@ -208,7 +216,7 @@ namespace Furikiri.Echo
             // Then output top-level properties with associated getter/setter bodies.
             foreach (var propertyBlock in propertyBlocks)
             {
-                if (propertyBlock.Key.Parent?.ContextType == TjsContextType.Class)
+                if (propertyBlock.Key.Parent != Script.TopLevel)
                 {
                     continue;
                 }
