@@ -119,6 +119,8 @@ namespace Furikiri.Echo
                 case GPDS:
                 case GPIS:
                 case GETP:
+                case DELD:
+                case DELI:
                 case GLOBAL:
                     Write.Add(ins.GetRegisterSlot(0));
                     break;

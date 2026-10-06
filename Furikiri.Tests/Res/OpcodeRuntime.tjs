@@ -1,0 +1,63 @@
+var trace = "";
+class Box {
+    var stored = 8;
+    property value {
+        getter() { trace += "G"; return stored; }
+        setter(n) { trace += "S"; stored = n; }
+    }
+}
+function operations(p) {
+    *p += 2; trace += ":" + (*p += 3) + ";";
+    *p -= 1; trace += ":" + (*p -= 2) + ";";
+    *p *= 2; trace += ":" + (*p *= 3) + ";";
+    *p /= 2; trace += ":" + (*p /= 3) + ";";
+    *p %= 7; trace += ":" + (*p %= 3) + ";";
+    *p = 64; *p \= 2; trace += ":" + (*p \= 3) + ";";
+    *p |= 4; trace += ":" + (*p |= 1) + ";";
+    *p ^= 3; trace += ":" + (*p ^= 2) + ";";
+    *p &= 15; trace += ":" + (*p &= 7) + ";";
+    *p <<= 2; trace += ":" + (*p <<= 1) + ";";
+    *p >>= 2; trace += ":" + (*p >>= 1) + ";";
+    *p = -16; *p >>>= 1; trace += ":" + (*p >>>= 2) + ";";
+    *p ||= 0; trace += ":" + (*p ||= 2) + ";";
+    *p &&= 3; trace += ":" + (*p &&= 0) + ";";
+    ++*p; trace += ":" + (++*p) + ";";
+    --*p; trace += ":" + (--*p) + ";";
+    trace += ":" + ((*p)++) + ":" + ((*p)--) + ";";
+}
+function deleteResults(obj, key) {
+    var direct = delete obj.value;
+    var indirect = delete obj[key];
+    return direct + ":" + indirect + ":" + (delete obj.missing);
+}
+function standaloneRead(p) { *p; }
+function chooseProperty(b) { trace += "P"; return &b.value; }
+function rightValue() { trace += "R"; return 5; }
+function deleteInCondition(obj, key) {
+    if (delete obj.value) trace += "D";
+    if (!(delete obj[key])) trace += "N";
+}
+function updateInCondition(p) {
+    if (++*p) trace += "I";
+    if (*p += 2) trace += "A";
+    if (*p &&= 0) trace += "bad";
+}
+var opcodeDeleteGlobal = 7;
+class DeleteBox {
+    var opcodeDeleteGlobal = 99;
+    var value = 42;
+    function remove() {
+        var removed = delete global.opcodeDeleteGlobal;
+        return removed + ":" + opcodeDeleteGlobal + ":" + (delete this.value);
+    }
+}
+var box = new Box();
+operations(&box.value);
+trace += deleteResults(%["value" => 1, "other" => 2], "other");
+standaloneRead(&box.value);
+trace += ":" + (*chooseProperty(box) += rightValue()) + ";";
+deleteInCondition(%["value" => 1], "missing");
+updateInCondition(&box.value);
+var deleteBox = new DeleteBox();
+trace += deleteBox.remove();
+global.__validationResult = trace;

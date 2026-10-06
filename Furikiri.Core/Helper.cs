@@ -448,6 +448,8 @@ namespace Furikiri
                 BinaryOp.NumberShiftLeft => "<<=",
                 BinaryOp.NumberShiftRight => ">>=",
                 BinaryOp.BitShiftRight => ">>>=",
+                BinaryOp.LogicAnd => "&&=",
+                BinaryOp.LogicOr => "||=",
                 _ => op.ToSymbol(),
             };
         }
@@ -637,7 +639,7 @@ namespace Furikiri
 
         public static bool CanBeJunk(this OpCode code)
         {
-            return code == OpCode.NOP || code == OpCode.DEBUGGER;
+            return code == OpCode.NOP;
         }
 
         /// <summary>

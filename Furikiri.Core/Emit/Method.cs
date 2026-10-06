@@ -78,7 +78,8 @@ namespace Furikiri.Emit
             Resolve();
 
             Instructions.RemoveAll(instruction =>
-                instruction.OpCode == OpCode.NOP || instruction.OpCode == OpCode.DEBUGGER);
+                instruction.OpCode == OpCode.NOP &&
+                (instruction.JumpedFrom == null || instruction.JumpedFrom.Count == 0));
 
             //a simple demo
             //List<Instruction> toBeRemoved = new List<Instruction>();
@@ -104,6 +105,9 @@ namespace Furikiri.Emit
             //}
 
             Merge();
+            // CFG 使用列表索引而非字节偏移。删除 NOP 后必须重新编号；作为
+            // 跳转目标的 NOP 保留，DEBUGGER 具有可观察行为，也不能删除。
+            for (var i = 0; i < Instructions.Count; i++) Instructions[i].Line = i;
         }
 
         /// <summary>

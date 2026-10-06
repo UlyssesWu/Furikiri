@@ -739,13 +739,18 @@ namespace Furikiri.Echo.Language
             if (bin.IsSelfAssignment && bin.Op != BinaryOp.Swap)
             {
                 needBrackets = false;
-                if (bin.Op.CanSelfAssign())
+                if (bin.Op.CanSelfAssign() || bin.Op is BinaryOp.LogicAnd or BinaryOp.LogicOr)
                 {
+                    // AST 保存的是运算符，但写出的 op= 具有赋值优先级。
+                    // 嵌在拼接、调用或返回表达式中时必须将完整赋值成组。
+                    var wrapAssignment = bin.Parent is Expression;
+                    if (wrapAssignment) _formatter.WriteToken("(");
                     Visit(bin.Left);
                     _formatter.WriteSpace();
                     _formatter.WriteToken(bin.Op.ToSelfAssignSymbol());
                     _formatter.WriteSpace();
                     Visit(bin.Right);
+                    if (wrapAssignment) _formatter.WriteToken(")");
                     return;
                 }
 
@@ -1333,7 +1338,8 @@ namespace Furikiri.Echo.Language
 
             int pos = _formatter.CurrentPosition;
             if (expression.Expression is IOperation bin &&
-                expression.Expression is not BinaryExpression { Op: BinaryOp.Swap })
+                expression.Expression is not BinaryExpression
+                    { Op: BinaryOp.Swap or BinaryOp.LogicAnd or BinaryOp.LogicOr })
             {
                 bin.IsSelfAssignment = true;
             }
@@ -1784,6 +1790,16 @@ namespace Furikiri.Echo.Language
             _formatter.WriteIdentifier(delete.Identifier);
         }
 
+        internal override void VisitStmt(Statement statement)
+        {
+            if (statement is DebuggerStatement)
+            {
+                _formatter.WriteKeyword("debugger");
+                _formatter.WriteToken(";");
+                _formatter.WriteLine();
+            }
+        }
+
         internal override void VisitUnaryExpr(UnaryExpression unary)
         {
             // Invalidate 是独立语句操作（invalidate target），
@@ -1821,7 +1837,11 @@ namespace Furikiri.Echo.Language
                     }
                     else
                     {
+                        // * 的绑定弱于后置 ++/--，必须写成 (*property)++。
+                        var wrapProperty = unary.Target is UnaryExpression { Op: UnaryOp.PropertyObject };
+                        if (wrapProperty) _formatter.WriteToken("(");
                         Visit(unary.Target);
+                        if (wrapProperty) _formatter.WriteToken(")");
                         _formatter.WriteToken(unary.Op.ToSymbol());
                     }
                     break;

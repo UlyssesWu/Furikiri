@@ -901,22 +901,74 @@ namespace Furikiri.Echo.Pass
                         break;
                     case OpCode.INCP:
                     case OpCode.DECP:
+                    {
+                        var res = ins.GetRegisterSlot(0);
+                        var propertySlot = ins.GetRegisterSlot(1);
+                        var target = new UnaryExpression(ex[propertySlot], UnaryOp.PropertyObject);
+                        var op = ins.OpCode == OpCode.INCP ? UnaryOp.Inc : UnaryOp.Dec;
+                        var update = new UnaryExpression(target, op) { IsPrefix = res != 0 };
+
+                        // 后置形式先 GETP 保存旧值，再以无结果 INCP/DECP 更新属性。
+                        // 合并到旧值快照中，保留 getter/setter 次数和传出的旧值。
+                        if (res == 0 && i > 0 &&
+                            block.Instructions[i - 1].OpCode == OpCode.GETP)
+                        {
+                            var snapshot = block.Instructions[i - 1];
+                            if (snapshot.GetRegisterSlot(1) == propertySlot &&
+                                snapshot.GetRegisterSlot(0) > Const.ArgBase)
+                            {
+                                ex[snapshot.GetRegisterSlot(0)] = update;
+                                break;
+                            }
+                        }
+
+                        if (res != 0) ex[res] = MarkCachedEvaluation(update, res, ins);
+                        if (ShouldEmitStandaloneCall(block, ins, res)) expList.Add(update);
+                    }
                         break;
                     case OpCode.LORP:
-                        break;
                     case OpCode.LANDP:
-                        break;
                     case OpCode.BORP:
-                        break;
                     case OpCode.BXORP:
-                        break;
                     case OpCode.BANDP:
-                        break;
                     case OpCode.SARP:
-                        break;
                     case OpCode.SALP:
-                        break;
                     case OpCode.SRP:
+                    case OpCode.ADDP:
+                    case OpCode.SUBP:
+                    case OpCode.MODP:
+                    case OpCode.DIVP:
+                    case OpCode.IDIVP:
+                    case OpCode.MULP:
+                    {
+                        var res = ins.GetRegisterSlot(0);
+                        var target = new UnaryExpression(
+                            ex[ins.GetRegisterSlot(1)], UnaryOp.PropertyObject);
+                        var op = ins.OpCode switch
+                        {
+                            OpCode.LORP => BinaryOp.LogicOr,
+                            OpCode.LANDP => BinaryOp.LogicAnd,
+                            OpCode.BORP => BinaryOp.BitOr,
+                            OpCode.BXORP => BinaryOp.BitXor,
+                            OpCode.BANDP => BinaryOp.BitAnd,
+                            OpCode.SARP => BinaryOp.NumberShiftRight,
+                            OpCode.SALP => BinaryOp.NumberShiftLeft,
+                            OpCode.SRP => BinaryOp.BitShiftRight,
+                            OpCode.ADDP => BinaryOp.Add,
+                            OpCode.SUBP => BinaryOp.Sub,
+                            OpCode.MODP => BinaryOp.Mod,
+                            OpCode.DIVP => BinaryOp.Div,
+                            OpCode.IDIVP => BinaryOp.Idiv,
+                            OpCode.MULP => BinaryOp.Mul,
+                            _ => throw new ArgumentOutOfRangeException()
+                        };
+                        var update = new BinaryExpression(target, ex[ins.GetRegisterSlot(2)], op)
+                        {
+                            IsSelfAssignment = true
+                        };
+                        if (res != 0) ex[res] = MarkCachedEvaluation(update, res, ins);
+                        if (ShouldEmitStandaloneCall(block, ins, res)) expList.Add(update);
+                    }
                         break;
                     case OpCode.CP:
                     {
@@ -1317,18 +1369,6 @@ namespace Furikiri.Echo.Pass
                         expList.Add(b);
                     }
                         break;
-                    case OpCode.ADDP:
-                        break;
-                    case OpCode.SUBP:
-                        break;
-                    case OpCode.MODP:
-                        break;
-                    case OpCode.DIVP:
-                        break;
-                    case OpCode.IDIVP:
-                        break;
-                    case OpCode.MULP:
-                        break;
                     case OpCode.EVAL:
                     {
                         var srcSlot = ins.GetRegisterSlot(0);
@@ -1712,7 +1752,15 @@ namespace Furikiri.Echo.Pass
                         var src = ins.GetRegisterSlot(1);
                         if (ex.TryGetValue(src, out var srcExpr))
                         {
-                            ex[dst] = new UnaryExpression(srcExpr, UnaryOp.PropertyObject);
+                            var read = MarkCachedEvaluation(
+                                new UnaryExpression(srcExpr, UnaryOp.PropertyObject), dst, ins);
+                            ex[dst] = read;
+                            if (ShouldEmitStandaloneCall(block, ins, dst))
+                            {
+                                // 丢弃读取值也会调用 getter，不能删除该次求值。
+                                read.RequiresStandaloneEvaluation = true;
+                                expList.Add(read);
+                            }
                         }
                     }
                         break;
@@ -1720,11 +1768,16 @@ namespace Furikiri.Echo.Pass
                     case OpCode.DELD:
                         DeleteExpression d = new DeleteExpression(ins.Data.AsString());
                         d.Instance = ex[ins.GetRegisterSlot(1)];
-                        expList.Add(d);
+                        if (ins.GetRegisterSlot(0) != 0)
+                            ex[ins.GetRegisterSlot(0)] = d;
+                        if (ShouldEmitStandaloneCall(block, ins, ins.GetRegisterSlot(0)))
+                            expList.Add(d);
                         break;
                     case OpCode.DELI:
                         DeleteExpression d2 = new DeleteExpression(ex[ins.GetRegisterSlot(2)]);
                         d2.Instance = ex[ins.GetRegisterSlot(1)];
+                        if (ins.GetRegisterSlot(0) != 0)
+                            ex[ins.GetRegisterSlot(0)] = d2;
                         //Check declare
                         if (d2.Instance is IdentifierExpression toDel)
                         {
@@ -1734,7 +1787,8 @@ namespace Furikiri.Echo.Pass
                             }
                         }
 
-                        expList.Add(d2);
+                        if (ShouldEmitStandaloneCall(block, ins, ins.GetRegisterSlot(0)))
+                            expList.Add(d2);
                         break;
                     case OpCode.SRV:
                     {
@@ -1784,12 +1838,17 @@ namespace Furikiri.Echo.Pass
                     }
                         break;
                     case OpCode.ADDCI:
+                        // 类名/继承元数据由类声明恢复；不是独立源码表达式。
                         break;
                     case OpCode.REGMEMBER:
+                        // 成员注册序列已由 RegMemberPass 处理。
                         break;
                     case OpCode.DEBUGGER:
+                        expList.Add(new DebuggerStatement());
                         break;
                     case OpCode.LAST:
+                        // LAST 是 VM 指令边界；之后的值是编译器内部伪指令，
+                        // 不属于 TJS2100 文件中的运行时 opcode。
                         break;
                     case OpCode.PreDec:
                         break;

@@ -336,6 +336,7 @@ ASALocalRun/
 !/Furikiri.Tests/Res/SemanticControlFlow.tjs.comp
 !/Furikiri.Tests/Res/NumericRuntime.tjs
 !/Furikiri.Tests/Res/PropertyRuntime.tjs
+!/Furikiri.Tests/Res/OpcodeRuntime.tjs
 !/Furikiri.Tests/Res/ControlFlowRuntime.tjs
 !/Furikiri.Tests/Res/NestedFunctionRuntime.tjs
 !/Furikiri.Tests/Res/GamePatternsRuntime.tjs

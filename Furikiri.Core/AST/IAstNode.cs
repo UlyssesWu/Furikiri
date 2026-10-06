@@ -34,6 +34,7 @@ namespace Furikiri.AST
         DeleteExpression,
         PropertyAccessExpression,
         PhiExpression,
+        DebuggerStatement,
     }
 
     public interface IAstNode

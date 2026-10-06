@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Furikiri.AST.Expressions;
 using Furikiri.Echo;
@@ -157,6 +158,84 @@ public class RuntimeTest
     {
         AssertRuntimeRoundTrip("PropertyRuntime.tjs",
             "S3;G;T;S5;A5;G;S13;G;C27;G;G;G;I;N1;J;W42,7,8,9;J;J;L42,7,8,9,0,1,2;Q;J;R7;V10,1;");
+    }
+
+    [TestMethod]
+    public void PropertyObjectOpcodesAndDeleteResultsPreserveRuntimeEffects()
+    {
+        AssertRuntimeRoundTrip("OpcodeRuntime.tjs",
+            "GSGS:13;GSGS:10;GSGS:60;GSGS:10;GSGS:0;SGSGS:10;" +
+            "GSGS:15;GSGS:14;GSGS:6;GSGS:48;GSGS:6;SGSGS:2305843009213693950;" +
+            "GSGS:1;GSGS:0;GSGS:2;GSGS:0;GGSGGS:0:1;1:1:0GRPGS:5;DNGSIGSAGS1:99:1");
+
+        var directory = Path.Combine(Root, "bak", "runtime-tests", "OpcodeRuntime");
+        foreach (var name in new[] { "OpcodeRuntime.tjs.comp", "decompiled.tjs.comp" })
+        {
+            var module = new Module(Path.Combine(directory, name));
+            var instructions = module.Objects.Single(obj => obj.Name == "operations")
+                .ResolveMethod().Instructions;
+            // 防止夹具因编译器优化或语法改动不再覆盖某种 opcode。
+            foreach (var op in new[] {
+                OpCode.INCP, OpCode.DECP, OpCode.LORP, OpCode.LANDP,
+                OpCode.BORP, OpCode.BXORP, OpCode.BANDP, OpCode.SARP,
+                OpCode.SALP, OpCode.SRP, OpCode.ADDP, OpCode.SUBP,
+                OpCode.MODP, OpCode.DIVP, OpCode.IDIVP, OpCode.MULP })
+            {
+                Assert.IsTrue(instructions.Any(ins => ins.OpCode == op && ins.GetRegisterSlot(0) == 0),
+                    $"{name}: 缺少无结果 {op}");
+                Assert.IsTrue(instructions.Any(ins => ins.OpCode == op && ins.GetRegisterSlot(0) != 0),
+                    $"{name}: 缺少有结果 {op}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void DebuggerOpcodesSurviveControlFlowAndRecompilation()
+    {
+        var directory = Path.Combine(Root, "bak", "runtime-tests", "DebuggerOpcodes");
+        Directory.CreateDirectory(directory);
+        var source = Path.Combine(directory, "source.tjs");
+        File.WriteAllText(source,
+            "function stop(gate, count) { debugger; if (gate) { debugger; } " +
+            "else { debugger; } while (count-- > 0) { debugger; } return count; }",
+            new UTF8Encoding(false));
+        Execute(source, "c");
+        var result = new Decompiler(source + ".comp").Decompile();
+        Assert.HasCount(4, System.Text.RegularExpressions.Regex.Matches(result, @"\bdebugger;"));
+        var output = Path.Combine(directory, "decompiled.tjs");
+        File.WriteAllText(output, result, new UTF8Encoding(false));
+        Execute(output, "c");
+        // debugger 会触发原生断点，只验证编译与 CFG/指令保留，不执行。
+        foreach (var path in new[] { source + ".comp", output + ".comp" })
+        {
+            var instructions = new Module(path).Objects.Single(obj => obj.Name == "stop")
+                .ResolveMethod().Instructions;
+            Assert.AreEqual(4, instructions.Count(ins => ins.OpCode == OpCode.DEBUGGER));
+            Assert.AreEqual(2, instructions.Count(ins => ins.OpCode is OpCode.JF or OpCode.JNF));
+        }
+    }
+
+    [TestMethod]
+    public void NopCompactionPreservesBranchTargetsAndCfgInstructionNumbers()
+    {
+        var obj = new CodeObject
+        {
+            // 删除入口 NOP；条件跳转目标处的 NOP 必须仍有有效地址。
+            Code = new short[] { 0, 1, 1, 0, 5, 1, 16, 2, 0, 118, 0, 119 },
+            Variants = new List<ITjsVariant> { new TjsInt(1) },
+            MaxFrameCount = 1,
+            ContextType = TjsContextType.Function
+        };
+        var method = new Method(obj);
+        method.Compact();
+        Assert.AreEqual(OpCode.CONST, method.Instructions[0].OpCode);
+        Assert.AreEqual(OpCode.NOP,
+            method.Instructions.Single(ins => ins.OpCode == OpCode.JNF).BranchTarget.OpCode);
+        CollectionAssert.AreEqual(Enumerable.Range(0, method.Instructions.Count).ToArray(),
+            method.Instructions.Select(ins => ins.Line).ToArray());
+        var context = new DecompileContext(obj) { Method = method };
+        context.BuildCFG(method.Instructions);
+        Assert.IsNotNull(context.ExitBlock);
     }
 
     [TestMethod]

@@ -5,7 +5,14 @@ namespace Furikiri.AST.Expressions
     class DeleteExpression : Expression, IInstance
     {
         public override AstNodeType Type => AstNodeType.DeleteExpression;
-        public override IEnumerable<IAstNode> Children { get; }
+        public override IEnumerable<IAstNode> Children
+        {
+            get
+            {
+                if (Instance != null) yield return Instance;
+                if (IdentifierExpression != null) yield return IdentifierExpression;
+            }
+        }
 
         public bool HideInstance
         {
@@ -16,7 +23,7 @@ namespace Furikiri.AST.Expressions
                     return true;
                 }
 
-                if (Instance is IdentifierExpression id && id.IdentifierType != IdentifierType.Normal)
+                if (Instance is IdentifierExpression id && id.IdentifierType == IdentifierType.ThisProxy)
                 {
                     return true;
                 }
