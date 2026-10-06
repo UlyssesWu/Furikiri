@@ -2,12 +2,12 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyTitle("Girigiri")]
+[assembly: AssemblyTitle("Furikiri")]
 [assembly: AssemblyDescription("Furikiri TJS2 Decompiler")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Independent Galgrammer")]
+[assembly: AssemblyCompany("UlyssesWu")]
 [assembly: AssemblyProduct("Furikiri")]
-[assembly: AssemblyCopyright("Copyright © Ulysses 2018-2023")]
+[assembly: AssemblyCopyright("Copyright © Ulysses 2018-2026")]
 [assembly: AssemblyTrademark("wdwxy12345@gmail.com")]
 [assembly: AssemblyCulture("")]
 

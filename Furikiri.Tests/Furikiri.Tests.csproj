@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Furikiri.Core\Furikiri.Core.csproj" />
+    <ProjectReference Include="..\Furikiri.CLI\Furikiri.CLI.csproj" />
   </ItemGroup>
 
 </Project>
