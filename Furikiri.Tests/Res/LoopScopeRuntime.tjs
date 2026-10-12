@@ -1,0 +1,29 @@
+function layoutLike(count) {
+    var x = void, y = void, start = void, index = void;
+    start = y = x = 0;
+    var widths = [];
+    for (index = 0; index < count; index++) {
+        widths.add(x);
+        x += index + 1;
+    }
+    widths.add(x);
+    return string(index) + ":" + widths.join(",");
+}
+function catchInLoop() {
+    var queue = [0, 1, 2];
+    var result = "";
+    while (queue.count) {
+        var item = queue[0];
+        queue.erase(0);
+        try {
+            if (item) throw new Exception(item == 1 ? "ignored" : "fatal");
+            result += "S";
+        }
+        catch (error) {
+            if (error.message == "ignored") result += "I";
+            else result += "F";
+        }
+    }
+    return result;
+}
+global.__validationResult = layoutLike(0) + "|" + layoutLike(1) + "|" + layoutLike(3) + "|" + catchInLoop();

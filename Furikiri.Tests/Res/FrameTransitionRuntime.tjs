@@ -1,0 +1,27 @@
+function frames(oldList, newList) {
+    for (var n = 0; n < 2; n++) for (var i = 0; i < newList.count; i++) {
+        var old = oldList[i];
+        var current = newList[i];
+        if (old !== void && current === void) global.trace += "N";
+        if (old === void && current !== void || old !== void && current !== void &&
+            (old.icon != current.icon || old.blendMode != current.blendMode)) {
+            var frame = %[];
+            frame.src = current.icon;
+            frame.bm = current.blendMode;
+            global.trace += "C";
+        }
+        oldList[i] = current;
+    }
+}
+var values = [void, %["icon" => 0, "blendMode" => 0],
+    %["icon" => 1, "blendMode" => 0], %["icon" => 0, "blendMode" => 1]];
+var results = [];
+for (var before = 0; before < values.count; before++)
+for (var after = 0; after < values.count; after++) {
+    global.trace = "";
+    var saved = [values[before]];
+    frames(saved, [values[after]]);
+    var value = saved[0];
+    results.add(global.trace + ":" + (value === void ? "u" : value.icon + "," + value.blendMode));
+}
+global.__validationResult = results.join("|");

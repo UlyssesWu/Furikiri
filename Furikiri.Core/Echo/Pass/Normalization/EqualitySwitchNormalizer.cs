@@ -109,8 +109,8 @@ namespace Furikiri.Echo.Pass
                 return false;
             }
 
-            var endsAtLoopLatch = isLoopTail ||
-                                  root.EqualityDispatchEndsAtLoopLatch;
+            var endsAtLoopLatch = sequentialContinuation == null &&
+                                 (isLoopTail || root.EqualityDispatchEndsAtLoopLatch);
             // 转换会把 continue 改成 break，并可能重排条件贯穿 case；必须先
             // 验证全部 case 都可恢复，避免后面的某项失败时留下半修改 AST。
             if (defaultBody != null &&

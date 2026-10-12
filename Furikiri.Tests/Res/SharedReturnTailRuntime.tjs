@@ -1,0 +1,13 @@
+global.trace='';
+function hide(enabled,fix,value) {
+ if(!enabled)return;
+ if(value!==void)fix=value;
+ else {if(fix)return;}
+ global.trace+='H';
+}
+for(var enabled=0;enabled<2;enabled++)for(var fix=0;fix<2;fix++) {
+ hide(enabled,fix,void);global.trace+='|';
+ hide(enabled,fix,0);global.trace+='|';
+ hide(enabled,fix,1);global.trace+='|';
+}
+global.__validationResult=global.trace;

@@ -1,0 +1,63 @@
+global.trace='';
+global.YES_ALL=3; global.NO_ALL=2; global.NO=0;
+function confirm(a){global.trace+='Q';return a;}
+function probe(exists,answer) {
+ var choice=0;
+ for(var n=0;n<2;n++) {
+  if(exists) {
+   if(choice==2)continue;
+   if(choice!=3) {
+    choice=confirm(answer);
+    if(choice==2||choice==0)continue;
+   }
+  }
+  global.trace+='P';
+ }
+ global.trace+='|';
+}
+for(var exists=0;exists<2;exists++)for(var a=0;a<4;a++)probe(exists,a);
+function namedProbe(exists,answer) {
+ var choice=NO;
+ for(var n=0;n<2;n++) {
+  if(exists) {
+   if(choice==NO_ALL)continue;
+   if(choice==YES_ALL) {} else {
+    choice=confirm(answer);
+    if(choice==NO_ALL||choice==NO)continue;
+   }
+  }
+  global.trace+='P';
+ }
+ global.trace+='|';
+}
+for(var exists=0;exists<2;exists++)for(var a=0;a<4;a++)namedProbe(exists,a);
+function patchProbe(mode,kind,missing,mismatch) {
+ for(var n=0;n<2;n++) {
+  switch(mode) {
+  case 0:
+   if(kind instanceof 'Dictionary') {
+    if(missing){global.trace+='D';continue;}
+   } else if(kind instanceof 'Array') {
+    if(missing){global.trace+='A';continue;}
+   } else {global.trace+='X';continue;}
+   if(mismatch)global.trace+='W';
+   global.trace+='P';
+   continue;
+  case 1:
+   if(kind instanceof 'Dictionary') {
+    if(missing){global.trace+='D';continue;}
+   } else if(kind instanceof 'Array') {
+    if(missing){global.trace+='A';continue;}
+   } else {global.trace+='X';continue;}
+   if(mismatch)global.trace+='W';
+   global.trace+='R';
+   continue;
+  }
+  global.trace+='T';
+ }
+ global.trace+='|';
+}
+for(var mode=0;mode<3;mode++)for(var missing=0;missing<2;missing++)for(var mismatch=0;mismatch<2;mismatch++) {
+ patchProbe(mode,%[],missing,mismatch);patchProbe(mode,[],missing,mismatch);patchProbe(mode,1,missing,mismatch);
+}
+global.__validationResult=global.trace;

@@ -343,6 +343,13 @@ ASALocalRun/
 !/Furikiri.Tests/Res/PositionRuntime.tjs
 !/Furikiri.Tests/Res/TextWrapRuntime.tjs
 !/Furikiri.Tests/Res/ImageReturnRuntime.tjs
+!/Furikiri.Tests/Res/LoopScopeRuntime.tjs
+!/Furikiri.Tests/Res/EmptyBranchRuntime.tjs
+!/Furikiri.Tests/Res/SharedLoopTailRuntime.tjs
+!/Furikiri.Tests/Res/SharedReturnTailRuntime.tjs
+!/Furikiri.Tests/Res/SwitchSharedReturnRuntime.tjs
+!/Furikiri.Tests/Res/FrameTransitionRuntime.tjs
+!/Furikiri.Tests/Res/CallArgumentPhiRuntime.tjs
 /IronTJS
 /KrkrSharp
 /bak

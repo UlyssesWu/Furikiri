@@ -8,6 +8,8 @@ Furikiri (フリキリ / 福里吉里) is a managed TJS2 bytecode disassembler/d
 Furikiri init.tjs                      # Decompile (default)
 Furikiri decompile init.tjs            # Explicit decompile command
 Furikiri disasm init.tjs               # Disassemble
+Furikiri init.tjs -o result/init.tjs   # Single file: specify the exact output file
+Furikiri disasm init.tjs -o init.asm   # Custom assembly output filename
 Furikiri scripts                       # Batch decompile a folder
 Furikiri disasm scripts                # Batch disassemble a folder
 Furikiri scripts --recursive           # Include subfolders (-r)
@@ -16,6 +18,7 @@ Furikiri scripts -r -o decompiled      # Preserve paths and filenames in a new d
 Furikiri disasm scripts -r -o assembly # Preserve paths, write .tjsasm files
 Furikiri scripts other.tjs --print     # Print results instead of writing files (-p)
 ```
+
 
 ## Related projects
 * [KirikiriSharp](https://github.com/Project-AZUSA/KirikiriSharp)

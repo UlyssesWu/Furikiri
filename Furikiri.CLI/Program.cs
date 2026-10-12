@@ -12,7 +12,7 @@ namespace Furikiri.CLI
     {
         static int Main(string[] args)
         {
-            Console.WriteLine("Furikiri TJS2 Disassembler/Decompiler");
+            Console.WriteLine("Furikiri TJS2 Decompiler");
             Console.WriteLine("by Ulysses, wdwxy12345@gmail.com");
             Console.WriteLine();
 
@@ -23,6 +23,7 @@ namespace Furikiri.CLI
                 OptionsComparison = StringComparison.OrdinalIgnoreCase,
                 ExtendedHelpText = @"Examples:
   Furikiri init.tjs
+  Furikiri init.tjs --output decompiled/init.tjs
   Furikiri decompile scripts
   Furikiri disasm init.tjs
   Furikiri disasm scripts --recursive
@@ -31,7 +32,8 @@ namespace Furikiri.CLI
 
 Directories are scanned for TJS2 bytecode regardless of extension.
 Use --recursive to include subdirectories. Text source and generated output are skipped.
-With --output, paths are relative to each input folder and decompiled filenames are unchanged.
+For a single file, --output specifies the exact output file path.
+For folders or multiple inputs, --output specifies a directory; relative paths and decompiled filenames are preserved.
 Disassembly output uses .tjsasm. Without --output, decompiled files use .dec.tjs."
             };
             app.HelpOption(inherited: true);
@@ -42,8 +44,8 @@ Disassembly output uses .tjsasm. Without --output, decompiled files use .dec.tjs
                 CommandOptionType.NoValue, inherited: true);
             var optRecursive = app.Option("-r|--recursive", "Include subdirectories when processing folders",
                 CommandOptionType.NoValue, inherited: true);
-            var optOutput = app.Option("-o|--output <directory>",
-                "Write to this directory, preserving relative paths and decompiled filenames",
+            var optOutput = app.Option("-o|--output <path>",
+                "Output file for a single file input, or output directory for folders/multiple inputs",
                 CommandOptionType.SingleValue, inherited: true);
             var optSameLineBrace = app.Option("--same-line-brace",
                 "Place opening braces on the same line (the default; retained for compatibility)",
@@ -70,7 +72,7 @@ Disassembly output uses .tjsasm. Without --output, decompiled files use .dec.tjs
 
                     if (optOutput.HasValue() && (optPrint.HasValue() || string.IsNullOrWhiteSpace(optOutput.Value())))
                     {
-                        Console.Error.WriteLine("--output requires a directory and cannot be combined with --print.");
+                        Console.Error.WriteLine("--output requires a path and cannot be combined with --print.");
                         return 1;
                     }
 
@@ -113,29 +115,43 @@ Disassembly output uses .tjsasm. Without --output, decompiled files use .dec.tjs
         }
 
         private static int ProcessPaths(IEnumerable<string> paths, bool disassemble, bool print, bool recursive,
-            string outputDirectory)
+            string outputPath)
         {
             var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
             var files = new Dictionary<string, string>(comparer);
             var failed = 0;
+            var inputs = paths.ToList();
+            var singleFile = inputs.Count == 1 && File.Exists(inputs[0]);
+            string outputDirectory = null;
+            string outputFile = null;
 
-            if (outputDirectory != null)
+            if (outputPath != null)
             {
                 try
                 {
-                    outputDirectory = Path.GetFullPath(outputDirectory);
-                    if (File.Exists(outputDirectory))
-                        throw new IOException("Output directory is an existing file.");
+                    outputPath = Path.GetFullPath(outputPath);
+                    if (singleFile)
+                    {
+                        if (Directory.Exists(outputPath) || Path.EndsInDirectorySeparator(outputPath))
+                            throw new IOException("A single file input requires an output file path, not a directory.");
+                        outputFile = outputPath;
+                    }
+                    else
+                    {
+                        if (File.Exists(outputPath))
+                            throw new IOException("Output directory is an existing file.");
+                        outputDirectory = outputPath;
+                    }
                 }
                 catch (Exception e)
                 {
-                    ReportFailure(outputDirectory, e);
+                    ReportFailure(outputPath, e);
                     return 1;
                 }
             }
 
             // Collect inputs before writing output, so generated files cannot enter the batch.
-            foreach (var path in paths)
+            foreach (var path in inputs)
             {
                 try
                 {
@@ -179,7 +195,7 @@ Disassembly output uses .tjsasm. Without --output, decompiled files use .dec.tjs
 
             var succeeded = 0;
             var outputs = files.ToDictionary(file => file.Key,
-                file => GetOutputPath(file.Key, disassemble, file.Value, outputDirectory), comparer);
+                file => outputFile ?? GetOutputPath(file.Key, disassemble, file.Value, outputDirectory), comparer);
             var conflicts = new HashSet<string>(outputs.Values.GroupBy(output => output, comparer)
                 .Where(group => group.Count() > 1).Select(group => group.Key), comparer);
             foreach (var file in files.Keys)

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Furikiri.AST;
 using Furikiri.AST.Expressions;
 using Furikiri.AST.Statements;
@@ -68,7 +70,21 @@ namespace Furikiri.Echo.Pass
                 return true;
             }
 
-            foreach (var child in expression.Children ?? System.Array.Empty<IAstNode>())
+            // Call and property nodes do not expose their operands through Children.
+            // A consumed guard can be nested several levels deep in a call argument.
+            IEnumerable<IAstNode> children = expression switch
+            {
+                InvokeExpression invoke => new Expression[]
+                    { invoke.Instance, invoke.MethodExpression }.Concat(invoke.Parameters),
+                PropertyAccessExpression property => new Expression[]
+                    { property.Instance, property.Property },
+                BinaryExpression binary => new Expression[] { binary.Left, binary.Right },
+                UnaryExpression unary => new Expression[] { unary.Target },
+                ReturnExpression ret => new Expression[] { ret.Return },
+                ConditionExpression condition => new Expression[] { condition.Condition },
+                _ => expression.Children ?? System.Array.Empty<IAstNode>()
+            };
+            foreach (var child in children)
             {
                 if (child is Expression childExpression &&
                     ContainsEquivalent(childExpression, target))

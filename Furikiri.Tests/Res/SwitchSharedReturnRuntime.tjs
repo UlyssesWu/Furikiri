@@ -1,0 +1,83 @@
+class TagProbe {
+    function onTag(name, attrs) {
+        var result;
+        switch (name) {
+            case "l":
+                if (!attrs.voicewait && currentText !== void) {
+                    global.trace += "L";
+                    return 0;
+                }
+            case "p":
+                if (currentText !== void) {
+                    if (storeSpeech && currentText.speechtext === void && speechText != "")
+                        currentText.speechtext = speechText;
+                    if (storeSearch && currentText.searchtext === void && searchText != "")
+                        currentText.searchtext = searchText;
+                    global.trace += "T";
+                    if (+attrs.same) result = [currentText];
+                    else { result = [currentText, attrs]; currentText.sync = 1; }
+                    global.trace += "C";
+                    noCrOnce = name == "l" && attrs.nor;
+                    return result;
+                }
+                break;
+            case "r":
+                if (!attrs.eol) {
+                    if (noCrOnce) noCrOnce = void;
+                    else global.trace += "R";
+                    return 0;
+                }
+                break;
+            case "startline": global.trace += "I"; break;
+            case "nor": noCrOnce = 1; break;
+            default:
+                result = void;
+                if ((result = textWaitTags[name]) !== void &&
+                    currentText !== void && currentText.text != "" ||
+                    (result = textTags[name]) !== void) {
+                    result(attrs);
+                    return 0;
+                }
+                break;
+        }
+    }
+}
+global.trace = "";
+var results = [];
+var names = ["l", "p", "r", "startline", "nor", "custom"];
+for (var name = 0; name < names.count; name++)
+for (var text = 0; text < 3; text++)
+for (var voice = 0; voice < 2; voice++)
+for (var eol = 0; eol < 2; eol++)
+for (var wait = 0; wait < 2; wait++)
+for (var normal = 0; normal < 2; normal++) {
+    var ctx = %[
+        "currentText" => text ? %["text" => text == 1 ? "" : "X"] : void,
+        "storeSpeech" => 0, "storeSearch" => 0, "noCrOnce" => 0,
+        "textWaitTags" => %[], "textTags" => %[]
+    ];
+    if (wait) ctx.textWaitTags.custom = function(*) { global.trace += "W"; };
+    if (normal) ctx.textTags.custom = function(*) { global.trace += "N"; };
+    global.trace = "";
+    var value = (TagProbe.onTag incontextof ctx)(names[name],
+        %["voicewait" => voice, "eol" => eol, "same" => 0, "nor" => 0]);
+    var result = value === void ? "u" : typeof value == "Object" ? "a" + value.count : string(value);
+    results.add(global.trace + ":" + result + ":" + ctx.noCrOnce);
+}
+function pickHandler(hasText, wait, normal) {
+    var handler;
+    if ((handler = wait) !== void && hasText || (handler = normal) !== void) {
+        handler();
+        return 0;
+    }
+}
+for (var present = 0; present < 2; present++)
+for (var wait = 0; wait < 2; wait++)
+for (var normal = 0; normal < 2; normal++) {
+    global.trace = "";
+    var value = pickHandler(present,
+        wait ? function() { global.trace += "W"; } : void,
+        normal ? function() { global.trace += "N"; } : void);
+    results.add(global.trace + ":" + (value === void ? "u" : string(value)));
+}
+global.__validationResult = results.join("|");

@@ -1,0 +1,18 @@
+function probe(value) { global.trace += "P"; return value; }
+function receive(items) {
+    global.trace += "M" + items[0].action + items[1].enabled;
+}
+function menus(present, supported, active) {
+    receive([%["action" => (probe(present) && supported && active ? "X" : "Y")],
+             %["enabled" => (supported && active ? "T" : "F")]]);
+    global.trace += "H";
+}
+var results = [];
+for (var present = 0; present < 2; present++)
+for (var supported = 0; supported < 2; supported++)
+for (var active = 0; active < 2; active++) {
+    global.trace = "";
+    menus(present, supported, active);
+    results.add(global.trace);
+}
+global.__validationResult = results.join("|");

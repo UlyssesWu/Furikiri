@@ -2966,11 +2966,11 @@ namespace Furikiri.Tests
                 "function validationLoopContinueGuardedInnerLoop",
                 "function validationPostfixMemberArgument");
             StringAssert.Contains(loopContinueGuardBody,
-                "if (typeof p3[v7] == \"String\")");
+                "if (v7 != \"\" && typeof p3[v7] == \"String\")");
             StringAssert.Contains(loopContinueGuardBody, "var v8 = p3[v7];");
             StringAssert.Contains(loopContinueGuardBody, "for (var v9 = 0;");
             Assert.IsTrue(
-                loopContinueGuardBody.IndexOf("if (typeof", StringComparison.Ordinal) <
+                loopContinueGuardBody.IndexOf("if (v7 !=", StringComparison.Ordinal) <
                 loopContinueGuardBody.IndexOf("var v8", StringComparison.Ordinal) &&
                 loopContinueGuardBody.IndexOf("var v8", StringComparison.Ordinal) <
                 loopContinueGuardBody.IndexOf("for (var v9", StringComparison.Ordinal),

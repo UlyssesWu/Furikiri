@@ -16,6 +16,87 @@ namespace Furikiri.Tests;
 [DoNotParallelize]
 public class RuntimeTest
 {
+    [TestMethod]
+    public void NestedCallArgumentPhisEvaluateGuardsAndConsumerOnce()
+    {
+        AssertRuntimeRoundTrip("CallArgumentPhiRuntime.tjs",
+            "PMYFH|PMYFH|PMYFH|PMYTH|PMYFH|PMYFH|PMYFH|PMXTH");
+    }
+
+    [TestMethod]
+    public void EarlyReturnPreservesSharedFinalSideEffect()
+    {
+        AssertRuntimeRoundTrip("SharedReturnTailRuntime.tjs", "||||||H|H|H||H|H|");
+    }
+
+    [TestMethod]
+    public void LoopContinueDecisionsPreserveSharedOverwriteTail()
+    {
+        AssertRuntimeRoundTrip("SharedLoopTailRuntime.tjs",
+            "PP|PP|PP|PP|QQ|QPQP|Q|QPP|PP|PP|PP|PP|QQ|QPQP|Q|QPP|" +
+            "PP|PP|XX|WPWP|WPWP|XX|DD|AA|XX|DD|AA|XX|" +
+            "RR|RR|XX|WRWR|WRWR|XX|DD|AA|XX|DD|AA|XX|" +
+            "TT|TT|TT|TT|TT|TT|TT|TT|TT|TT|TT|TT|");
+    }
+
+    [TestMethod]
+    public void LoopScopeAndLoopTailCatchPreserveRuntimeState()
+    {
+        AssertRuntimeRoundTrip("LoopScopeRuntime.tjs", "0:0|1:0,1|3:0,1,3,6|SIF");
+    }
+
+    [TestMethod]
+    public void EmptyBranchPreservesNestedGuardAndSharedCallTail()
+    {
+        AssertRuntimeRoundTrip("EmptyBranchRuntime.tjs", "R|AR|BR");
+    }
+
+    [TestMethod]
+    public void SwitchGuardsPreserveSharedImplicitReturnAndHandlerSelection()
+    {
+        var results = new List<string>();
+        foreach (var name in new[] { "l", "p", "r", "startline", "nor", "custom" })
+        for (var text = 0; text < 3; text++)
+        for (var voice = 0; voice < 2; voice++)
+        for (var eol = 0; eol < 2; eol++)
+        for (var wait = 0; wait < 2; wait++)
+        for (var normal = 0; normal < 2; normal++)
+        {
+            var value = name switch
+            {
+                "l" when voice == 0 && text != 0 => "L:0:0",
+                "l" or "p" when text != 0 => "TC:a2:0",
+                "r" when eol == 0 => "R:0:0",
+                "startline" => "I:u:0",
+                "nor" => ":u:1",
+                "custom" when wait != 0 && text == 2 => "W:0:0",
+                "custom" when normal != 0 => "N:0:0",
+                _ => ":u:0"
+            };
+            results.Add(value);
+        }
+        for (var present = 0; present < 2; present++)
+        for (var wait = 0; wait < 2; wait++)
+        for (var normal = 0; normal < 2; normal++)
+            results.Add(present != 0 && wait != 0 ? "W:0" : normal != 0 ? "N:0" : ":u");
+        AssertRuntimeRoundTrip("SwitchSharedReturnRuntime.tjs", string.Join("|", results));
+    }
+
+    [TestMethod]
+    public void FrameTransitionsPreserveBothSharedSuccessPathsAndStateUpdates()
+    {
+        var values = new[] { "u", "0,0", "1,0", "0,1" };
+        var results = new List<string>();
+        for (var before = 0; before < values.Length; before++)
+        for (var after = 0; after < values.Length; after++)
+        {
+            var trace = before != 0 && after == 0 ? "N" :
+                after != 0 && before != after ? "C" : "";
+            results.Add(trace + ":" + values[after]);
+        }
+        AssertRuntimeRoundTrip("FrameTransitionRuntime.tjs", string.Join("|", results));
+    }
+
     private static readonly string Root = Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "..", "..", "..", ".."));
 

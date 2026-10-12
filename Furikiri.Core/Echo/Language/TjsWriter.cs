@@ -709,10 +709,10 @@ namespace Furikiri.Echo.Language
 
                 if (_validDeclarations != null)
                 {
-                    // 使用词法声明预分析结果；未提升的 for 初始化变量仍在此声明。
-                    shouldEmitVar = _validDeclarations.Contains(bin) ||
-                                    (_inForInitializer && bin.IsDeclaration &&
-                                     !_hoistedLocalDeclarations.Contains(declaredName));
+                    // The analyzer includes for initializers and knows whether a
+                    // visible outer variable already owns this VM slot. Emitting
+                    // another var here would shadow the value used after the loop.
+                    shouldEmitVar = _validDeclarations.Contains(bin);
                 }
                 else if (!string.IsNullOrEmpty(declaredName) && _declaredLocals.Contains(declaredName) && !_inForInitializer)
                 {
