@@ -11,6 +11,7 @@
 		<AssemblyName>Furikiri</AssemblyName>
 		<AssemblyVersion>0.2.0.0</AssemblyVersion>
 		<FileVersion>0.2.0.0</FileVersion>
+		<PublishAOT>true</PublishAOT>
 	</PropertyGroup>
 
 	<ItemGroup>

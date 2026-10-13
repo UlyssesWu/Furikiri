@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyTitle("Furikiri")]
+[assembly: AssemblyTitle("Furikiri TJS2 Decompiler")]
 [assembly: AssemblyDescription("Furikiri TJS2 Decompiler")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("UlyssesWu")]
